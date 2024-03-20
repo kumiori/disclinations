@@ -2,11 +2,11 @@
 # mscroggs Add weights
 
 import numpy as np
-from mpi4py import MPI
 from dolfinx.fem import FunctionSpace
-from dolfinx.mesh import create_unit_square, create_unit_cube
 from dolfinx.geometry import (BoundingBoxTree, compute_colliding_cells,
                               compute_collisions)
+from dolfinx.mesh import create_unit_cube, create_unit_square
+from mpi4py import MPI
 
 
 def get_local_coordinates(vertices, point):

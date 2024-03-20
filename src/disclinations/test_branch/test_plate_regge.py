@@ -1,73 +1,60 @@
 # Solving a plate problem with mixed formulation
 # and Regge elements (ie. tensors with n-n continuity
 # across facets)
+import sys
+
 import pyvista
 from pyvista.utilities import xvfb
-import sys
+
 sys.path.append("../")
 
-import logging
-
-from utils.viz import plot_mesh, plot_vector, plot_scalar
-import numpy as np
-import yaml
 import json
-from pathlib import Path
+import logging
 import os
-from mpi4py import MPI
-import petsc4py
-from petsc4py import PETSc
+import pdb
+from pathlib import Path
+
 import dolfinx
 import dolfinx.plot
-from dolfinx import log, plot
+import numpy as np
+import petsc4py
 import ufl
-from ufl import (CellDiameter, FacetNormal, SpatialCoordinate, TestFunction,
-                 TrialFunction, avg, div, ds, dS, dx, grad, inner, jump)
-import pdb
-
+import yaml
+from dolfinx import log, plot
 from dolfinx.io import XDMFFile, gmshio
+from meshes import mesh_bounding_box
+from meshes.primitives import mesh_bar_gmshapi
 # from damage.utils import ColorPrint
 from models import ElasticityModel
+from mpi4py import MPI
+from petsc4py import PETSc
 from solvers import SNESSolver as ElasticitySolver
+from ufl import (CellDiameter, FacetNormal, SpatialCoordinate, TestFunction,
+                 TrialFunction, avg, div, ds, dS, dx, grad, inner, jump)
+from utils.viz import plot_mesh, plot_scalar, plot_vector
 
-from meshes.primitives import mesh_bar_gmshapi
-from meshes import mesh_bounding_box
-
-import numpy as np
 logging.basicConfig(level=logging.INFO)
 
 
-import dolfinx.plot
-import dolfinx.io
-from dolfinx.fem import (
-    Constant,
-    Function,
-    FunctionSpace,
-    dirichletbc,
-    form,
-)
-
-from dolfinx.fem.petsc import (
-    assemble_matrix,
-    apply_lifting,
-    set_bc,
-    assemble_vector
-    )
-
-import dolfinx.mesh
-from dolfinx.mesh import CellType
-import ufl
-
-from mpi4py import MPI
-import petsc4py
-from petsc4py import PETSc
 import sys
+
+import dolfinx.io
+import dolfinx.mesh
+import dolfinx.plot
+import petsc4py
+import ufl
 import yaml
+from dolfinx.fem import Constant, Function, FunctionSpace, dirichletbc, form
+from dolfinx.fem.petsc import (apply_lifting, assemble_matrix, assemble_vector,
+                               set_bc)
+from dolfinx.mesh import CellType
+from mpi4py import MPI
+from petsc4py import PETSc
 from ufl import (CellDiameter, FacetNormal, avg, div, dS, dx, grad, inner,
                  jump, pi, sin)
+
 sys.path.append("../")
 from solvers import SNESSolver
-
 
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)

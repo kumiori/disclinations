@@ -3,18 +3,16 @@
 # SPDX-License-Identifier: MIT
 import sys
 
+import dolfinx
+import dolfinx.fem.petsc
+import numpy as np
+import ufl
+from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
 from petsc4py import PETSc
 
-import dolfinx
-import dolfinx.fem.petsc
-from dolfinx.io import XDMFFile, gmshio
-import numpy as np
-import ufl
-
 sys.path.append("../")
 from meshes.primitives import mesh_circle_gmshapi
-
 
 
 def compute_cell_contributions(V, points):
@@ -145,6 +143,7 @@ with dolfinx.io.VTXWriter(domain.comm, "uh.bp", [uh], engine="BP4") as bp:
     
 
 from dolfinx import plot
+
 outdir = 'output'
 
 try:
