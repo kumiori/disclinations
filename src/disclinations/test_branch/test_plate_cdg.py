@@ -26,6 +26,7 @@ from meshes.primitives import mesh_bar_gmshapi
 # from damage.utils import ColorPrint
 from models import ElasticityModel
 from solvers import SNESSolver as PlateSolver
+
 logging.basicConfig(level=logging.INFO)
 
 import sys
@@ -36,9 +37,9 @@ import dolfinx.mesh
 import dolfinx.plot
 import ufl
 import yaml
-from dolfinx.io import XDMFFile, gmshio
 from dolfinx.fem import (Constant, Function, FunctionSpace, assemble_scalar,
                          dirichletbc, form, locate_dofs_geometrical, set_bc)
+from dolfinx.io import XDMFFile, gmshio
 from dolfinx.mesh import CellType
 from mpi4py import MPI
 from ufl import (CellDiameter, FacetNormal, SpatialCoordinate, TestFunction,
@@ -47,9 +48,6 @@ from ufl import (CellDiameter, FacetNormal, SpatialCoordinate, TestFunction,
 
 sys.path.append("../")
 from solvers import SNESSolver
-
-
-
 
 # class PlateModel(ElasticityModel):
 

@@ -108,26 +108,24 @@
 #
 # We first import the modules and functions that the program uses:
 
-from mpi4py import MPI
-from petsc4py.PETSc import ScalarType  # type: ignore
+import sys
 
+import dolfinx
 # +
 import numpy as np
-
 import ufl
-import dolfinx
 from dolfinx import fem, io, mesh, plot
 from dolfinx.fem.petsc import LinearProblem
+from dolfinx.io import XDMFFile, gmshio
 from dolfinx.mesh import CellType, GhostMode
+from mpi4py import MPI
+from petsc4py.PETSc import ScalarType  # type: ignore
 from ufl import (CellDiameter, FacetNormal, avg, div, dS, dx, grad, inner,
                  jump, pi, sin)
-from dolfinx.io import XDMFFile, gmshio
 
-import sys
 sys.path.append("../")
-from utils import _logger
-
 from meshes.primitives import mesh_bar_gmshapi
+from utils import _logger
 
 # -
 
