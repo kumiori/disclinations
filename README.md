@@ -1,10 +1,27 @@
-# disclinations
+# Disclinations
 Plates with...
 
+.
+
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
+.
 
 ### Prerequisites
 
-The course will assume basic knowledge of the theory of infinitesimal elasticity and
+The project assumes basic knowledge of the theory of infinitesimal elasticity and
 finite element methods.
 
 Basic knowledge of Python will be assumed, see https://github.com/jakevdp/WhirlwindTourOfPython
