@@ -277,20 +277,20 @@ def mesh_bar_gmshapi(name,
         # gmsh.model.mesh.optimize("Netgen")
 
         # Set geometric order of mesh cells
-        gmsh.model.mesh.setOrder(order)
+        model.mesh.setOrder(order)
 
         # Define physical groups for subdomains (! target tag > 0)
         # domain = 1
-        # gmsh.model.addPhysicalGroup(tdim, [v[1] for v in volumes], domain)
-        # gmsh.model.setPhysicalName(tdim, domain, 'domain')
-        gmsh.model.addPhysicalGroup(tdim - 1, [3], tag=6)
-        gmsh.model.setPhysicalName(tdim - 1, 6, "left")
-        gmsh.model.addPhysicalGroup(tdim - 1, [1], tag=7)
-        gmsh.model.setPhysicalName(tdim - 1, 7, "right")
-        gmsh.model.addPhysicalGroup(tdim - 1, [2], tag=8)
-        gmsh.model.setPhysicalName(tdim - 1, 8, "top")
-        gmsh.model.addPhysicalGroup(tdim - 1, [0], tag=9)
-        gmsh.model.setPhysicalName(tdim - 1, 9, "bottom")
+        # model.addPhysicalGroup(tdim, [v[1] for v in volumes], domain)
+        # model.setPhysicalName(tdim, domain, 'domain')
+        model.addPhysicalGroup(tdim - 1, [3], tag=6)
+        model.setPhysicalName(tdim - 1, 6, "left")
+        model.addPhysicalGroup(tdim - 1, [1], tag=7)
+        model.setPhysicalName(tdim - 1, 7, "right")
+        model.addPhysicalGroup(tdim - 1, [2], tag=8)
+        model.setPhysicalName(tdim - 1, 8, "top")
+        model.addPhysicalGroup(tdim - 1, [0], tag=9)
+        model.setPhysicalName(tdim - 1, 9, "bottom")
 
         model.mesh.generate(tdim)
 

@@ -4,7 +4,7 @@
 import numpy as np
 from dolfinx.fem import FunctionSpace
 from dolfinx.geometry import (BoundingBoxTree, compute_colliding_cells,
-                              compute_collisions)
+                              compute_collisions_points)
 from dolfinx.mesh import create_unit_cube, create_unit_square
 from mpi4py import MPI
 
@@ -31,7 +31,7 @@ def assemble_point_sources(space, points, weights):
     for point, weight in zip(points, weights):
         # Get cell
         tree = BoundingBoxTree(mesh, mesh.geometry.dim)
-        cell_candidates = compute_collisions(tree, point)
+        cell_candidates = compute_collisions_points(tree, point)
         # This gets the first cell. Would it be better to put a fraction of the delta function into each cell instead?
         cell = compute_colliding_cells(mesh, cell_candidates, point)[0]
 

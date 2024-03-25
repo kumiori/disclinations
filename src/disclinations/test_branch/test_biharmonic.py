@@ -126,6 +126,7 @@ from ufl import (CellDiameter, FacetNormal, avg, div, dS, dx, grad, inner,
 sys.path.append("../")
 from meshes.primitives import mesh_bar_gmshapi
 from utils import _logger
+import pytest
 
 # -
 
@@ -140,133 +141,137 @@ from utils import _logger
 #                             cell_type=CellType.triangle,
 #                             ghost_mode=GhostMode.shared_facet)
 
-Lx = 1
-Ly = 1
-tdim = 2
-lc = 0.1
-comm = MPI.COMM_WORLD
 
-geom_type = f'slab-{tdim}d'
-gmsh_model, tdim = mesh_bar_gmshapi(geom_type, Lx, Ly, lc, tdim)
+@pytest.mark.parametrize("penalisation, expected_norm", [(8.0, 1.0), (10.0, 1.0)])
+def test_solve_biharmonic_equation(penalisation, expected_norm):
+        
+    Lx = 1
+    Ly = 1
+    tdim = 2
+    lc = 0.1
+    comm = MPI.COMM_WORLD
 
-# Get mesh and meshtags
-mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, 0, tdim)
+    geom_type = f'slab-{tdim}d'
+    gmsh_model, tdim = mesh_bar_gmshapi(geom_type, Lx, Ly, lc, tdim)
 
-V = fem.functionspace(mesh, ("Lagrange", 2))
+    # Get mesh and meshtags
+    mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, 0, tdim)
 
-# The second argument to {py:func}`functionspace
-# <dolfinx.fem.functionspace>` is a tuple consisting of `(family,
-# degree)`, where `family` is the finite element family, and `degree`
-# specifies the polynomial degree. in this case `V` consists of
-# second-order, continuous Lagrange finite element functions.
-#
-# Next, we locate the mesh facets that lie on the boundary
-# $\Gamma_D = \partial\Omega$.
-# We do this using using {py:func}`locate_entities_boundary
-# <dolfinx.mesh.locate_entities_boundary>` and providing  a marker
-# function that returns `True` for points `x` on the boundary and
-# `False` otherwise.
+    V = fem.functionspace(mesh, ("Lagrange", 2))
 
-facets = dolfinx.mesh.locate_entities_boundary(mesh, dim=1,
-                                       marker=lambda x: np.logical_or.reduce((
-                                           np.isclose(x[0], 0.0),
-                                           np.isclose(x[0], Lx),
-                                           np.isclose(x[1], 0.0),
-                                           np.isclose(x[1], Ly))))
+    # The second argument to {py:func}`functionspace
+    # <dolfinx.fem.functionspace>` is a tuple consisting of `(family,
+    # degree)`, where `family` is the finite element family, and `degree`
+    # specifies the polynomial degree. in this case `V` consists of
+    # second-order, continuous Lagrange finite element functions.
+    #
+    # Next, we locate the mesh facets that lie on the boundary
+    # $\Gamma_D = \partial\Omega$.
+    # We do this using using {py:func}`locate_entities_boundary
+    # <dolfinx.mesh.locate_entities_boundary>` and providing  a marker
+    # function that returns `True` for points `x` on the boundary and
+    # `False` otherwise.
 
-# We now find the degrees-of-freedom that are associated with the
-# boundary facets using {py:func}`locate_dofs_topological
-# <dolfinx.fem.locate_dofs_topological>`
+    facets = dolfinx.mesh.locate_entities_boundary(mesh, dim=1,
+                                        marker=lambda x: np.logical_or.reduce((
+                                            np.isclose(x[0], 0.0),
+                                            np.isclose(x[0], Lx),
+                                            np.isclose(x[1], 0.0),
+                                            np.isclose(x[1], Ly))))
 
-dofs = fem.locate_dofs_topological(V=V, entity_dim=1, entities=facets)
+    # We now find the degrees-of-freedom that are associated with the
+    # boundary facets using {py:func}`locate_dofs_topological
+    # <dolfinx.fem.locate_dofs_topological>`
 
-# and use {py:func}`dirichletbc <dolfinx.fem.dirichletbc>` to create a
-# {py:class}`DirichletBC <dolfinx.fem.DirichletBC>`
-# class that represents the boundary condition. In this case, we impose
-# Dirichlet boundary conditions with value $0$ on the entire boundary
-# $\partial\Omega$.
+    dofs = fem.locate_dofs_topological(V=V, entity_dim=1, entities=facets)
 
-bc = fem.dirichletbc(value=ScalarType(0), dofs=dofs, V=V)
+    # and use {py:func}`dirichletbc <dolfinx.fem.dirichletbc>` to create a
+    # {py:class}`DirichletBC <dolfinx.fem.DirichletBC>`
+    # class that represents the boundary condition. In this case, we impose
+    # Dirichlet boundary conditions with value $0$ on the entire boundary
+    # $\partial\Omega$.
 
-# Next, we express the variational problem using UFL.
-#
-# First, the penalty parameter $\alpha$ is defined. In addition, we define a
-# variable `h` for the cell diameter $h_E$, a variable `n`for the
-# outward-facing normal vector $n$ and a variable `h_avg` for the
-# average size of cells sharing a facet
-# $\left< h \right> = \frac{1}{2} (h_{+} + h_{-})$. Here, the UFL syntax
-# `('+')` and `('-')` restricts a function to the `('+')` and `('-')`
-# sides of a facet.
+    bc = fem.dirichletbc(value=ScalarType(0), dofs=dofs, V=V)
 
-alpha = ScalarType(8.0)
-h = CellDiameter(mesh)
-n = FacetNormal(mesh)
-h_avg = (h('+') + h('-')) / 2.0
+    # Next, we express the variational problem using UFL.
+    #
+    # First, the penalty parameter $\alpha$ is defined. In addition, we define a
+    # variable `h` for the cell diameter $h_E$, a variable `n`for the
+    # outward-facing normal vector $n$ and a variable `h_avg` for the
+    # average size of cells sharing a facet
+    # $\left< h \right> = \frac{1}{2} (h_{+} + h_{-})$. Here, the UFL syntax
+    # `('+')` and `('-')` restricts a function to the `('+')` and `('-')`
+    # sides of a facet.
 
-# After that, we can define the variational problem consisting of the bilinear
-# form $a$ and the linear form $L$. The source term is prescribed as
-# $f = 4.0 \pi^4\sin(\pi x)\sin(\pi y)$. Note that with `dS`, integration is
-# carried out over all the interior facets $\mathcal{E}_h^{\rm int}$, whereas
-# with `ds` it would be only the facets on the boundary of the domain, i.e.
-# $\partial\Omega$. The jump operator
-# $[\!\![ w ]\!\!] = w_{+} \cdot n_{+} + w_{-} \cdot n_{-}$ w.r.t. the
-# outward-facing normal vector $n$ is in UFL available as `jump(w, n)`.
+    alpha = ScalarType(penalisation)
+    h = CellDiameter(mesh)
+    n = FacetNormal(mesh)
+    h_avg = (h('+') + h('-')) / 2.0
 
-# +
-# Define variational problem
-u = ufl.TrialFunction(V)
-v = ufl.TestFunction(V)
-x = ufl.SpatialCoordinate(mesh)
-f = 4.0 * pi**4 * sin(pi * x[0]) * sin(pi * x[1])
+    # After that, we can define the variational problem consisting of the bilinear
+    # form $a$ and the linear form $L$. The source term is prescribed as
+    # $f = 4.0 \pi^4\sin(\pi x)\sin(\pi y)$. Note that with `dS`, integration is
+    # carried out over all the interior facets $\mathcal{E}_h^{\rm int}$, whereas
+    # with `ds` it would be only the facets on the boundary of the domain, i.e.
+    # $\partial\Omega$. The jump operator
+    # $[\!\![ w ]\!\!] = w_{+} \cdot n_{+} + w_{-} \cdot n_{-}$ w.r.t. the
+    # outward-facing normal vector $n$ is in UFL available as `jump(w, n)`.
 
-a = inner(div(grad(u)), div(grad(v))) * dx \
-    - inner(avg(div(grad(u))), jump(grad(v), n)) * dS \
-    - inner(jump(grad(u), n), avg(div(grad(v)))) * dS \
-    + alpha / h_avg * inner(jump(grad(u), n), jump(grad(v), n)) * dS
-L = inner(f, v) * dx
-# -
+    # +
+    # Define variational problem
+    u = ufl.TrialFunction(V)
+    v = ufl.TestFunction(V)
+    x = ufl.SpatialCoordinate(mesh)
+    f = 4.0 * pi**4 * sin(pi * x[0]) * sin(pi * x[1])
 
-# We create a {py:class}`LinearProblem <dolfinx.fem.petsc.LinearProblem>`
-# object that brings together the variational problem, the Dirichlet
-# boundary condition, and which specifies the linear solver. In this
-# case we use a direct (LU) solver. The {py:func}`solve
-# <dolfinx.fem.petsc.LinearProblem.solve>` will compute a solution.
+    a = inner(div(grad(u)), div(grad(v))) * dx \
+        - inner(avg(div(grad(u))), jump(grad(v), n)) * dS \
+        - inner(jump(grad(u), n), avg(div(grad(v)))) * dS \
+        + alpha / h_avg * inner(jump(grad(u), n), jump(grad(v), n)) * dS
+    L = inner(f, v) * dx
+    # -
 
-problem = LinearProblem(a, L, bcs=[bc], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
-uh = problem.solve()
+    # We create a {py:class}`LinearProblem <dolfinx.fem.petsc.LinearProblem>`
+    # object that brings together the variational problem, the Dirichlet
+    # boundary condition, and which specifies the linear solver. In this
+    # case we use a direct (LU) solver. The {py:func}`solve
+    # <dolfinx.fem.petsc.LinearProblem.solve>` will compute a solution.
 
-# The solution can be written to a  {py:class}`XDMFFile
-# <dolfinx.io.XDMFFile>` file visualization with ParaView or VisIt
+    problem = LinearProblem(a, L, bcs=[bc], petsc_options={"ksp_type": "preonly", "pc_type": "lu"})
+    uh = problem.solve()
 
-with io.XDMFFile(mesh.comm, "output/biharmonic.xdmf", "w") as file:
-    V1 = fem.functionspace(mesh, ("Lagrange", 1))
-    u1 = fem.Function(V1)
-    u1.interpolate(uh)
-    file.write_mesh(mesh)
-    file.write_function(u1)
+    # The solution can be written to a  {py:class}`XDMFFile
+    # <dolfinx.io.XDMFFile>` file visualization with ParaView or VisIt
 
-# and displayed using [pyvista](https://docs.pyvista.org/).
+    with io.XDMFFile(mesh.comm, "output/biharmonic.xdmf", "w") as file:
+        V1 = fem.functionspace(mesh, ("Lagrange", 1))
+        u1 = fem.Function(V1)
+        u1.interpolate(uh)
+        file.write_mesh(mesh)
+        file.write_function(u1)
 
-_logger.info("Norm of uh: %e with alpha: %.2f", u1.vector.norm(), alpha)
+    # and displayed using [pyvista](https://docs.pyvista.org/).
 
-try:
-    import pyvista
-    pyvista.OFF_SCREEN = True
-    cells, types, x = plot.vtk_mesh(V)
-    grid = pyvista.UnstructuredGrid(cells, types, x)
-    grid.point_data["u"] = uh.x.array.real
-    grid.set_active_scalars("u")
-    plotter = pyvista.Plotter()
-    plotter.add_mesh(grid, show_edges=True)
-    warped = grid.warp_by_scalar()
-    plotter.add_mesh(warped)
-    plotter.add_mesh(warped, show_edges=True)
+    _logger.info("Norm of uh: %e with alpha: %.2f", u1.vector.norm(), alpha)
 
-    if pyvista.OFF_SCREEN:
-        pyvista.start_xvfb(wait=0.1)
-        plotter.screenshot("output/biharmonic.png")
-    else:
-        plotter.show()
-except ModuleNotFoundError:
-    print("'pyvista' is required to visualise the solution")
-    print("Install 'pyvista' with pip: 'python3 -m pip install pyvista'")
+    try:
+        import pyvista
+        pyvista.OFF_SCREEN = True
+        cells, types, x = plot.vtk_mesh(V)
+        grid = pyvista.UnstructuredGrid(cells, types, x)
+        grid.point_data["u"] = uh.x.array.real
+        grid.set_active_scalars("u")
+        plotter = pyvista.Plotter()
+        plotter.add_mesh(grid, show_edges=True)
+        warped = grid.warp_by_scalar()
+        plotter.add_mesh(warped)
+        plotter.add_mesh(warped, show_edges=True)
+
+        if pyvista.OFF_SCREEN:
+            pyvista.start_xvfb(wait=0.1)
+            plotter.screenshot("output/biharmonic.png")
+        else:
+            plotter.show()
+    except ModuleNotFoundError:
+        print("'pyvista' is required to visualise the solution")
+        print("Install 'pyvista' with pip: 'python3 -m pip install pyvista'")

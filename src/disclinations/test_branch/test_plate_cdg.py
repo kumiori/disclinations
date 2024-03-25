@@ -1,7 +1,9 @@
 # Solving a plate problem with a penalised formulation
 
 import json
+import logging
 import os
+import pdb
 import sys
 from pathlib import Path
 
@@ -11,21 +13,14 @@ import numpy as np
 import petsc4py
 import ufl
 import yaml
+from disclinations.meshes import mesh_bounding_box
+from disclinations.meshes.primitives import mesh_bar_gmshapi
+# from damage.utils import ColorPrint
+from disclinations.solvers import SNESSolver as PlateSolver
 from dolfinx import log
+from dolfinx.io import XDMFFile
 from mpi4py import MPI
 from petsc4py import PETSc
-
-sys.path.append("../")
-import logging
-import pdb
-
-import numpy as np
-from dolfinx.io import XDMFFile
-from meshes import mesh_bounding_box
-from meshes.primitives import mesh_bar_gmshapi
-# from damage.utils import ColorPrint
-from models import ElasticityModel
-from solvers import SNESSolver as PlateSolver
 
 logging.basicConfig(level=logging.INFO)
 
@@ -37,23 +32,11 @@ import dolfinx.mesh
 import dolfinx.plot
 import ufl
 import yaml
-from dolfinx.fem import (Constant, Function, FunctionSpace, assemble_scalar,
-                         dirichletbc, form, locate_dofs_geometrical, set_bc)
+from dolfinx.fem import Constant, dirichletbc
 from dolfinx.io import XDMFFile, gmshio
-from dolfinx.mesh import CellType
 from mpi4py import MPI
-from ufl import (CellDiameter, FacetNormal, SpatialCoordinate, TestFunction,
-                 TrialFunction, avg, div, ds, dS, dx, grad, inner, jump, outer,
-                 sym)
-
-sys.path.append("../")
-from solvers import SNESSolver
-
-# class PlateModel(ElasticityModel):
-
-#     def total_energy_density(self, state):
-
-
+from ufl import (CellDiameter, FacetNormal, TestFunction, TrialFunction, avg,
+                 ds, dS, dx, grad, inner, jump, outer, sym)
 
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
@@ -92,6 +75,7 @@ gmsh_model, tdim = mesh_bar_gmshapi(geom_type, Lx, Ly, lc, tdim)
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
 
+# pdb.set_trace()
 
 outdir = "output"
 if comm.rank == 0:
@@ -194,8 +178,10 @@ L_BC = (
     - inner(inner(theta_e, n), Mnn0) * ds(_right)
 )
 
+
 W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w_
 
+# the culprit is in the following line, assembling external facet data
 L = psi * dx - W_ext * dx + L_CDG + L_BC
 
 DL_CDG = ufl.derivative(L_CDG, w_, TestFunction(V_w))
@@ -229,7 +215,7 @@ loads = np.linspace(
     parameters.get('loading').get("steps")
     )
 
-pdb.set_trace()
+# pdb.set_trace()
 
 solver = PlateSolver(
     L,
