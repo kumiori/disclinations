@@ -1,37 +1,27 @@
 # Solving a plate problem with mixed formulation
 # and Regge elements (ie. tensors with n-n continuity
 # across facets)
-import sys
-
-import pyvista
-from pyvista.utilities import xvfb
-
-sys.path.append("../")
-
-import json
 import logging
-import os
-import pdb
+import sys
 from pathlib import Path
 
 import dolfinx
 import dolfinx.plot
 import numpy as np
 import petsc4py
+import pyvista
 import ufl
 import yaml
+from disclinations.meshes import mesh_bounding_box
+from disclinations.meshes.primitives import mesh_bar_gmshapi
+from disclinations.utils.viz import plot_scalar
 from dolfinx import log, plot
 from dolfinx.io import XDMFFile, gmshio
-from meshes import mesh_bounding_box
-from meshes.primitives import mesh_bar_gmshapi
-# from damage.utils import ColorPrint
-from models import ElasticityModel
 from mpi4py import MPI
 from petsc4py import PETSc
-from solvers import SNESSolver as ElasticitySolver
+from pyvista.utilities import xvfb
 from ufl import (CellDiameter, FacetNormal, SpatialCoordinate, TestFunction,
                  TrialFunction, avg, div, ds, dS, dx, grad, inner, jump)
-from utils.viz import plot_mesh, plot_scalar, plot_vector
 
 logging.basicConfig(level=logging.INFO)
 
@@ -52,9 +42,6 @@ from mpi4py import MPI
 from petsc4py import PETSc
 from ufl import (CellDiameter, FacetNormal, avg, div, dS, dx, grad, inner,
                  jump, pi, sin)
-
-sys.path.append("../")
-from solvers import SNESSolver
 
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
