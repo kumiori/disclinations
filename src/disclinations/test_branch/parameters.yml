@@ -10,7 +10,7 @@ geometry:
     geom_type: "bar"
     Lx: 1.
     Ly: .1
-    lc: 0.02
+    mesh_size: 0.02
     mesh_size_factor: 3
 
 #  === Material === #

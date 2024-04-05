@@ -50,26 +50,14 @@ with open("parameters.yml") as f:
 Lx = parameters["geometry"]["Lx"]
 Ly = parameters["geometry"]["Ly"]
 tdim = parameters["geometry"]["geometric_dimension"]
-lc = parameters["geometry"]["lc"]
+mesh_size = parameters["geometry"]["mesh_size"]
 
 # Get geometry model
 geom_type = parameters["geometry"]["geom_type"]
 model_rank = 0
 
 # Create the mesh of the specimen with given dimensions
-gmsh_model, tdim = mesh_bar_gmshapi(geom_type, Lx, Ly, lc, tdim)
-
-# # Get mesh and meshtags
-# mesh, mts = gmsh_model_to_mesh(gmsh_model,
-#                                cell_data=False,
-#                                facet_data=True,
-#                                gdim=2)
-
-# mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-
-
-# Create the mesh of the specimen with given dimensions
-gmsh_model, tdim = mesh_bar_gmshapi(geom_type, Lx, Ly, lc, tdim)
+gmsh_model, tdim = mesh_bar_gmshapi(geom_type, Lx, Ly, mesh_size, tdim)
 
 # Get mesh and meshtags
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
@@ -158,7 +146,17 @@ bcs_w = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
     dofs_u_left, V_w
 )
-bcs = [bcs_w]
+
+# Create Dirichlet boundary condition
+facetdim = mesh.topology.dim - 1
+mesh.topology.create_connectivity(facetdim, mesh.topology.dim)
+bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
+
+bcs_w = [
+    dolfinx.fem.dirichletbc(value=Constant(mesh, 0.0), dofs=bndry_facets, V=V_w)
+    ]
+
+# bcs = [bcs_w]
 
 ds = ufl.Measure("ds")(subdomain_data=mts)
 dx = ufl.Measure("dx")
@@ -182,7 +180,8 @@ L_BC = (
 W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w_
 
 # the culprit is in the following line, assembling external facet data
-L = psi * dx - W_ext * dx + L_CDG + L_BC
+L = psi * dx - W_ext * dx + L_CDG 
+# + L_BC
 
 DL_CDG = ufl.derivative(L_CDG, w_, TestFunction(V_w))
 DL_BC = ufl.derivative(L_BC, w_, TrialFunction(V_w))
@@ -200,12 +199,12 @@ for f in [zero_u, ux_]:
     f.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                          mode=PETSc.ScatterMode.FORWARD)
 
-bcs_u = [
-    dolfinx.fem.dirichletbc(zero_u, dofs_u_left),
-    dolfinx.fem.dirichletbc(u_, dofs_u_right),
-]
+# bcs_u = [
+#     dolfinx.fem.dirichletbc(zero_u, dofs_u_left),
+#     dolfinx.fem.dirichletbc(u_, dofs_u_right),
+# ]
 
-bcs = {"bcs_u": bcs_u}
+# bcs = {"bcs_u": bcs_u}
 
 # Define the model
 
@@ -242,7 +241,7 @@ for i_t, t in enumerate(loads):
 
     elastic_energy = comm.allreduce(
         dolfinx.fem.assemble_scalar(
-            dolfinx.fem.form(model.elastic_energy_density(state) * dx)),
+            dolfinx.fem.form(elastic_energy_density(state) * dx)),
         op=MPI.SUM,
     )
 
