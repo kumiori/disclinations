@@ -23,8 +23,34 @@ comm = MPI.COMM_WORLD
 
 class SNESSolver:
     """
-    Problem class for elasticity, compatible with PETSC.SNES solvers.
+    Problem class for nonlinear problems, compatible with PETSC.SNES solvers.
+    
+    Initialize the SNESSolver.
+
+    Parameters
+    ----------
+    F_form : ufl.Form
+        The form of the residual.
+    u : dolfinx.fem.Function
+        The solution function.
+    bcs : list, optional
+        List of boundary conditions (default is []).
+    J_form : ufl.Form, optional
+        The form of the Jacobian (default is None).
+    bounds : tuple, optional
+        Bounds for the solution as (lower, upper) (default is None).
+    petsc_options : dict, optional
+        Dictionary of PETSc solver options (default is {}).
+    form_compiler_parameters : dict, optional
+        Parameters for form compiler (default is {}).
+    jit_parameters : dict, optional
+        Parameters for JIT compilation (default is {}).
+    monitor : function, optional
+        Monitor function for the solver (default is None).
+    prefix : str, optional
+        Unique prefix for PETSc solver options (default is None).
     """
+    
     def __init__(
         self,
         F_form: ufl.Form,
@@ -71,7 +97,14 @@ class SNESSolver:
         self.solver = self.solver_setup()
 
     def set_petsc_options(self, debug=False):
-        # Set PETSc options
+        """
+        Set PETSc solver options.
+
+        Parameters
+        ----------
+        debug : bool, optional
+            If True, print the PETSc options (default is False).
+        """
         opts = PETSc.Options()
         opts.prefixPush(self.prefix)
         if debug is True:
@@ -83,7 +116,15 @@ class SNESSolver:
         opts.prefixPop()
 
     def solver_setup(self):
-        # Create nonlinear solver
+        """
+        Set up the PETSc.SNES solver.
+
+        Returns
+        -------
+        PETSc.SNES
+            The configured PETSc.SNES solver object.
+        """
+        
         snes = PETSc.SNES().create(self.comm)
 
         # Set options
@@ -105,14 +146,19 @@ class SNESSolver:
         return snes
 
     def F(self, snes: PETSc.SNES, x: PETSc.Vec, b: PETSc.Vec):
-        """Assemble the residual F into the vector b.
+        """
+        Assemble the residual F into the vector b.
 
         Parameters
-        ==========
-        snes: the snes object
-        x: Vector containing the latest solution.
-        b: Vector to assemble the residual into.
+        ----------
+        snes : PETSc.SNES
+            The SNES solver object.
+        x : PETSc.Vec
+            Vector containing the latest solution.
+        b : PETSc.Vec
+            Vector to assemble the residual into.
         """
+        
         # We need to assign the vector to the function
 
         x.ghostUpdate(addv=PETSc.InsertMode.INSERT,
@@ -125,7 +171,8 @@ class SNESSolver:
         with b.localForm() as b_local:
             b_local.set(0.0)
         assemble_vector(b, self.F_form)
-
+        __import__('pdb').set_trace()
+        
         # Apply boundary conditions
         apply_lifting(b, [self.J_form], [self.bcs], [x], -1.0)
         b.ghostUpdate(addv=PETSc.InsertMode.ADD,
@@ -133,18 +180,40 @@ class SNESSolver:
         set_bc(b, self.bcs, x, -1.0)
 
     def J(self, snes, x: PETSc.Vec, A: PETSc.Mat, P: PETSc.Mat):
-        """Assemble the Jacobian matrix.
+        """
+        Assemble the Jacobian matrix.
 
         Parameters
-        ==========
-        x: Vector containing the latest solution.
-        A: Matrix to assemble the Jacobian into.
+        ----------
+        snes : PETSc.SNES
+            The SNES solver object.
+        x : PETSc.Vec
+            Vector containing the latest solution.
+        A : PETSc.Mat
+            Matrix to assemble the Jacobian into.
+        P : PETSc.Mat
+            Preconditioner matrix (not used in this context).
         """
+        
         A.zeroEntries()
         assemble_matrix(A, self.J_form, self.bcs)
         A.assemble()
 
     def solve(self):
+        """
+        Solve the nonlinear problem.
+
+        Returns
+        -------
+        tuple
+            A tuple containing the number of iterations and the reason for convergence.
+
+        Raises
+        ------
+        RuntimeError
+            If the solver fails to converge.
+        """
+        
         log(LogLevel.INFO, f"Solving {self.prefix}")
 
         try:
