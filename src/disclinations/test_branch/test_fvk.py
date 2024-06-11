@@ -19,7 +19,7 @@ from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 
 # from damage.utils import ColorPrint
-from disclinations.solvers import SNESSolver as PlateSolver
+from disclinations.solvers import SNESSolver
 from dolfinx import log
 from dolfinx.io import XDMFFile
 from mpi4py import MPI
@@ -27,6 +27,8 @@ from petsc4py import PETSc
 
 logging.basicConfig(level=logging.INFO)
 
+
+from dolfinx.fem.petsc import (assemble_matrix, create_vector, create_matrix, assemble_vector)
 
 import sys
 
@@ -201,12 +203,26 @@ L = energy + dg1(w) + dg2(w) \
            + bc1(v) + bc2(v) \
     - W_ext
            
-F = ufl.derivative(L, dolfinx.fem.Function(Q), ufl.TestFunction(Q))
-# J = ufl.derivative(F, dolfinx.fem.Function(Q), ufl.TrialFunction(Q))
+F = ufl.derivative(L, q, ufl.TestFunction(Q))
+J = ufl.derivative(F, dolfinx.fem.Function(Q), ufl.TrialFunction(Q))
+
+dolfinx.fem.petsc.create_vector(dolfinx.fem.form(F))
+
+
+
+
+pdb.set_trace()
+
+# problem = dolfinx.fem.petsc.NonlinearProblem(F, q, bcs, J=J)
+solver = dolfinx.cpp.nls.petsc.NewtonSolver(mesh.comm)
+pdb.set_trace()
+
+
+
 
 # q = dolfinx.fem.Function(Q)
 
-solver = PlateSolver(
+solver = SNESSolver(
     F,
     q,
     bcs,
@@ -223,12 +239,12 @@ fig = ax.get_figure()
 fig.savefig(f"{prefix}/mesh.png")
 
 solver.solve()
+pdb.set_trace() 
 
 elastic_energy = comm.allreduce(
     dolfinx.fem.assemble_scalar(
         dolfinx.fem.form(energy)),
     op=MPI.SUM,
 )
-
 
 pdb.set_trace() 
