@@ -121,9 +121,7 @@ M = ufl.diff(psi, k)
 
 alpha = E * t ** 3
 h = CellDiameter(mesh)
-
 n = FacetNormal(mesh)
-
 M_nn = inner(M, outer(n, n))
 
 L_CDG = (
@@ -217,7 +215,7 @@ loads = np.linspace(
 # pdb.set_trace()
 
 solver = PlateSolver(
-    L,
+    F,
     w_,
     bcs_w,
     bounds=None,

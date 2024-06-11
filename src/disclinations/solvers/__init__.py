@@ -129,12 +129,16 @@ class SNESSolver:
 
         # Set options
         snes.setOptionsPrefix(self.prefix)
-        self.set_petsc_options()
+        # self.set_petsc_options()
         snes.setFunction(self.F, self.b)
         snes.setJacobian(self.J, self.a)
 
-        # We set the bound (Note: they are passed as reference and not as values)
+        snes.setTolerances(rtol=1.0e-9, max_it=10)
+        snes.getKSP().setType("preonly")
+        snes.getKSP().setTolerances(rtol=1.0e-9)
+        snes.getKSP().getPC().setType("lu")
 
+        # We set the bound (Note: they are passed as reference and not as values)
         if self.monitor is not None:
             snes.setMonitor(self.monitor)
 
@@ -166,13 +170,10 @@ class SNESSolver:
         x.copy(self.u.vector)
         self.u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                                   mode=PETSc.ScatterMode.FORWARD)
-
         # Zero the residual vector
         with b.localForm() as b_local:
             b_local.set(0.0)
         assemble_vector(b, self.F_form)
-        __import__('pdb').set_trace()
-        
         # Apply boundary conditions
         apply_lifting(b, [self.J_form], [self.bcs], [x], -1.0)
         b.ghostUpdate(addv=PETSc.InsertMode.ADD,
@@ -218,13 +219,13 @@ class SNESSolver:
 
         try:
             self.solver.solve(None, self.u.vector)
-            # print(
-            #    f"{self.prefix} SNES solver converged in",
-            #    self.solver.getIterationNumber(),
-            #    "iterations",
-            #    "with converged reason",
-            #    self.solver.getConvergedReason(),
-            # )
+            print(
+               f"{self.prefix} SNES solver converged in",
+               self.solver.getIterationNumber(),
+               "iterations",
+               "with converged reason",
+               self.solver.getConvergedReason(),
+            )
             self.u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                                       mode=PETSc.ScatterMode.FORWARD)
             return (self.solver.getIterationNumber(),
@@ -236,3 +237,36 @@ class SNESSolver:
                 f"WARNING: {self.prefix} solver failed to converge, what's next?",
             )
             raise RuntimeError(f"{self.prefix} solvers did not converge")
+
+
+from ufl import TestFunction, TrialFunction, derivative, dx, grad, inner
+
+
+class SNESProblem:
+    def __init__(self, F, u, bc):
+        V = u.function_space
+        du = TrialFunction(V)
+        self.L = form(F)
+        self.a = form(derivative(F, u, du))
+        self.bc = bc
+        self._F, self._J = None, None
+        self.u = u
+
+    def F(self, snes, x, F):
+        """Assemble residual vector."""
+        x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+        x.copy(self.u.vector)
+        self.u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+
+        with F.localForm() as f_local:
+            f_local.set(0.0)
+        assemble_vector(F, self.L)
+        apply_lifting(F, [self.a], bcs=[[self.bc]], x0=[x], scale=-1.0)
+        F.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
+        set_bc(F, [self.bc], x, -1.0)
+
+    def J(self, snes, x, J, P):
+        """Assemble Jacobian matrix."""
+        J.zeroEntries()
+        assemble_matrix(J, self.a, bcs=[self.bc])
+        J.assemble()
