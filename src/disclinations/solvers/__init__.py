@@ -292,7 +292,6 @@ class SNESProblem:
             
         return snes
 
-
     def F(self, snes: PETSc.SNES, x: PETSc.Vec, F: PETSc.Vec):
         """Assemble residual vector."""
         x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
@@ -305,6 +304,7 @@ class SNESProblem:
         apply_lifting(F, [self.J_form], bcs=[self.bc], x0=[x], scale=-1.0)
         F.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
         set_bc(F, self.bc, x, -1.0)
+        __import__('pdb').set_trace()
 
     def J(self, snes: PETSc.SNES, x: PETSc.Vec, J: PETSc.Mat, P: PETSc.Mat):
         """Assemble Jacobian matrix."""
