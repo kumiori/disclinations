@@ -19,7 +19,7 @@ from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 
 # from damage.utils import ColorPrint
-from disclinations.solvers import SNESSolver
+from disclinations.solvers import SNESSolver, SNESProblem
 from dolfinx import log
 from dolfinx.io import XDMFFile
 from mpi4py import MPI
@@ -64,6 +64,10 @@ petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
 
 comm = MPI.COMM_WORLD
+
+def monitor(snes, it, norm):
+    logging.info(f"Iteration {it}, residual {norm}")
+    return PETSc.SNES.ConvergedReason.ITERATING
 
 import matplotlib.tri as tri
 
@@ -206,30 +210,31 @@ L = energy + dg1(w) + dg2(w) \
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
 J = ufl.derivative(F, dolfinx.fem.Function(Q), ufl.TrialFunction(Q))
 
-dolfinx.fem.petsc.create_vector(dolfinx.fem.form(F))
+solver = SNESProblem(F, q, bcs, monitor = monitor)
 
-
-
+solver.snes.solve(None, q.vector)
+print(solver.snes.getConvergedReason())
 
 pdb.set_trace()
 
-# problem = dolfinx.fem.petsc.NonlinearProblem(F, q, bcs, J=J)
-solver = dolfinx.cpp.nls.petsc.NewtonSolver(mesh.comm)
-pdb.set_trace()
+# # problem = dolfinx.fem.petsc.NonlinearProblem(F, q, bcs, J=J)
+# solver = dolfinx.cpp.nls.petsc.NewtonSolver(mesh.comm)
+# pdb.set_trace()
 
 
 
 
-# q = dolfinx.fem.Function(Q)
+# # q = dolfinx.fem.Function(Q)
 
-solver = SNESSolver(
-    F,
-    q,
-    bcs,
-    bounds=None,
-    petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
-    prefix='plate_fvk',
-)
+# solver = SNESSolver(
+#     F,
+#     q,
+#     bcs,
+#     bounds=None,
+#     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
+#     prefix='plate_fvk',
+# )
+# solver.solve()
 
 import matplotlib.pyplot as plt
 
@@ -238,7 +243,6 @@ ax = plot_mesh(mesh)
 fig = ax.get_figure()
 fig.savefig(f"{prefix}/mesh.png")
 
-solver.solve()
 pdb.set_trace() 
 
 elastic_energy = comm.allreduce(
