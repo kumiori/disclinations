@@ -170,3 +170,22 @@ plotter = pyvista.Plotter(
 scalar_plot = plot_scalar(u, plotter, subplot=(0, 1), lineproperties={"scalars": "u"})
 scalar_plot.screenshot("output/test_poisson.png")
 print("plotted scalar")
+
+
+# 0---------------------------0
+
+solver = SNESSolver(
+    F,
+    u,
+    bcs,
+    bounds=None,
+    petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
+    prefix='test_snes',
+)
+
+res = solver.solve()
+
+
+scalar_plot = plot_scalar(u, plotter, subplot=(0, 0), lineproperties={"scalars": "u"})
+scalar_plot.screenshot("output/test_poisson.png")
+print("plotted scalar")
