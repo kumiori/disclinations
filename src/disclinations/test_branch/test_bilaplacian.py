@@ -120,7 +120,7 @@ bending = (D/2 * (inner(div(grad(u)), div(grad(u))))) * dx
 W_ext = load * u * dx
 
 dg1 = lambda u: 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
-dg2 = lambda u: 1/2 * α/h_avg * inner(jump(grad(u)), jump(grad(u))) * dS
+dg2 = lambda u: 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
 dg3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
 
 L = bending + dg1(u) + dg2(u) + dg3(u) - W_ext
