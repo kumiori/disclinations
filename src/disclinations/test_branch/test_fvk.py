@@ -81,7 +81,6 @@ def plot_mesh(mesh, ax=None):
     ax.triplot(tria, color="k")
     return ax
 
-
 with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -102,9 +101,7 @@ outdir = "output"
 prefix = os.path.join(outdir, "plate_fvk")
 
 if comm.rank == 0:
-    # Path(outdir).mkdir(parents=True, exist_ok=True)
     Path(prefix).mkdir(parents=True, exist_ok=True)
-
 
 h = CellDiameter(mesh)
 n = FacetNormal(mesh)
@@ -113,16 +110,6 @@ n = FacetNormal(mesh)
 X = ufl.FiniteElement("CG", mesh.ufl_cell(), parameters["model"]["order"])
 # Q_el = 
 Q = dolfinx.fem.FunctionSpace(mesh, ufl.MixedElement([X, X]))
-
-# Boundaries
-# facets = dolfinx.mesh.locate_entities_boundary(
-#     mesh,
-#     1,
-#     marker=lambda x: np.isclose(
-#         x[0] ** 2 + x[1] ** 2, parameters["geometry"]["radius"] ** 2, atol=1e-10
-#     ),
-# )
-
 
 # Material parameters
 
@@ -134,7 +121,6 @@ Eh = dolfinx.fem.Constant(mesh, 1.)
 k_g = -D*(1-nu)
 n = ufl.FacetNormal(mesh)
 
-# dofs = dolfinx.fem.locate_dofs_geometrical(
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
 dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(0), entity_dim=1, entities=bndry_facets)
@@ -150,7 +136,7 @@ bcs_v = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
     dofs_w, Q.sub(1)
 )
-#     dolfinx.fem.dirichletbc(value=Constant(mesh, 0.0), dofs=dofs_0, V=Q.sub(0))
+# dolfinx.fem.dirichletbc(value=Constant(mesh, 0.0), dofs=dofs_0, V=Q.sub(0))
 
 bcs = [bcs_w, bcs_v]
 # (subdomain_data=mts)
@@ -161,9 +147,8 @@ dS = ufl.Measure("dS")
 h = ufl.CellDiameter(mesh)
 
 q = dolfinx.fem.Function(Q)
-v, w = q.split()
-v.name = "airy"
-w.name = "Deflection"
+v, w = ufl.split(q)
+
 J = as_matrix([[0, -1], [1, 0]])
 # v = dolfinx.fem.Function(Q.sub(1).collapse(), name="sigma")
 # w = dolfinx.fem.Function(Q.sub(0).collapse(), name="Deflection")
@@ -210,31 +195,28 @@ L = energy + dg1(w) + dg2(w) \
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
 J = ufl.derivative(F, dolfinx.fem.Function(Q), ufl.TrialFunction(Q))
 
+# --------------------------------
 solver = SNESProblem(F, q, bcs, monitor = monitor)
 
 solver.snes.solve(None, q.vector)
-print(solver.snes.getConvergedReason())
+# print(solver.snes.getConvergedReason())
+# ---------------------------------
 
-pdb.set_trace()
-
-# # problem = dolfinx.fem.petsc.NonlinearProblem(F, q, bcs, J=J)
-# solver = dolfinx.cpp.nls.petsc.NewtonSolver(mesh.comm)
-# pdb.set_trace()
-
-
+J_mat = create_matrix(dolfinx.fem.form(J))
+J_mat.zeroEntries()
+assemble_matrix(J_mat, dolfinx.fem.form(J), bcs=bcs)
+J_mat.assemble()
 
 
-# # q = dolfinx.fem.Function(Q)
-
-# solver = SNESSolver(
-#     F,
-#     q,
-#     bcs,
-#     bounds=None,
-#     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
-#     prefix='plate_fvk',
-# )
-# solver.solve()
+solver = SNESSolver(
+    F_form=F,
+    u=q,
+    bcs=bcs,
+    bounds=None,
+    petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
+    prefix='plate_fvk',
+)
+solver.solve()
 
 import matplotlib.pyplot as plt
 
@@ -243,7 +225,6 @@ ax = plot_mesh(mesh)
 fig = ax.get_figure()
 fig.savefig(f"{prefix}/mesh.png")
 
-pdb.set_trace() 
 
 elastic_energy = comm.allreduce(
     dolfinx.fem.assemble_scalar(
@@ -251,4 +232,82 @@ elastic_energy = comm.allreduce(
     op=MPI.SUM,
 )
 
-pdb.set_trace() 
+
+# ------------------------------
+
+from disclinations.utils.viz import plot_scalar, plot_profile
+
+import pyvista
+from pyvista.plotting.utilities import xvfb
+
+xvfb.start_xvfb(wait=0.05)
+pyvista.OFF_SCREEN = True
+
+plotter = pyvista.Plotter(
+        title="Displacement",
+        window_size=[1600, 600],
+        shape=(1, 1),
+    )
+
+v, w = q.split()
+v.name = "Airy"
+w.name = "deflection"
+
+V_v, dofs_v = Q.sub(0).collapse()
+V_w, dofs_w = Q.sub(1).collapse()
+
+
+scalar_plot = plot_scalar(w, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w)
+scalar_plot.screenshot(f"{prefix}/test_fvk-w.png")
+
+plotter = pyvista.Plotter(
+        title="Displacement",
+        window_size=[1600, 600],
+        shape=(1, 1),
+    )
+
+scalar_plot = plot_scalar(v, plotter, subplot=(0, 0), V_sub=V_v, dofs=dofs_v)
+scalar_plot.screenshot(f"{prefix}/test_fvk-v.png")
+print("plotted scalar")
+
+
+
+tol = 1e-3
+xs = np.linspace(0 + tol, parameters["geometry"]["radius"] - tol, 101)
+points = np.zeros((3, 101))
+points[0] = xs
+
+fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+
+_plt, data = plot_profile(
+    w,
+    points,
+    None,
+    subplot=(1, 2),
+    lineproperties={
+        "c": "k",
+        "label": f"$w(x)$"
+    },
+    fig=fig,
+    subplotnumber=1
+)
+
+_plt, data = plot_profile(
+    v,
+    points,
+    None,
+    subplot=(1, 2),
+    lineproperties={
+        "c": "k",
+        "label": f"$v(x)$"
+    },
+    fig=fig,
+    subplotnumber=2
+)
+
+_plt.legend()
+
+_plt.savefig(f"{prefix}/test_fvk-profiles.png")
+
+
+# 0---------------------------0
