@@ -104,6 +104,13 @@ D = dolfinx.fem.Constant(mesh, 1.)
 α = dolfinx.fem.Constant(mesh, 10.)
 load = dolfinx.fem.Constant(mesh, 1.)
 h = ufl.CellDiameter(mesh)
+h_avg = (h('+') + h('-')) / 2.0
+
+tdim = mesh.topology.dim
+num_cells = mesh.topology.index_map(tdim).size_local
+_h = dolfinx.cpp.mesh.h(mesh._cpp_object, tdim, np.arange(num_cells, dtype=np.int32))
+# print(_h)
+
 n = ufl.FacetNormal(mesh)
 
 dx = ufl.Measure("dx")
@@ -113,9 +120,10 @@ bending = (D/2 * (inner(div(grad(u)), div(grad(u))))) * dx
 W_ext = load * u * dx
 
 dg1 = lambda u: 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
-dg2 = lambda u: 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
+dg2 = lambda u: 1/2 * α/h_avg * inner(jump(grad(u)), jump(grad(u))) * dS
+dg3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
 
-L = bending + dg1(u) + dg2(u) - W_ext
+L = bending + dg1(u) + dg2(u) + dg3(u) - W_ext
 F = ufl.derivative(L, u, ufl.TestFunction(V))
 
 solver = SNESProblem(F, u, bcs, monitor = monitor)
