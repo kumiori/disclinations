@@ -174,9 +174,19 @@ for cell, basis_value, sign in zip(_cells, _basis_values, signs):
     dofs = np.array(Q_0_to_Q_dofs)[subspace_dofs]
     b.x.array[dofs] += sign * basis_value
 
-__import__('pdb').set_trace()
-
 solver = SNESProblem(F, q, bcs, monitor = monitor)
+
+
+dolfinx.fem.petsc.apply_lifting(b.vector, [solver.J_form], [bcs])
+b.vector.ghostUpdate(addv=PETSc.InsertMode.ADD,
+                      mode=PETSc.ScatterMode.REVERSE)
+dolfinx.fem.petsc.set_bc(b.vector, bcs)
+# dolfinx.fem.petsc.set_bc(b.vector, bcs, -1.)
+# b.x.scatter_forward()
+b.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
+                      mode=PETSc.ScatterMode.FORWARD)
+
+__import__('pdb').set_trace()
 
 solver.snes.solve(None, q.vector)
 print(solver.snes.getConvergedReason())
