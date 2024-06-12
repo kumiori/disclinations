@@ -21,6 +21,7 @@ from disclinations.meshes.primitives import mesh_circle_gmshapi
 # from damage.utils import ColorPrint
 from disclinations.solvers import SNESSolver, SNESProblem
 from disclinations.utils.la import compute_cell_contributions
+from disclinations.utils.viz import plot_mesh
 
 from dolfinx import log
 from dolfinx.io import XDMFFile
@@ -76,6 +77,7 @@ with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
 
 mesh_size = parameters["geometry"]["mesh_size"]
+mesh_size = .3
 parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
 
@@ -87,6 +89,13 @@ gmsh_model, tdim = mesh_circle_gmshapi(
     parameters["geometry"]["geom_type"], 1, mesh_size, tdim
 )
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
+
+import matplotlib.pyplot as plt
+
+plt.figure()
+ax = plot_mesh(mesh)
+fig = ax.get_figure()
+fig.savefig(f"output/coarse-mesh.png")
 
 X = ufl.FiniteElement("CG", mesh.ufl_cell(), 1)
 
@@ -153,11 +162,19 @@ else:
     points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
               np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
 
-
-__import__('pdb').set_trace()
 # cells, basis_values = compute_cell_contribution_point(V, point)
 _cells, _basis_values = compute_cell_contributions(Q, points)
+Q_0, Q_0_to_Q_dofs = Q.sub(0).collapse()
+_cells, _basis_values = compute_cell_contributions(Q_0, points)
+_cells, _basis_values = compute_cell_contributions(Q.sub(0), points)
 
+for cell, basis_value, sign in zip(_cells, _basis_values, signs):
+    subspace_dofs = Q_0.dofmap.cell_dofs(cell)
+    # dofs = Q_0_to_Q_dofs[subspace_dofs]
+    dofs = np.array(Q_0_to_Q_dofs)[subspace_dofs]
+    b.x.array[dofs] += sign * basis_value
+
+__import__('pdb').set_trace()
 
 solver = SNESProblem(F, q, bcs, monitor = monitor)
 
