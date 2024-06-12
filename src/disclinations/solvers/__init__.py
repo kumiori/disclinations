@@ -91,10 +91,12 @@ class SNESSolver:
         self.petsc_options = petsc_options
 
         self.b = create_vector(self.F_form)
+        __import__('pdb').set_trace()
         self.a = create_matrix(self.J_form)
 
         self.monitor = monitor
-        self.solver = self.solver_setup()
+        # self.solver = self.solver_setup()
+        self.solver = self.solver_setup_demo()
 
     def set_petsc_options(self, debug=False):
         """
@@ -115,6 +117,22 @@ class SNESSolver:
 
         opts.prefixPop()
 
+    def solver_setup_demo(self):
+        snes = PETSc.SNES().create(self.comm)
+        
+        snes.setFunction(self.F, self.b)
+        snes.setJacobian(self.J, self.a)
+
+        snes.setTolerances(rtol=1.0e-9, max_it=10)
+        snes.getKSP().setType("preonly")
+        snes.getKSP().setTolerances(rtol=1.0e-9)
+        snes.getKSP().getPC().setType("lu")
+        
+        if self.monitor is not None:
+            snes.setMonitor(self.monitor)
+
+        return snes
+    
     def solver_setup(self):
         """
         Set up the PETSc.SNES solver.
@@ -174,13 +192,15 @@ class SNESSolver:
         with b.localForm() as b_local:
             b_local.set(0.0)
         assemble_vector(b, self.F_form)
+        
         # Apply boundary conditions
-        apply_lifting(b, [self.J_form], [self.bcs], [x], -1.0)
+        apply_lifting(b, [self.J_form], bcs=[self.bcs], x0=[x], scale=-1.0)
         b.ghostUpdate(addv=PETSc.InsertMode.ADD,
                       mode=PETSc.ScatterMode.REVERSE)
         set_bc(b, self.bcs, x, -1.0)
 
-    def J(self, snes, x: PETSc.Vec, A: PETSc.Mat, P: PETSc.Mat):
+    def J(self, snes: PETSc.SNES, x: PETSc.Vec, A: PETSc.Mat, P: PETSc.Mat):
+    # def J(self, snes, x: PETSc.Vec, A: PETSc.Mat, P: PETSc.Mat):
         """
         Assemble the Jacobian matrix.
 
@@ -243,16 +263,37 @@ from ufl import TestFunction, TrialFunction, derivative, dx, grad, inner
 
 
 class SNESProblem:
-    def __init__(self, F, u, bc):
+    def __init__(self, F, u, bc, monitor = None):
         V = u.function_space
         du = TrialFunction(V)
-        self.L = form(F)
-        self.a = form(derivative(F, u, du))
+        self.F_form = form(F)
+        self.J_form = form(derivative(F, u, du))
         self.bc = bc
-        self._F, self._J = None, None
+        # self._F, self._J = None, None
         self.u = u
+        self.monitor = monitor
+        self.snes = self.setup()
+    
+    def setup(self):
+        b = create_vector(self.F_form)
+        J = create_matrix(self.J_form)
 
-    def F(self, snes, x, F):
+        snes = PETSc.SNES().create()
+        snes.setFunction(self.F, b)
+        snes.setJacobian(self.J, J)
+
+        snes.setTolerances(rtol=1.0e-9, max_it=10)
+        snes.getKSP().setType("preonly")
+        snes.getKSP().setTolerances(rtol=1.0e-9)
+        snes.getKSP().getPC().setType("lu")
+        
+        if self.monitor is not None:
+            snes.setMonitor(self.monitor)
+            
+        return snes
+
+
+    def F(self, snes: PETSc.SNES, x: PETSc.Vec, F: PETSc.Vec):
         """Assemble residual vector."""
         x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
         x.copy(self.u.vector)
@@ -260,13 +301,13 @@ class SNESProblem:
 
         with F.localForm() as f_local:
             f_local.set(0.0)
-        assemble_vector(F, self.L)
-        apply_lifting(F, [self.a], bcs=[[self.bc]], x0=[x], scale=-1.0)
+        assemble_vector(F, self.F_form)
+        apply_lifting(F, [self.J_form], bcs=[self.bc], x0=[x], scale=-1.0)
         F.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
-        set_bc(F, [self.bc], x, -1.0)
+        set_bc(F, self.bc, x, -1.0)
 
-    def J(self, snes, x, J, P):
+    def J(self, snes: PETSc.SNES, x: PETSc.Vec, J: PETSc.Mat, P: PETSc.Mat):
         """Assemble Jacobian matrix."""
         J.zeroEntries()
-        assemble_matrix(J, self.a, bcs=[self.bc])
+        assemble_matrix(J, self.J_form, bcs=self.bc)
         J.assemble()
