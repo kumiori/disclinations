@@ -183,7 +183,7 @@ bc1 = lambda u: 1/2 * inner(grad(u), grad(grad(u)) * n) * ds
 bc2 = lambda u: 1/2 * α/h * inner(dot(grad(u), n), dot(grad(u), n)) * ds
 
 # Dead load (transverse)
-W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
+W_ext = Constant(mesh, np.array(-100.0, dtype=PETSc.ScalarType)) * w * dx
 
 # Define the functional
 L = energy + dg1(w) + dg2(w) \
@@ -193,7 +193,7 @@ L = energy + dg1(w) + dg2(w) \
     - W_ext
            
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
-J = ufl.derivative(F, dolfinx.fem.Function(Q), ufl.TrialFunction(Q))
+J = ufl.derivative(F, q, ufl.TrialFunction(Q))
 
 # --------------------------------
 solver = SNESProblem(F, q, bcs, monitor = monitor)
@@ -210,6 +210,7 @@ J_mat.assemble()
 
 solver = SNESSolver(
     F_form=F,
+    J_form=J,
     u=q,
     bcs=bcs,
     bounds=None,

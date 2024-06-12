@@ -87,7 +87,6 @@ class SNESSolver:
             J_form = ufl.derivative(F_form, self.u, ufl.TrialFunction(V))
 
         self.J_form = dolfinx.fem.form(J_form)
-
         self.petsc_options = petsc_options
 
         self.b = create_vector(self.F_form)
@@ -191,7 +190,6 @@ class SNESSolver:
         with b.localForm() as b_local:
             b_local.set(0.0)
         assemble_vector(b, self.F_form)
-        
         # Apply boundary conditions
         apply_lifting(b, [self.J_form], bcs=[self.bcs], x0=[x], scale=-1.0)
         b.ghostUpdate(addv=PETSc.InsertMode.ADD,

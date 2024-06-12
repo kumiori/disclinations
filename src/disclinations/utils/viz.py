@@ -18,7 +18,7 @@ from mpi4py import MPI
 comm = MPI.COMM_WORLD
 # import pdb
 import pyvista
-from pyvista.utilities import xvfb
+from pyvista.plotting.utilities import xvfb
 
 xvfb.start_xvfb(wait=0.05)
 
@@ -114,8 +114,6 @@ def plot_scalar(u, plotter, subplot=None, lineproperties={}, V_sub=None, dofs=No
     plotter.view_xy()
     plotter.set_background('white')
     return plotter
-
-
 
 def plot_profile(u, points, plotter, subplot=None, lineproperties={}, fig=None, ax=None, subplotnumber = 1):
     # import matplotlib.pyplot as plt

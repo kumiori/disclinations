@@ -114,7 +114,7 @@ b = dolfinx.fem.Function(V)
 b.x.array[:] = 0
 # cells, basis_values = compute_cell_contribution_point(V, point)
 _cells, _basis_values = compute_cell_contributions(V, points)
-__import__('pdb').set_trace()
+
 for cell, basis_value, sign in zip(_cells, _basis_values, signs):
     dofs = V.dofmap.cell_dofs(cell)
     b.x.array[dofs] += sign * basis_value
@@ -122,6 +122,7 @@ dolfinx.fem.petsc.apply_lifting(b.vector, [a_compiled], [[bc]])
 b.x.scatter_reverse(dolfinx.la.InsertMode.add)
 dolfinx.fem.petsc.set_bc(b.vector, [bc])
 b.x.scatter_forward()
+__import__('pdb').set_trace()
 
 A = dolfinx.fem.petsc.assemble_matrix(a_compiled, bcs=[bc])
 A.assemble()
