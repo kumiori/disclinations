@@ -19,11 +19,12 @@ from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 
 # from damage.utils import ColorPrint
-from disclinations.solvers import SNESSolver
+from disclinations.solvers import SNESSolver, SNESProblem
 from dolfinx import log
 from dolfinx.io import XDMFFile
 from mpi4py import MPI
 from petsc4py import PETSc
+from dolfinx.mesh import create_unit_square
 
 logging.basicConfig(level=logging.INFO)
 
@@ -82,6 +83,8 @@ gmsh_model, tdim = mesh_circle_gmshapi(
 )
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
+mesh = create_unit_square(MPI.COMM_WORLD, 12, 15)
+
 outdir = "output"
 prefix = os.path.join(outdir, "test_snes")
 
@@ -103,23 +106,21 @@ def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
     return PETSc.SNES.ConvergedReason.ITERATING
 
-solver = SNESSolver(
-    F,
-    u,
-    [bc],
-    bounds=None,
-    petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
-    prefix='test_snes',
-)
+# solver = SNESSolver(
+#     F,
+#     u,
+#     [bc],
+#     bounds=None,
+#     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
+#     prefix='test_snes',
+# )
 
-res = solver.solve()
-print(res)
-from dolfinx.fem.petsc import create_petsc_vector
+# res = solver.solve()
+# print(res)
+# from dolfinx.fem.petsc import create_petsc_vector
 
-b = create_petsc_vector(V.dofmap.index_map, V.dofmap.index_map_bs)
-__import__('pdb').set_trace()
+solver = SNESProblem(F, u, bc, monitor = monitor)
+solver.snes.solve(None, u.vector)
+print(solver.snes.getConvergedReason())
 
-A = create_matrix(dolfinx.fem.form(J))
-Fv = assemble_vector(b, dolfinx.fem.form(F))
-
-print(f"u norm {u.vector.norm()}")
+assert solver.snes.getConvergedReason() > 0

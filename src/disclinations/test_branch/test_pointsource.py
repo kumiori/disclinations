@@ -11,8 +11,7 @@ from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
 from petsc4py import PETSc
 
-sys.path.append("../")
-from meshes.primitives import mesh_circle_gmshapi
+from disclinations.meshes.primitives import mesh_circle_gmshapi
 
 
 def compute_cell_contributions(V, points):
@@ -115,7 +114,7 @@ b = dolfinx.fem.Function(V)
 b.x.array[:] = 0
 # cells, basis_values = compute_cell_contribution_point(V, point)
 _cells, _basis_values = compute_cell_contributions(V, points)
-
+__import__('pdb').set_trace()
 for cell, basis_value, sign in zip(_cells, _basis_values, signs):
     dofs = V.dofmap.cell_dofs(cell)
     b.x.array[dofs] += sign * basis_value

@@ -91,7 +91,6 @@ class SNESSolver:
         self.petsc_options = petsc_options
 
         self.b = create_vector(self.F_form)
-        __import__('pdb').set_trace()
         self.a = create_matrix(self.J_form)
 
         self.monitor = monitor
@@ -304,7 +303,6 @@ class SNESProblem:
         apply_lifting(F, [self.J_form], bcs=[self.bc], x0=[x], scale=-1.0)
         F.ghostUpdate(addv=PETSc.InsertMode.ADD, mode=PETSc.ScatterMode.REVERSE)
         set_bc(F, self.bc, x, -1.0)
-        __import__('pdb').set_trace()
 
     def J(self, snes: PETSc.SNES, x: PETSc.Vec, J: PETSc.Mat, P: PETSc.Mat):
         """Assemble Jacobian matrix."""

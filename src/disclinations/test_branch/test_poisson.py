@@ -116,44 +116,7 @@ print(solver.snes.getConvergedReason())
 pdb.set_trace()
 # ------------------------------
 
-
-def plot_scalar(u, plotter, subplot=None, lineproperties={}):
-    # __import__('pdb').set_trace()
-    from dolfinx.plot import vtk_mesh as compute_topology
-    
-    """Plots a scalar function using pyvista
-
-    Args:
-        u: Scalar field
-        plotter plotter: The plotter object
-        subplot plotter: Optional selection of subplot slot
-        lineproperties: Optional line properties (dictionary)
-
-    Returns:
-        plotter: Updated plotter object
-   """
-    if subplot:
-        plotter.subplot(subplot[0], subplot[1])
-    V = u.function_space
-    mesh = V.mesh
-    
-    ret = compute_topology(mesh, mesh.topology.dim)
-    if len(ret) == 2:
-        topology, cell_types = ret
-    else: 
-        topology, cell_types, _ = ret
-    grid = pyvista.UnstructuredGrid(topology, cell_types, mesh.geometry.x)
-
-    # plotter.subplot(0, 0)
-    values = u.vector.array.real.reshape(
-        V.dofmap.index_map.size_local, V.dofmap.index_map_bs)
-    grid.point_data["u"] = values
-    grid.set_active_scalars("u")
-    plotter.add_mesh(grid, **lineproperties)
-    plotter.view_xy()
-    plotter.set_background('white')
-    return plotter
-
+from disclinations.utils.viz import plot_scalar
 
 import pyvista
 from pyvista.plotting.utilities import xvfb
