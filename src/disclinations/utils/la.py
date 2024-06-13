@@ -12,7 +12,13 @@ def compute_cell_contribution_point(V, points):
 
     # Pull owning points back to reference cell
     mesh_nodes = mesh.geometry.x
-    cmap = mesh.geometry.cmaps[0]
+    # cmap = mesh.geometry.cmaps[0]
+    # Check for the existence of V.cmap or V.cmaps and select the appropriate one
+    if hasattr(mesh.geometry, 'cmap'):
+        cmap = mesh.geometry.cmap
+    elif hasattr(mesh.geometry, 'cmaps') and isinstance(mesh.geometry.cmaps, list) and len(mesh.geometry.cmaps) > 0:
+        cmap = mesh.geometry.cmaps[0]
+        
     ref_x = np.zeros((len(cells), mesh.geometry.dim),
                      dtype=mesh.geometry.x.dtype)
     for i, (point, cell) in enumerate(zip(owning_points, cells)):
