@@ -198,9 +198,7 @@ class SNESSolver:
             
         assemble_vector(b, self.F_form)
         
-        _b0 = self.b0
-        
-        if self.b0 is not None:
+        if isinstance(self.b0, PETSc.Vec):
             with self.b0.localForm() as b0_local, b.localForm() as b_local:
                 b_local.axpy(1, b0_local)
         

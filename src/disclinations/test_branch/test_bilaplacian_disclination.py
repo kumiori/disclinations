@@ -91,12 +91,7 @@ gmsh_model, tdim = mesh_circle_gmshapi(
 )
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
-
-
-
-
 X = ufl.FiniteElement("CG", mesh.ufl_cell(), 1)
-
 V = dolfinx.fem.functionspace(mesh, ("Lagrange", order))
 
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
