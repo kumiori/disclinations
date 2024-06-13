@@ -1,5 +1,5 @@
 # Solving a Foppl-von-Karman plate problem with a penalised formulation
-# H^0_2 formulation
+# H^0_2 formulation with disclinations
 #
 
 import json
@@ -17,6 +17,8 @@ import ufl
 import yaml
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
+from disclinations.utils.la import compute_cell_contributions
+from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 
 # from damage.utils import ColorPrint
 from disclinations.solvers import SNESSolver, SNESProblem
@@ -27,6 +29,14 @@ from petsc4py import PETSc
 
 logging.basicConfig(level=logging.INFO)
 
+import sys
+import warnings
+
+required_version = "0.8.0"
+
+if dolfinx.__version__ != required_version:
+    warnings.warn(f"We need dolfinx version {required_version}, but found version {dolfinx.__version__}. Exiting.")
+    sys.exit(1)
 
 from dolfinx.fem.petsc import (assemble_matrix, create_vector, create_matrix, assemble_vector)
 
@@ -68,19 +78,10 @@ comm = MPI.COMM_WORLD
 
 def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
+    print(f"Iteration {it}, residual {norm}")
     return PETSc.SNES.ConvergedReason.ITERATING
 
 import matplotlib.tri as tri
-
-def plot_mesh(mesh, ax=None):
-    if ax is None:
-        ax = plt.gca()
-    ax.set_aspect("equal")
-    points = mesh.geometry.x
-    cells = mesh.geometry.dofmap.reshape((-1, mesh.topology.dim + 1))
-    tria = tri.Triangulation(points[:, 0], points[:, 1], cells)
-    ax.triplot(tria, color="k")
-    return ax
 
 with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
@@ -99,7 +100,7 @@ gmsh_model, tdim = mesh_circle_gmshapi(
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
 outdir = "output"
-prefix = os.path.join(outdir, "plate_fvk")
+prefix = os.path.join(outdir, "plate_fvk_disclinations")
 
 if comm.rank == 0:
     Path(prefix).mkdir(parents=True, exist_ok=True)
@@ -128,6 +129,7 @@ TRANSVERSE = 1
 
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
+bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
 dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
 dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
 
@@ -146,7 +148,6 @@ bcs_v = dirichletbc(
 _bcs = {AIRY: bcs_v, TRANSVERSE: bcs_w}
 bcs = list(_bcs.values())
 
-
 ds = ufl.Measure("ds")
 dx = ufl.Measure("dx")
 dS = ufl.Measure("dS")
@@ -162,9 +163,6 @@ J = as_matrix([[0, -1], [1, 0]])
 state = {"v": v, "w": w}
 
 # Define the variational problem
-
-# Stress-displacement operator (membrane)
-# N = lambda v: σ(v)
 c_nu = 1
 hessian   = lambda f : grad(grad(f))
 laplacian = lambda f : div(grad(f))
@@ -197,6 +195,30 @@ bc2   = lambda u: 1/2 * α/h * inner(dot(grad(u), n), dot(grad(u), n)) * ds
 # Dead load (transverse)
 W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
 
+# Point sources
+b = dolfinx.fem.Function(Q)
+b.x.array[:] = 0
+
+if mesh.comm.rank == 0:
+    point = np.array([[0., 0., 0]], dtype=mesh.geometry.x.dtype)
+    
+    points = [np.array([[-0.2, 0.1, 0]], dtype=mesh.geometry.x.dtype),
+              np.array([[0.2, -0.1, 0]], dtype=mesh.geometry.x.dtype)]
+    # signs = [0, 0]
+    signs = [-1, 1]
+else:
+    point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
+    points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+              np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
+
+Q_A, Q_A_to_Q_dofs = Q.sub(AIRY).collapse()
+_cells, _basis_values = compute_cell_contributions(Q_A, points)
+
+for cell, basis_value, sign in zip(_cells, _basis_values, signs):
+    subspace_dofs = Q_A.dofmap.cell_dofs(cell)
+    dofs = np.array(Q_A_to_Q_dofs)[subspace_dofs]
+    b.x.array[dofs] += sign * basis_value
+    
 # Define the functional
 L = energy + dg1_w(w) + dg2(w) \
            + dg1_v(v) + dg2(v) \
@@ -207,22 +229,19 @@ L = energy + dg1_w(w) + dg2(w) \
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
 J = ufl.derivative(F, q, ufl.TrialFunction(Q))
 
-# --------------------------------
-solver = SNESProblem(F, q, bcs, monitor = monitor)
-
-solver.snes.solve(None, q.vector)
-# print(solver.snes.getConvergedReason())
-# ---------------------------------
 
 solver = SNESSolver(
     F_form=F,
     J_form=J,
     u=q,
     bcs=bcs,
-    bounds=None,
     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
-    prefix='plate_fvk',
+    prefix='plate_fvk_',
+    b0=b.vector,
+    monitor=monitor,
 )
+
+
 solver.solve()
 
 import matplotlib.pyplot as plt
@@ -239,10 +258,19 @@ elastic_energy = comm.allreduce(
     op=MPI.SUM,
 )
 
+energy_components = {"bending": bending, "membrane": -membrane, "coupling": coupling}
+
+# Assemble the energy terms and create the dictionary
+computed_energy_terms = {label: comm.allreduce(
+    dolfinx.fem.assemble_scalar(
+        dolfinx.fem.form(energy_term)),
+    op=MPI.SUM,
+) for label, energy_term in energy_components.items()}
+
+pdb.set_trace()
 
 # ------------------------------
 
-from disclinations.utils.viz import plot_scalar, plot_profile
 
 import pyvista
 from pyvista.plotting.utilities import xvfb
@@ -263,7 +291,6 @@ w.name = "deflection"
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
 
-
 scalar_plot = plot_scalar(w, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w)
 scalar_plot.screenshot(f"{prefix}/test_fvk-w.png")
 
@@ -280,7 +307,7 @@ print("plotted scalar")
 
 
 tol = 1e-3
-xs = np.linspace(0 + tol, parameters["geometry"]["radius"] - tol, 101)
+xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, 101)
 points = np.zeros((3, 101))
 points[0] = xs
 
