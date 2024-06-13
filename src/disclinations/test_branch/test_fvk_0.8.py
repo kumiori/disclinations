@@ -123,25 +123,29 @@ Eh = dolfinx.fem.Constant(mesh, parameters["model"]["E"])
 k_g = -D*(1-nu)
 n = ufl.FacetNormal(mesh)
 
+AIRY = 0
+TRANSVERSE = 1
+
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(0), entity_dim=1, entities=bndry_facets)
-dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(1), entity_dim=1, entities=bndry_facets)
+dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
+dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
 
 # Define the variational problem
 
 bcs_w = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
-    dofs_v, Q.sub(0)
+    dofs_v, Q.sub(TRANSVERSE)
 )
 bcs_v = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
-    dofs_w, Q.sub(1)
+    dofs_w, Q.sub(AIRY)
 )
-# dolfinx.fem.dirichletbc(value=Constant(mesh, 0.0), dofs=dofs_0, V=Q.sub(0))
+# keep track of the ordering of fields in boundary conditions
 
-bcs = [bcs_w, bcs_v]
-# (subdomain_data=mts)
+_bcs = {AIRY: bcs_v, TRANSVERSE: bcs_w}
+bcs = list(_bcs.values())
+
 
 ds = ufl.Measure("ds")
 dx = ufl.Measure("dx")
