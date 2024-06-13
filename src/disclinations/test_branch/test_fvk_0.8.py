@@ -32,6 +32,7 @@ from dolfinx.fem.petsc import (assemble_matrix, create_vector, create_matrix, as
 
 import sys
 
+import basix
 import dolfinx
 import dolfinx.io
 import dolfinx.mesh
@@ -107,9 +108,11 @@ h = CellDiameter(mesh)
 n = FacetNormal(mesh)
 
 # Function spaces
-X = ufl.FiniteElement("CG", mesh.ufl_cell(), parameters["model"]["order"])
+# X = ufl.FiniteElement("CG", mesh.ufl_cell(), parameters["model"]["order"])
 # Q_el = 
-Q = dolfinx.fem.FunctionSpace(mesh, ufl.MixedElement([X, X]))
+
+X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"]) 
+Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
 # Material parameters
 # Graphene-like properties
