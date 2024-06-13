@@ -78,6 +78,7 @@ comm = MPI.COMM_WORLD
 
 def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
+    print(f"Iteration {it}, residual {norm}")
     return PETSc.SNES.ConvergedReason.ITERATING
 
 import matplotlib.tri as tri
@@ -99,7 +100,7 @@ gmsh_model, tdim = mesh_circle_gmshapi(
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
 outdir = "output"
-prefix = os.path.join(outdir, "plate_fvk")
+prefix = os.path.join(outdir, "plate_fvk_disclinations")
 
 if comm.rank == 0:
     Path(prefix).mkdir(parents=True, exist_ok=True)
@@ -127,6 +128,7 @@ AIRY = 0
 TRANSVERSE = 1
 
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
+bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
 dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
 dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
@@ -187,20 +189,21 @@ bc1 = lambda u: 1/2 * inner(grad(u), grad(grad(u)) * n) * ds
 bc2 = lambda u: 1/2 * α/h * inner(dot(grad(u), n), dot(grad(u), n)) * ds
 
 # Dead load (transverse)
-W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
+W_ext = Constant(mesh, np.array(-1, dtype=PETSc.ScalarType)) * w * dx
 
 # Point sources
 b = dolfinx.fem.Function(Q)
 b.x.array[:] = 0
 
 if mesh.comm.rank == 0:
-    # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
+    point = np.array([[0., 0., 0]], dtype=mesh.geometry.x.dtype)
     
     points = [np.array([[-0.2, 0.1, 0]], dtype=mesh.geometry.x.dtype),
               np.array([[0.2, -0.1, 0]], dtype=mesh.geometry.x.dtype)]
+    # signs = [0, 0]
     signs = [-1, 1]
 else:
-    # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
+    point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
     points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
               np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
 
@@ -213,10 +216,10 @@ for cell, basis_value, sign in zip(_cells, _basis_values, signs):
     b.x.array[dofs] += sign * basis_value
     
 # Define the functional
-L = energy + dg1(w) + dg2(w) \
-           + dg1(v) + dg2(v) \
-           + bc1(w) + bc2(w) \
-           + bc1(v) + bc2(v) \
+L = energy - dg1(w) + dg2(w) \
+           - dg1(v) + dg2(v) \
+           - bc1(w) - bc2(w) \
+           - bc1(v) - bc2(v) \
     - W_ext
            
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
@@ -225,23 +228,15 @@ J = ufl.derivative(F, q, ufl.TrialFunction(Q))
 
 solver = SNESSolver(
     F_form=F,
-    # J_form=J,
+    J_form=J,
     u=q,
     bcs=bcs,
     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
-    prefix='plate_fvk',
+    prefix='plate_fvk_',
     b0=b.vector,
     monitor=monitor,
 )
 
-# dolfinx.fem.petsc.apply_lifting(b.vector, [solver.J_form], [bcs])
-# b.vector.ghostUpdate(addv=PETSc.InsertMode.ADD,
-#                       mode=PETSc.ScatterMode.REVERSE)
-# dolfinx.fem.petsc.set_bc(b.vector, bcs)
-# # dolfinx.fem.petsc.set_bc(b.vector, bcs, -1.)
-# # b.x.scatter_forward()
-# b.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
-#                       mode=PETSc.ScatterMode.FORWARD)
 
 solver.solve()
 
@@ -259,10 +254,19 @@ elastic_energy = comm.allreduce(
     op=MPI.SUM,
 )
 
+energy_components = {"bending": bending, "membrane": -membrane, "coupling": coupling}
+
+# Assemble the energy terms and create the dictionary
+computed_energy_terms = {label: comm.allreduce(
+    dolfinx.fem.assemble_scalar(
+        dolfinx.fem.form(energy_term)),
+    op=MPI.SUM,
+) for label, energy_term in energy_components.items()}
+
+pdb.set_trace()
 
 # ------------------------------
 
-from disclinations.utils.viz import plot_scalar, plot_profile
 
 import pyvista
 from pyvista.plotting.utilities import xvfb
@@ -283,7 +287,6 @@ w.name = "deflection"
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
 
-
 scalar_plot = plot_scalar(w, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w)
 scalar_plot.screenshot(f"{prefix}/test_fvk-w.png")
 
@@ -300,7 +303,7 @@ print("plotted scalar")
 
 
 tol = 1e-3
-xs = np.linspace(0 + tol, parameters["geometry"]["radius"] - tol, 101)
+xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, 101)
 points = np.zeros((3, 101))
 points[0] = xs
 

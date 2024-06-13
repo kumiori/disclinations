@@ -91,7 +91,7 @@ prefix = os.path.join(outdir, "poisson")
 order = 3
 
 V = dolfinx.fem.functionspace(mesh, ("Lagrange", order))
-
+pdb.set_trace()
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
 

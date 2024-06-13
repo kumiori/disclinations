@@ -23,13 +23,13 @@ model:
     model_type: "2D"
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"
     order: 2
-    alpha_penalty: 100.
+    alpha_penalty: 10.
 # === Solver === #
 solvers:
     elasticity:
         prefix: elasticity
         snes:
-            snes_type: ksponly
+            snes_type: newtonls
             snes_stol: 1e-8
             snes_atol: 1e-8
             snes_rtol: 1e-8

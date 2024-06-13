@@ -17,6 +17,7 @@ import ufl
 import yaml
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
+from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 
 # from damage.utils import ColorPrint
 from disclinations.solvers import SNESSolver, SNESProblem
@@ -27,6 +28,14 @@ from petsc4py import PETSc
 
 logging.basicConfig(level=logging.INFO)
 
+import sys
+import warnings
+
+required_version = "0.8.0"
+
+if dolfinx.__version__ != required_version:
+    warnings.warn(f"We need dolfinx version {required_version}, but found version {dolfinx.__version__}. Exiting.")
+    sys.exit(1)
 
 from dolfinx.fem.petsc import (assemble_matrix, create_vector, create_matrix, assemble_vector)
 
@@ -68,19 +77,11 @@ comm = MPI.COMM_WORLD
 
 def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
+    print(f"Iteration {it}, residual {norm}")
+    pdb.set_trace()
     return PETSc.SNES.ConvergedReason.ITERATING
 
 import matplotlib.tri as tri
-
-def plot_mesh(mesh, ax=None):
-    if ax is None:
-        ax = plt.gca()
-    ax.set_aspect("equal")
-    points = mesh.geometry.x
-    cells = mesh.geometry.dofmap.reshape((-1, mesh.topology.dim + 1))
-    tria = tri.Triangulation(points[:, 0], points[:, 1], cells)
-    ax.triplot(tria, color="k")
-    return ax
 
 with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
@@ -192,10 +193,10 @@ bc2 = lambda u: 1/2 * α/h * inner(dot(grad(u), n), dot(grad(u), n)) * ds
 W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
 
 # Define the functional
-L = energy + dg1(w) + dg2(w) \
-           + dg1(v) + dg2(v) \
-           + bc1(w) + bc2(w) \
-           + bc1(v) + bc2(v) \
+L = energy - dg1(w) + dg2(w) \
+           - dg1(v) + dg2(v) \
+           - bc1(w) - bc2(w) \
+           - bc1(v) - bc2(v) \
     - W_ext
            
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
@@ -236,7 +237,6 @@ elastic_energy = comm.allreduce(
 
 # ------------------------------
 
-from disclinations.utils.viz import plot_scalar, plot_profile
 
 import pyvista
 from pyvista.plotting.utilities import xvfb
