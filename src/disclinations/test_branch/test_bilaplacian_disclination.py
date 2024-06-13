@@ -109,7 +109,7 @@ bcs = [dolfinx.fem.dirichletbc(value=np.array(0, dtype=PETSc.ScalarType), dofs=d
 u = dolfinx.fem.Function(V)
 D = dolfinx.fem.Constant(mesh, 1.)
 α = dolfinx.fem.Constant(mesh, 10.)
-load = dolfinx.fem.Constant(mesh, 0.)
+load = dolfinx.fem.Constant(mesh, .5)
 h = ufl.CellDiameter(mesh)
 h_avg = (h('+') + h('-')) / 2.0
 
@@ -207,6 +207,7 @@ solver.solve()
 
 
 from disclinations.utils.viz import plot_scalar, plot_profile
+from dolfinx import plot
 
 import pyvista
 from pyvista.plotting.utilities import xvfb
@@ -219,7 +220,31 @@ plotter = pyvista.Plotter(
         shape=(1, 2),
     )
 
-scalar_plot = plot_scalar(u, plotter, subplot=(0, 0), lineproperties={"scalars": "u"})
+scalar_plot = plot_scalar(u, plotter, subplot=(0, 0), lineproperties={"show_edges": True})
+# plotter.subplot(0, 1)
+_pv_points = np.array([p[0] for p in points])
+_pv_colours = np.array(signs)
+plotter.add_points(
+        _pv_points,
+        scalars = _pv_colours,
+        style = 'points', 
+        render_points_as_spheres=True, 
+        point_size=15.0
+)
+
+plotter.subplot(0, 1)
+cells, types, x = plot.vtk_mesh(V)
+grid = pyvista.UnstructuredGrid(cells, types, x)
+grid.point_data["u"] = u.x.array.real
+grid.set_active_scalars("u")
+# plotter = pyvista.Plotter()
+# plotter.add_mesh(grid, show_edges=True)
+warped = grid.warp_by_scalar("u", scale_factor=100)
+plotter.add_mesh(warped, show_edges=False)
+
+
+
+# plotter.show_edges=True
 scalar_plot.screenshot("output/test_bilaplacian_disclination.png")
 print("plotted scalar")
 
