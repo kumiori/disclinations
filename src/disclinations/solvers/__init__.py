@@ -63,6 +63,7 @@ class SNESSolver:
         jit_parameters={},
         monitor=None,
         prefix=None,
+        b0=PETSc.Vec | None
     ):
 
         self.u = u
@@ -90,11 +91,16 @@ class SNESSolver:
         self.petsc_options = petsc_options
 
         self.b = create_vector(self.F_form)
+        # if b0 is not None:
+        self.b0 = b0
         self.a = create_matrix(self.J_form)
 
         self.monitor = monitor
         # self.solver = self.solver_setup()
         self.solver = self.solver_setup_demo()
+        
+        
+        
 
     def set_petsc_options(self, debug=False):
         """
@@ -189,7 +195,17 @@ class SNESSolver:
         # Zero the residual vector
         with b.localForm() as b_local:
             b_local.set(0.0)
+            
         assemble_vector(b, self.F_form)
+        
+        _b0 = self.b0
+        
+        if self.b0 is not None:
+            with self.b0.localForm() as b0_local, b.localForm() as b_local:
+                b_local.axpy(1, b0_local)
+        
+        self.b.ghostUpdate(addv=PETSc.InsertMode.ADD,
+                                  mode=PETSc.ScatterMode.FORWARD)
         # Apply boundary conditions
         apply_lifting(b, [self.J_form], bcs=[self.bcs], x0=[x], scale=-1.0)
         b.ghostUpdate(addv=PETSc.InsertMode.ADD,

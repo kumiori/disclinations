@@ -1,5 +1,5 @@
-# Solving a simple Poisson problem
-# H^1_0 formulation
+# Solving a simple Bilaplacian problem
+# H^2_0 formulation
 #
 
 import json

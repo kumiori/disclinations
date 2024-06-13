@@ -62,6 +62,7 @@ from ufl import (
     as_matrix,
     sym,
 )
+import matplotlib.pyplot as plt
 
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
@@ -77,7 +78,7 @@ with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
 
 mesh_size = parameters["geometry"]["mesh_size"]
-# mesh_size = .3
+mesh_size = .5
 parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
 order = parameters["model"]["order"]
@@ -85,18 +86,14 @@ order = parameters["model"]["order"]
 model_rank = 0
 tdim = 2
 
-
 gmsh_model, tdim = mesh_circle_gmshapi(
     parameters["geometry"]["geom_type"], 1, mesh_size, tdim
 )
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
-import matplotlib.pyplot as plt
 
-plt.figure()
-ax = plot_mesh(mesh)
-fig = ax.get_figure()
-fig.savefig(f"output/coarse-mesh.png")
+
+
 
 X = ufl.FiniteElement("CG", mesh.ufl_cell(), 1)
 
@@ -112,7 +109,7 @@ bcs = [dolfinx.fem.dirichletbc(value=np.array(0, dtype=PETSc.ScalarType), dofs=d
 u = dolfinx.fem.Function(V)
 D = dolfinx.fem.Constant(mesh, 1.)
 α = dolfinx.fem.Constant(mesh, 10.)
-load = dolfinx.fem.Constant(mesh, 1.)
+load = dolfinx.fem.Constant(mesh, 0.)
 h = ufl.CellDiameter(mesh)
 h_avg = (h('+') + h('-')) / 2.0
 
@@ -129,6 +126,21 @@ dS = ufl.Measure("dS")
 bending = (D/2 * (inner(div(grad(u)), div(grad(u))))) * dx 
 W_ext = load * u * dx
 
+# Point sources
+b = dolfinx.fem.Function(V)
+b.x.array[:] = 0
+
+if mesh.comm.rank == 0:
+    # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
+    
+    points = [np.array([[-0.2, 0.1, 0]], dtype=mesh.geometry.x.dtype),
+              np.array([[0.2, -0.1, 0]], dtype=mesh.geometry.x.dtype)]
+    signs = [-1, 1]
+else:
+    # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
+    points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+              np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
+
 dg1 = lambda u: 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
 dg2 = lambda u: 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
 dg3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
@@ -142,39 +154,20 @@ solver = SNESProblem(F, u, bcs, monitor = monitor)
 solver.snes.solve(None, u.vector)
 print(solver.snes.getConvergedReason())
 
-pdb.set_trace()
 
 
-# Point sources
-b = dolfinx.fem.Function(Q)
-b.x.array[:] = 0
-
-if mesh.comm.rank == 0:
-    point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
-    
-    points = [np.array([[-0.2, 0.1, 0]], dtype=mesh.geometry.x.dtype),
-              np.array([[0.2, -0.1, 0]], dtype=mesh.geometry.x.dtype)]
-    signs = [-1, 1]
-else:
-    point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
-    points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
-              np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
 
 # cells, basis_values = compute_cell_contribution_point(V, point)
-_cells, _basis_values = compute_cell_contributions(Q, points)
-Q_0, Q_0_to_Q_dofs = Q.sub(0).collapse()
+_cells, _basis_values = compute_cell_contributions(V, points)
+
+# Q_0, Q_0_to_Q_dofs = Q.sub(0).collapse()
 # https://fenicsproject.discourse.group/t/meaning-of-collapse/10641/2
-_cells, _basis_values = compute_cell_contributions(Q_0, points)
-_cells, _basis_values = compute_cell_contributions(Q.sub(0), points)
 
 for cell, basis_value, sign in zip(_cells, _basis_values, signs):
-    subspace_dofs = Q_0.dofmap.cell_dofs(cell)
-    # dofs = Q_0_to_Q_dofs[subspace_dofs]
-    dofs = np.array(Q_0_to_Q_dofs)[subspace_dofs]
+    # subspace_dofs = Q_0.dofmap.cell_dofs(cell)
+    # dofs = np.array(Q_0_to_Q_dofs)[subspace_dofs]
+    dofs = V.dofmap.cell_dofs(cell)
     b.x.array[dofs] += sign * basis_value
-
-solver = SNESProblem(F, q, bcs, monitor = monitor)
-
 
 dolfinx.fem.petsc.apply_lifting(b.vector, [solver.J_form], [bcs])
 b.vector.ghostUpdate(addv=PETSc.InsertMode.ADD,
@@ -185,8 +178,48 @@ dolfinx.fem.petsc.set_bc(b.vector, bcs)
 b.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                       mode=PETSc.ScatterMode.FORWARD)
 
-# now b has to be added into the residual
-__import__('pdb').set_trace()
 
-solver.snes.solve(None, q.vector)
-print(solver.snes.getConvergedReason())
+
+plt.figure()
+ax = plot_mesh(mesh)
+fig = ax.get_figure()
+
+for point in points:
+    ax.plot(point[0][0], point[0][1], 'ro')
+
+fig.savefig(f"output/coarse-mesh.png")
+
+
+# now b has to be added into the residual
+solver = SNESSolver(
+    F_form=F,
+    u=u,
+    bcs=bcs,
+    petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
+    prefix='bilaplacian_disclination',
+    b0=b.vector
+)
+solver.solve()
+
+# solver = SNESProblem(F, u, bcs, monitor = monitor)
+# solver.snes.solve(None, q.vector)
+# print(solver.snes.getConvergedReason())
+
+
+from disclinations.utils.viz import plot_scalar, plot_profile
+
+import pyvista
+from pyvista.plotting.utilities import xvfb
+xvfb.start_xvfb(wait=0.05)
+pyvista.OFF_SCREEN = True
+
+plotter = pyvista.Plotter(
+        title="Displacement",
+        window_size=[1600, 600],
+        shape=(1, 2),
+    )
+
+scalar_plot = plot_scalar(u, plotter, subplot=(0, 0), lineproperties={"scalars": "u"})
+scalar_plot.screenshot("output/test_bilaplacian_disclination.png")
+print("plotted scalar")
+
