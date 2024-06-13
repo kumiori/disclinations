@@ -77,13 +77,14 @@ with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
 
 mesh_size = parameters["geometry"]["mesh_size"]
-mesh_size = .3
+# mesh_size = .3
 parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
+order = parameters["model"]["order"]
 
 model_rank = 0
 tdim = 2
-# order = 3
+
 
 gmsh_model, tdim = mesh_circle_gmshapi(
     parameters["geometry"]["geom_type"], 1, mesh_size, tdim
@@ -99,52 +100,49 @@ fig.savefig(f"output/coarse-mesh.png")
 
 X = ufl.FiniteElement("CG", mesh.ufl_cell(), 1)
 
-Q = dolfinx.fem.FunctionSpace(mesh, ufl.MixedElement([X, X]))
+V = dolfinx.fem.functionspace(mesh, ("Lagrange", order))
 
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
 
-dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(0), entity_dim=1, entities=bndry_facets)
-dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(1), entity_dim=1, entities=bndry_facets)
+dofs = dolfinx.fem.locate_dofs_topological(V=V, entity_dim=1, entities=bndry_facets)
 
-bcs_w = dirichletbc(
-    np.array(0.0, dtype=PETSc.ScalarType),
-    dofs_v, Q.sub(0)
-)
-bcs_v = dirichletbc(
-    np.array(1.0, dtype=PETSc.ScalarType),
-    dofs_w, Q.sub(1)
-)
+bcs = [dolfinx.fem.dirichletbc(value=np.array(0, dtype=PETSc.ScalarType), dofs=dofs, V=V)]
 
-bcs = [bcs_w, bcs_v]
-
-q = dolfinx.fem.Function(Q)
-v, w = ufl.split(q)
-
-x = ufl.SpatialCoordinate(mesh)
-f = 10 * ufl.exp(-((x[0] - 0.5) ** 2 + (x[1] - 0.5) ** 2) / 0.02)
-g = ufl.sin(5 * x[0])
-
+u = dolfinx.fem.Function(V)
 D = dolfinx.fem.Constant(mesh, 1.)
 α = dolfinx.fem.Constant(mesh, 10.)
 load = dolfinx.fem.Constant(mesh, 1.)
 h = ufl.CellDiameter(mesh)
 h_avg = (h('+') + h('-')) / 2.0
+
+tdim = mesh.topology.dim
+num_cells = mesh.topology.index_map(tdim).size_local
+_h = dolfinx.cpp.mesh.h(mesh._cpp_object, tdim, np.arange(num_cells, dtype=np.int32))
+# print(_h)
+
 n = ufl.FacetNormal(mesh)
 
 dx = ufl.Measure("dx")
 dS = ufl.Measure("dS")
-bending = (D/2 * (inner(div(grad(v)), div(grad(v))))) * dx 
+
+bending = (D/2 * (inner(div(grad(u)), div(grad(u))))) * dx 
+W_ext = load * u * dx
 
 dg1 = lambda u: 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
 dg2 = lambda u: 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
 dg3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
-W_ext = load * v * dx 
 
-# energy = 1./2. * (inner(grad(v), grad(v)) + inner(grad(w), grad(w))) * dx - f * v * dx - g * w * dx
-L = bending + dg1(v) + dg2(v) + dg3(v) - W_ext
 
-F = ufl.derivative(L, q, ufl.TestFunction(Q))
+L = bending + dg1(u) + dg2(u) + dg3(u) - W_ext
+F = ufl.derivative(L, u, ufl.TestFunction(V))
+
+solver = SNESProblem(F, u, bcs, monitor = monitor)
+
+solver.snes.solve(None, u.vector)
+print(solver.snes.getConvergedReason())
+
+pdb.set_trace()
 
 
 # Point sources
@@ -165,6 +163,7 @@ else:
 # cells, basis_values = compute_cell_contribution_point(V, point)
 _cells, _basis_values = compute_cell_contributions(Q, points)
 Q_0, Q_0_to_Q_dofs = Q.sub(0).collapse()
+# https://fenicsproject.discourse.group/t/meaning-of-collapse/10641/2
 _cells, _basis_values = compute_cell_contributions(Q_0, points)
 _cells, _basis_values = compute_cell_contributions(Q.sub(0), points)
 
@@ -186,6 +185,7 @@ dolfinx.fem.petsc.set_bc(b.vector, bcs)
 b.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                       mode=PETSc.ScatterMode.FORWARD)
 
+# now b has to be added into the residual
 __import__('pdb').set_trace()
 
 solver.snes.solve(None, q.vector)
