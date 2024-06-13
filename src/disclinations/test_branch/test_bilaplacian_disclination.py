@@ -1,4 +1,4 @@
-# Solving a simple Poisson problem
+ # Solving a simple biharmonic problem with disclinations
 # H^1_0 formulation
 #
 

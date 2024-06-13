@@ -129,19 +129,28 @@ TRANSVERSE = 1
 
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
-dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
+
+bndry_facets_w = dolfinx.mesh.locate_entities_boundary(
+    mesh,
+    dim=(mesh.topology.dim - 1),
+    marker=lambda x: x[0] <= -1+0.1,
+)
+geom_dofs_w = dolfinx.fem.locate_dofs_geometrical((Q.sub(TRANSVERSE), Q.sub(TRANSVERSE).collapse()[0]), lambda x: x[0]<-1+.1)
+bndry_dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets_w)
+
+bd_dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
+bd_dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
+# bd_dofs_w = np.intersect1d(bndry_dofs_w, geom_dofs_w)
 
 # Define the variational problem
 
 bcs_w = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
-    dofs_v, Q.sub(TRANSVERSE)
+    bd_dofs_w, Q.sub(TRANSVERSE)
 )
 bcs_v = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
-    dofs_w, Q.sub(AIRY)
+    bd_dofs_v, Q.sub(AIRY)
 )
 # keep track of the ordering of fields in boundary conditions
 
