@@ -29,7 +29,7 @@ solvers:
     elasticity:
         prefix: elasticity
         snes:
-            snes_type: newtontr
+            snes_type: ksponly
             snes_stol: 1e-8
             snes_atol: 1e-8
             snes_rtol: 1e-8

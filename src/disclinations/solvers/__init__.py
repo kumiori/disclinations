@@ -96,11 +96,8 @@ class SNESSolver:
         self.a = create_matrix(self.J_form)
 
         self.monitor = monitor
-        # self.solver = self.solver_setup()
-        self.solver = self.solver_setup_demo()
-        
-        
-        
+        self.solver = self.solver_setup()
+        # self.solver = self.solver_setup_demo()
 
     def set_petsc_options(self, debug=False):
         """
@@ -151,7 +148,7 @@ class SNESSolver:
 
         # Set options
         snes.setOptionsPrefix(self.prefix)
-        # self.set_petsc_options()
+        self.set_petsc_options()
         snes.setFunction(self.F, self.b)
         snes.setJacobian(self.J, self.a)
 
