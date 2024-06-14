@@ -49,17 +49,10 @@ class Biharmonic:
         return - dg1(u) + dg2(u) + bc1(u)
     
 
-class NonlinearPlateFVK:
+class ToyPlateFVK:
     def __init__(self, mesh, model_parameters = {}) -> None:
         self.alpha_penalty = model_parameters.get("alpha_penalty",
                                                        default_model_parameters["alpha_penalty"])
-        self.D = model_parameters.get("D",
-                                      default_model_parameters["D"])
-        self.nu = model_parameters.get("nu",
-                                       default_model_parameters["nu"])
-        self.E = model_parameters.get("E",
-                                      default_model_parameters["E"])
-        self.mesh = mesh
     
     def σ(self, v):
         # J = ufl.as_matrix([[0, -1], [1, 0]])
@@ -69,24 +62,6 @@ class NonlinearPlateFVK:
     def bracket(self, f, g):
         J = ufl.as_matrix([[0, -1], [1, 0]])
         return inner(grad(grad(f)), J.T * grad(grad(g)) * J)
-    
-    def energy(self, state):
-        v = state["v"]
-        w = state["w"]
-        dx = ufl.Measure("dx")
-
-        D = self.D
-        nu = self.nu
-        Eh = self.E
-        k_g = -D*(1-nu)
-        
-        bending = (D/2 * (inner(div(grad(w)), div(grad(w)))) + k_g * self.bracket(w, w)) * dx 
-        membrane = (-1/(2*Eh) * inner(grad(grad(v)), grad(grad(v))) + nu/(2*Eh) * self.bracket(v, v)) * dx 
-        # membrane = 1/2 * inner(Ph(ph_), grad(grad(ph_)))*dx 
-        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
-        energy = bending + membrane + coupling
-
-        return energy
     
     def penalisation(self, state):
         v = state["v"]
@@ -107,3 +82,78 @@ class NonlinearPlateFVK:
                 - dg1(v) + dg2(v) \
                 - bc1(w) - bc2(w) \
                 - bc1(v) - bc2(v) 
+class NonlinearPlateFVK(ToyPlateFVK):
+    def __init__(self, mesh, model_parameters = {}) -> None:
+        self.alpha_penalty = model_parameters.get("alpha_penalty",
+                                                       default_model_parameters["alpha_penalty"])
+        self.D = model_parameters.get("D",
+                                      default_model_parameters["D"])
+        self.nu = model_parameters.get("nu",
+                                       default_model_parameters["nu"])
+        self.E = model_parameters.get("E",
+                                      default_model_parameters["E"])
+        self.mesh = mesh
+    
+    def energy(self, state):
+        v = state["v"]
+        w = state["w"]
+        dx = ufl.Measure("dx")
+
+        D = self.D
+        nu = self.nu
+        Eh = self.E
+        k_g = -D*(1-nu)
+
+        laplacian = lambda f : div(grad(f))
+        hessian = lambda f : grad(grad(f))
+
+        bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g * self.bracket(w, w)) * dx 
+        membrane = (-1/(2*Eh) * inner(hessian(v), hessian(v)) + nu/(2*Eh) * self.bracket(v, v)) * dx 
+        # membrane = 1/2 * inner(Ph(ph_), grad(grad(ph_)))*dx 
+        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
+        energy = bending + membrane + coupling
+
+        return energy, bending, membrane, coupling
+
+    def M(self, f):
+        return grad(grad(f)) + self.nu*self.σ(f)
+    
+    def P(self, f):
+        c_nu = 12*(1-self.nu**2)
+        return (1.0/c_nu)*grad(grad(f)) - self.nu*self.σ(f)
+
+    def W(self, f):
+        J = ufl.as_matrix([[0, -1], [1, 0]])
+        return -0.5*J.T*(outer(grad(f), grad(f))) * J
+    
+    def penalisation(self, state):
+        v = state["v"]
+        w = state["w"]
+        α = self.alpha_penalty
+        h = ufl.CellDiameter(self.mesh)
+        n = ufl.FacetNormal(self.mesh)
+        nu = self.nu
+
+        dS = ufl.Measure("dS")
+        ds = ufl.Measure("ds")
+        c_nu = 12*(1-nu**2)
+        
+        # M = lambda f : grad(grad(f)) + nu*self.σ(f)       
+        M = lambda f : self.M(f)       
+        # P = lambda f : (1.0/c_nu)*grad(grad(f)) - nu*self.σ(f)
+        P = lambda f : self.P(f)
+        W = lambda f : self.W(f)
+        
+        dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
+        dg2 = lambda u: - 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
+        dgc   = lambda f, g: avg(inner(W(f), outer(n, n)))*jump(grad(g), n)*dS
+
+        bc1 = lambda u: 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
+        bc2 = lambda u: 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
+        bc3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
+        
+        return   (dg1(w) + dg2(w)) \
+                - dg1(v) + dg2(v) \
+                - bc1(w) - bc2(v) \
+                + bc3(w) + bc3(v) \
+                + dgc(w, v) 

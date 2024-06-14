@@ -10,7 +10,7 @@ geometry:
     geom_type: "bar"
     Lx: 1.
     Ly: .1
-    mesh_size: 0.05
+    mesh_size: 0.03
     mesh_size_factor: 3
 
 #  === Material === #
@@ -22,23 +22,22 @@ model:
     model_dimension: 2
     model_type: "2D"
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"
-    order: 2
-    alpha_penalty: 10.
+    order: 3
+    alpha_penalty: 1000.
 # === Solver === #
 solvers:
     elasticity:
         prefix: elasticity
         snes:
             snes_type: newtonls
-            snes_stol: 1e-8
-            snes_atol: 1e-8
-            snes_rtol: 1e-8
+            snes_stol: 1e-3
+            snes_atol: 1e-3
+            snes_rtol: 1e-3
             snes_max_it: 200
             # snes_divergence_tolerance: -1.0
             snes_monitor: ""
             ksp_type: preonly
             pc_type: lu
-            pc_factor_mat_solver_type: mumps
 
     newton:
         snes_type: "vinewtonrsls"

@@ -99,7 +99,7 @@ class SNESSolver:
         self.solver = self.solver_setup()
         # self.solver = self.solver_setup_demo()
 
-    def set_petsc_options(self, debug=False):
+    def set_petsc_options(self, debug=True):
         """
         Set PETSc solver options.
 
@@ -148,21 +148,20 @@ class SNESSolver:
 
         # Set options
         snes.setOptionsPrefix(self.prefix)
-        self.set_petsc_options()
         snes.setFunction(self.F, self.b)
         snes.setJacobian(self.J, self.a)
-
+        
         snes.setTolerances(rtol=1.0e-9, max_it=10)
         snes.getKSP().setType("preonly")
         snes.getKSP().setTolerances(rtol=1.0e-9)
         snes.getKSP().getPC().setType("lu")
-
-        # We set the bound (Note: they are passed as reference and not as values)
+        self.set_petsc_options()
+        
         if self.monitor is not None:
             snes.setMonitor(self.monitor)
 
-        if self.bounds is not None:
-            snes.setVariableBounds(self.lb.vector, self.ub.vector)
+        # if self.bounds is not None:
+        #     snes.setVariableBounds(self.lb.vector, self.ub.vector)
 
         snes.setFromOptions()
 

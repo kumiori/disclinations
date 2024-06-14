@@ -55,26 +55,15 @@ from mpi4py import MPI
 from ufl import (
     CellDiameter,
     FacetNormal,
-    TestFunction,
-    TrialFunction,
-    avg,
-    ds,
-    dS,
     dx,
-    div,
-    grad,
-    inner,
-    dot,
-    jump,
-    outer,
-    as_matrix,
-    sym,
 )
 
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
 
 comm = MPI.COMM_WORLD
+AIRY = 0
+TRANSVERSE = 1
 
 def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
@@ -105,27 +94,14 @@ prefix = os.path.join(outdir, "plate_fvk")
 if comm.rank == 0:
     Path(prefix).mkdir(parents=True, exist_ok=True)
 
+if comm.rank == 0:
+    Path(prefix).mkdir(parents=True, exist_ok=True)
+
 h = CellDiameter(mesh)
 n = FacetNormal(mesh)
 
-# Function spaces
-# X = ufl.FiniteElement("CG", mesh.ufl_cell(), parameters["model"]["order"])
-# Q_el = 
-
 X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"]) 
 Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
-
-# Material parameters
-# Graphene-like properties
-# nu = dolfinx.fem.Constant(mesh, parameters["model"]["nu"])
-# D = dolfinx.fem.Constant(mesh, parameters["model"]["D"])
-# Eh = dolfinx.fem.Constant(mesh, parameters["model"]["E"])
-# α = dolfinx.fem.Constant(mesh, parameters["model"]["alpha_penalty"])
-# k_g = -D*(1-nu)
-# n = ufl.FacetNormal(mesh)
-
-AIRY = 0
-TRANSVERSE = 1
 
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
@@ -142,6 +118,7 @@ bcs_v = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
     dofs_w, Q.sub(AIRY)
 )
+
 # keep track of the ordering of fields in boundary conditions
 _bcs = {AIRY: bcs_v, TRANSVERSE: bcs_w}
 bcs = list(_bcs.values())
@@ -200,7 +177,7 @@ pyvista.OFF_SCREEN = True
 plotter = pyvista.Plotter(
         title="Displacement",
         window_size=[1600, 600],
-        shape=(1, 1),
+        shape=(1, 2),
     )
 
 v, w = q.split()
@@ -212,19 +189,11 @@ V_w, dofs_w = Q.sub(1).collapse()
 
 
 scalar_plot = plot_scalar(w, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w)
-scalar_plot.screenshot(f"{prefix}/test_fvk-w.png")
+# scalar_plot.screenshot(f"{prefix}/test_fvk-w.png")
 
-plotter = pyvista.Plotter(
-        title="Displacement",
-        window_size=[1600, 600],
-        shape=(1, 1),
-    )
-
-scalar_plot = plot_scalar(v, plotter, subplot=(0, 0), V_sub=V_v, dofs=dofs_v)
-scalar_plot.screenshot(f"{prefix}/test_fvk-v.png")
+scalar_plot = plot_scalar(v, plotter, subplot=(0, 1), V_sub=V_v, dofs=dofs_v)
+scalar_plot.screenshot(f"{prefix}/test_fvk.png")
 print("plotted scalar")
-
-
 
 tol = 1e-3
 xs = np.linspace(0 + tol, parameters["geometry"]["radius"] - tol, 101)

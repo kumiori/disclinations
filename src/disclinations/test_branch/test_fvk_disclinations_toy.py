@@ -15,7 +15,6 @@ import numpy as np
 import petsc4py
 import ufl
 import yaml
-from disclinations.models import NonlinearPlateFVK
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.la import compute_cell_contributions
@@ -56,7 +55,20 @@ from mpi4py import MPI
 from ufl import (
     CellDiameter,
     FacetNormal,
+    TestFunction,
+    TrialFunction,
+    avg,
+    ds,
+    dS,
     dx,
+    div,
+    grad,
+    inner,
+    dot,
+    jump,
+    outer,
+    as_matrix,
+    sym,
 )
 
 petsc4py.init(sys.argv)
@@ -80,6 +92,7 @@ parameters["geometry"]["geom_type"] = "circle"
 
 model_rank = 0
 tdim = 2
+# order = 3
 
 gmsh_model, tdim = mesh_circle_gmshapi(
     parameters["geometry"]["geom_type"], 1, mesh_size, tdim
@@ -96,65 +109,96 @@ h = CellDiameter(mesh)
 n = FacetNormal(mesh)
 
 # Function spaces
+# X = ufl.FiniteElement("CG", mesh.ufl_cell(), parameters["model"]["order"])
+# Q_el = 
 
 X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"]) 
 Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
-
 # Material parameters
 # Graphene-like properties
-# nu = dolfinx.fem.Constant(mesh, parameters["model"]["nu"])
-# D = dolfinx.fem.Constant(mesh, parameters["model"]["D"])
-# Eh = dolfinx.fem.Constant(mesh, parameters["model"]["E"])
-# α = dolfinx.fem.Constant(mesh, parameters["model"]["alpha_penalty"])
-# k_g = -D*(1-nu)
-# n = ufl.FacetNormal(mesh)
+nu = dolfinx.fem.Constant(mesh, parameters["model"]["nu"])
+D = dolfinx.fem.Constant(mesh, parameters["model"]["D"])
+Eh = dolfinx.fem.Constant(mesh, parameters["model"]["E"])
+α = dolfinx.fem.Constant(mesh, parameters["model"]["alpha_penalty"])
+k_g = -D*(1-nu)
+n = ufl.FacetNormal(mesh)
 
 AIRY = 0
 TRANSVERSE = 1
 
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
-dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
+
+bndry_facets_w = dolfinx.mesh.locate_entities_boundary(
+    mesh,
+    dim=(mesh.topology.dim - 1),
+    marker=lambda x: x[0] <= -1+0.1,
+)
+geom_dofs_w = dolfinx.fem.locate_dofs_geometrical((Q.sub(TRANSVERSE), Q.sub(TRANSVERSE).collapse()[0]), lambda x: x[0]<-1+.1)
+bndry_dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets_w)
+
+bd_dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
+bd_dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
+# bd_dofs_w = np.intersect1d(bndry_dofs_w, geom_dofs_w)
 
 # Define the variational problem
 
 bcs_w = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
-    dofs_v, Q.sub(TRANSVERSE)
+    bd_dofs_w, Q.sub(TRANSVERSE)
 )
 bcs_v = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
-    dofs_w, Q.sub(AIRY)
+    bd_dofs_v, Q.sub(AIRY)
 )
 # keep track of the ordering of fields in boundary conditions
 
 _bcs = {AIRY: bcs_v, TRANSVERSE: bcs_w}
 bcs = list(_bcs.values())
 
+ds = ufl.Measure("ds")
 dx = ufl.Measure("dx")
+dS = ufl.Measure("dS")
+h = ufl.CellDiameter(mesh)
 
 q = dolfinx.fem.Function(Q)
 v, w = ufl.split(q)
 
+J = as_matrix([[0, -1], [1, 0]])
 # v = dolfinx.fem.Function(Q.sub(1).collapse(), name="sigma")
 # w = dolfinx.fem.Function(Q.sub(0).collapse(), name="Deflection")
 
 state = {"v": v, "w": w}
 
 # Define the variational problem
+σ = lambda v: div(grad(v)) * ufl.Identity(2) - grad(grad(v))
 
-model = NonlinearPlateFVK(mesh, parameters["model"])
-energy = model.energy(state)
+# Stress-displacement operator (membrane)
+# N = lambda v: σ(v)
+# M = lambda w: grad(grad(w)) + nu*σ(w)
+bracket = lambda f, g:  inner(grad(grad(f)), J.T * grad(grad(g)) * J)
+# bracket(w, w) = det Hess(w)
+# Moment-displacement operator
+
+# Define the new functional. See the reference article for details.
+# bending = 1/2 * inner(M(w), grad(grad(w))) * dx 
+bending = (D/2 * (inner(div(grad(w)), div(grad(w)))) + k_g * bracket(w, w)) * dx 
+membrane = (-1/(2*Eh) * inner(grad(grad(v)), grad(grad(v))) + nu/(2*Eh) * bracket(v, v)) * dx 
+# membrane = 1/2 * inner(Ph(ph_), grad(grad(ph_)))*dx 
+coupling = 1/2 * inner(σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
+energy = bending + membrane + coupling
+
+# inner discontinuity penalisations
+dg1 = lambda u: 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
+dg2 = lambda u: 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
+
+# exterior boundary penalisations
+bc1 = lambda u: 1/2 * inner(grad(u), grad(grad(u)) * n) * ds
+bc2 = lambda u: 1/2 * α/h * inner(dot(grad(u), n), dot(grad(u), n)) * ds
 
 # Dead load (transverse)
-W_ext = Constant(mesh, np.array(-1., dtype=PETSc.ScalarType)) * w * dx
-penalisation = model.penalisation(state)
-
-# Define the functional
-L = energy[0] - W_ext + penalisation
+W_ext = Constant(mesh, np.array(-1, dtype=PETSc.ScalarType)) * w * dx
 
 # Point sources
 b = dolfinx.fem.Function(Q)
@@ -163,15 +207,14 @@ b.x.array[:] = 0
 if mesh.comm.rank == 0:
     point = np.array([[0., 0., 0]], dtype=mesh.geometry.x.dtype)
     
-    points = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
-              np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
+    points = [np.array([[-0.2, 0.1, 0]], dtype=mesh.geometry.x.dtype),
+              np.array([[0.2, -0.1, 0]], dtype=mesh.geometry.x.dtype)]
     # signs = [0, 0]
     signs = [-1, 1]
 else:
     point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
     points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
               np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
-    signs = [0, 0]
 
 Q_A, Q_A_to_Q_dofs = Q.sub(AIRY).collapse()
 _cells, _basis_values = compute_cell_contributions(Q_A, points)
@@ -181,11 +224,20 @@ for cell, basis_value, sign in zip(_cells, _basis_values, signs):
     dofs = np.array(Q_A_to_Q_dofs)[subspace_dofs]
     b.x.array[dofs] += sign * basis_value
     
-
+# Define the functional
+L = energy - dg1(w) + dg2(w) \
+           - dg1(v) + dg2(v) \
+           - bc1(w) - bc2(w) \
+           - bc1(v) - bc2(v) \
+    - W_ext
+           
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
+J = ufl.derivative(F, q, ufl.TrialFunction(Q))
+
 
 solver = SNESSolver(
     F_form=F,
+    J_form=J,
     u=q,
     bcs=bcs,
     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
@@ -193,6 +245,7 @@ solver = SNESSolver(
     b0=b.vector,
     monitor=monitor,
 )
+
 
 solver.solve()
 
@@ -204,9 +257,13 @@ fig = ax.get_figure()
 fig.savefig(f"{prefix}/mesh.png")
 
 
-energy_components = {"bending": energy[1], "membrane": -energy[2], "coupling": energy[3], "external_work": -W_ext}
-# penalty_components = {"dg1_w": dg1_w(w), "dg2": dg2(w), "dg1_v": dg1_v(v), "dgc": dgc(v, w)}
-# boundary_components = {"bc1_w": bc1_w(w), "bc2": bc2(w), "bc1_v": bc1_v(v)}
+elastic_energy = comm.allreduce(
+    dolfinx.fem.assemble_scalar(
+        dolfinx.fem.form(energy)),
+    op=MPI.SUM,
+)
+
+energy_components = {"bending": bending, "membrane": -membrane, "coupling": coupling}
 
 # Assemble the energy terms and create the dictionary
 computed_energy_terms = {label: comm.allreduce(
@@ -215,30 +272,7 @@ computed_energy_terms = {label: comm.allreduce(
     op=MPI.SUM,
 ) for label, energy_term in energy_components.items()}
 
-# computed_penalty_terms = {label: comm.allreduce(
-#     dolfinx.fem.assemble_scalar(
-#         dolfinx.fem.form(penalty_term)),
-#     op=MPI.SUM,
-# ) for label, penalty_term in penalty_components.items()}
-
-# computed_boundary_terms = {label: comm.allreduce(
-#     dolfinx.fem.assemble_scalar(
-#         dolfinx.fem.form(boundary_term)),
-#     op=MPI.SUM,
-# ) for label, boundary_term in boundary_components.items()}
-
-
-
-
-print(computed_energy_terms)
-# print(computed_penalty_terms)
-# print(computed_boundary_terms)
-
-
-
-
-
-
+pdb.set_trace()
 
 # ------------------------------
 
@@ -252,7 +286,7 @@ pyvista.OFF_SCREEN = True
 plotter = pyvista.Plotter(
         title="Displacement",
         window_size=[1600, 600],
-        shape=(1, 2),
+        shape=(1, 1),
     )
 
 v, w = q.split()
@@ -263,22 +297,23 @@ V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
 
 scalar_plot = plot_scalar(w, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w)
-# scalar_plot.screenshot(f"{prefix}/test_fvk-w.png")
+scalar_plot.screenshot(f"{prefix}/test_fvk-w.png")
 
-# plotter = pyvista.Plotter(
-#         title="Displacement",
-#         window_size=[1600, 600],
-#         shape=(1, 1),
-#     )
+plotter = pyvista.Plotter(
+        title="Displacement",
+        window_size=[1600, 600],
+        shape=(1, 1),
+    )
 
-scalar_plot = plot_scalar(v, plotter, subplot=(0, 1), V_sub=V_v, dofs=dofs_v)
-scalar_plot.screenshot(f"{prefix}/test_fvk.png")
+scalar_plot = plot_scalar(v, plotter, subplot=(0, 0), V_sub=V_v, dofs=dofs_v)
+scalar_plot.screenshot(f"{prefix}/test_fvk-v.png")
 print("plotted scalar")
 
-npoints = 1001
+
+
 tol = 1e-3
-xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, npoints)
-points = np.zeros((3, npoints))
+xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, 101)
+points = np.zeros((3, 101))
 points[0] = xs
 
 fig, axes = plt.subplots(1, 2, figsize=(18, 6))
@@ -315,72 +350,3 @@ _plt.savefig(f"{prefix}/test_fvk-profiles.png")
 
 
 # 0---------------------------0
-
-
-# RK: should be dg0
-DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), parameters["model"]["order"]-2)
-DG = dolfinx.fem.functionspace(mesh, DG_e)
-
-mxx = model.M(w)[0, 0]
-mxx_expr = dolfinx.fem.Expression(mxx, DG.element.interpolation_points())
-Mxx = dolfinx.fem.Function(DG)
-Mxx.interpolate(mxx_expr)
-
-pxx = model.P(v)[0, 0]
-pxx_expr = dolfinx.fem.Expression(pxx, DG.element.interpolation_points())
-Pxx = dolfinx.fem.Function(DG)
-Pxx.interpolate(pxx_expr)
-
-wxx = model.W(w)[0, 0]
-wxx_expr = dolfinx.fem.Expression(wxx, DG.element.interpolation_points())
-Wxx = dolfinx.fem.Function(DG)
-Wxx.interpolate(wxx_expr)
-
-plotter = pyvista.Plotter(
-        title="Moment",
-        window_size=[1600, 600],
-        shape=(1, 3),
-    )
-try:
-    plotter = plot_scalar(Mxx, plotter, subplot=(0, 0))
-    plotter = plot_scalar(Pxx, plotter, subplot=(0, 1))
-    plotter = plot_scalar(Wxx, plotter, subplot=(0, 2))
-
-    plotter.screenshot(f"{prefix}/test_tensors.png")
-    print("plotted scalar")
-except Exception as e:
-    print(e)
-    
-fig, axes = plt.subplots(1, 2, figsize=(18, 6))
-
-_plt, data = plot_profile(
-    Mxx,
-    points,
-    None,
-    subplot=(1, 2),
-    lineproperties={
-        "c": "k",
-        "label": f"$Mxx(x)$"
-    },
-    fig=fig,
-    subplotnumber=1
-)
-
-_plt.legend()
-
-_plt, data = plot_profile(
-    Pxx,
-    points,
-    None,
-    subplot=(1, 2),
-    lineproperties={
-        "c": "k",
-        "label": f"$Pxx(x)$"
-    },
-    fig=fig,
-    subplotnumber=2
-)
-
-_plt.legend()
-
-_plt.savefig(f"{prefix}/test_fvk-Mxx-profiles.png")
