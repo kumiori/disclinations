@@ -19,9 +19,11 @@ from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 
 # from damage.utils import ColorPrint
-from disclinations.solvers import SNESSolver, SNESProblem
-from disclinations.utils.la import compute_cell_contributions
+from disclinations.solvers import SNESSolver
+from disclinations.utils.la import compute_cell_contributions, compute_disclination_loads
 from disclinations.utils.viz import plot_mesh
+from disclinations.models import Biharmonic
+
 
 from dolfinx import log
 from dolfinx.io import XDMFFile
@@ -78,7 +80,6 @@ with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
 
 mesh_size = parameters["geometry"]["mesh_size"]
-mesh_size = .5
 parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
 order = parameters["model"]["order"]
@@ -86,12 +87,19 @@ order = parameters["model"]["order"]
 model_rank = 0
 tdim = 2
 
+outdir = "output"
+prefix = os.path.join(outdir, "biharmonic_disclination")
+
+if comm.rank == 0:
+    Path(prefix).mkdir(parents=True, exist_ok=True)
+
+
 gmsh_model, tdim = mesh_circle_gmshapi(
     parameters["geometry"]["geom_type"], 1, mesh_size, tdim
 )
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
-X = ufl.FiniteElement("CG", mesh.ufl_cell(), 1)
+# X = ufl.FiniteElement("CG", mesh.ufl_cell(), 1)
 V = dolfinx.fem.functionspace(mesh, ("Lagrange", order))
 
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
@@ -102,9 +110,11 @@ dofs = dolfinx.fem.locate_dofs_topological(V=V, entity_dim=1, entities=bndry_fac
 bcs = [dolfinx.fem.dirichletbc(value=np.array(0, dtype=PETSc.ScalarType), dofs=dofs, V=V)]
 
 u = dolfinx.fem.Function(V)
+state = {"u": u}
+
 D = dolfinx.fem.Constant(mesh, 1.)
 α = dolfinx.fem.Constant(mesh, 10.)
-load = dolfinx.fem.Constant(mesh, .5)
+load = dolfinx.fem.Constant(mesh, .0)
 h = ufl.CellDiameter(mesh)
 h_avg = (h('+') + h('-')) / 2.0
 
@@ -115,65 +125,34 @@ _h = dolfinx.cpp.mesh.h(mesh._cpp_object, tdim, np.arange(num_cells, dtype=np.in
 
 n = ufl.FacetNormal(mesh)
 
+
+model = Biharmonic(mesh, parameters["model"])
+W_ext = load * u * dx
+
+L = model.energy(state) + model.penalisation(state) - W_ext
+
 dx = ufl.Measure("dx")
 dS = ufl.Measure("dS")
 
-bending = (D/2 * (inner(div(grad(u)), div(grad(u))))) * dx 
-W_ext = load * u * dx
 
 # Point sources
-b = dolfinx.fem.Function(V)
-b.x.array[:] = 0
-
 if mesh.comm.rank == 0:
     # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
-    
-    points = [np.array([[-0.2, 0.1, 0]], dtype=mesh.geometry.x.dtype),
-              np.array([[0.2, -0.1, 0]], dtype=mesh.geometry.x.dtype)]
+    points = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+              np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
     signs = [-1, 1]
 else:
     # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
     points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
               np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
 
-dg1 = lambda u: 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
-dg2 = lambda u: 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
-dg3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
+b = compute_disclination_loads(points, signs, V)
 
 
-L = bending + dg1(u) + dg2(u) + dg3(u) - W_ext
 F = ufl.derivative(L, u, ufl.TestFunction(V))
-
-solver = SNESProblem(F, u, bcs, monitor = monitor)
-
-solver.snes.solve(None, u.vector)
-print(solver.snes.getConvergedReason())
-
-
-
-
-# cells, basis_values = compute_cell_contribution_point(V, point)
-_cells, _basis_values = compute_cell_contributions(V, points)
 
 # Q_0, Q_0_to_Q_dofs = Q.sub(0).collapse()
 # https://fenicsproject.discourse.group/t/meaning-of-collapse/10641/2
-
-for cell, basis_value, sign in zip(_cells, _basis_values, signs):
-    # subspace_dofs = Q_0.dofmap.cell_dofs(cell)
-    # dofs = np.array(Q_0_to_Q_dofs)[subspace_dofs]
-    dofs = V.dofmap.cell_dofs(cell)
-    b.x.array[dofs] += sign * basis_value
-
-dolfinx.fem.petsc.apply_lifting(b.vector, [solver.J_form], [bcs])
-b.vector.ghostUpdate(addv=PETSc.InsertMode.ADD,
-                      mode=PETSc.ScatterMode.REVERSE)
-dolfinx.fem.petsc.set_bc(b.vector, bcs)
-# dolfinx.fem.petsc.set_bc(b.vector, bcs, -1.)
-# b.x.scatter_forward()
-b.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
-                      mode=PETSc.ScatterMode.FORWARD)
-
-
 
 plt.figure()
 ax = plot_mesh(mesh)
@@ -182,7 +161,7 @@ fig = ax.get_figure()
 for point in points:
     ax.plot(point[0][0], point[0][1], 'ro')
 
-fig.savefig(f"output/coarse-mesh.png")
+fig.savefig(f"{prefix}/coarse-mesh.png")
 
 
 # now b has to be added into the residual
@@ -195,10 +174,6 @@ solver = SNESSolver(
     b0=b.vector
 )
 solver.solve()
-
-# solver = SNESProblem(F, u, bcs, monitor = monitor)
-# solver.snes.solve(None, q.vector)
-# print(solver.snes.getConvergedReason())
 
 
 from disclinations.utils.viz import plot_scalar, plot_profile
@@ -237,9 +212,42 @@ grid.set_active_scalars("u")
 warped = grid.warp_by_scalar("u", scale_factor=100)
 plotter.add_mesh(warped, show_edges=False)
 
+distance = np.linalg.norm(points[0] - points[1])
 
+exact_energy_monopole = parameters["model"]["E"] * parameters["model"]["h"]**3 \
+    * parameters["geometry"]["R"]**2 / (32 * np.pi)
 
+exact_energy_dipole = parameters["model"]["E"] * parameters["model"]["h"]**3 \
+    * parameters["geometry"]["R"]**2 / (8 * np.pi) *  distance**2 * \
+        (np.log(4+distance**2) - np.log(4 * distance))
+
+print(exact_energy_dipole)
+# Check the solution
+check_components = {
+    "energy": model.energy(state),
+    "penalisation": model.penalisation(state),
+}
+
+# compute distance between points 
+check_terms = {label: comm.allreduce(
+dolfinx.fem.assemble_scalar(
+    dolfinx.fem.form(energy_term)),
+op=MPI.SUM,
+) for label, energy_term in check_components.items()}
+
+print(check_terms)
+print(f"Exact energy: {exact_energy_dipole}")
+
+print(f"Computed energy: {check_terms['energy'] + check_terms['penalisation']}")
+# Print error norm
+error = np.abs(exact_energy_dipole - check_terms['energy'])
+print(f"Abs error: {error}")
+print(f"Rel error: {error/exact_energy_dipole:.3%}")
+print(f"Error: {error/exact_energy_dipole:.1%}")
+
+# Print alpha value
+print(f'Computed alpha: {parameters["model"]["alpha_penalty"]}')
 # plotter.show_edges=True
-scalar_plot.screenshot("output/test_bilaplacian_disclination.png")
+scalar_plot.screenshot(f"{prefix}/test_bilaplacian_disclination.png")
 print("plotted scalar")
 
