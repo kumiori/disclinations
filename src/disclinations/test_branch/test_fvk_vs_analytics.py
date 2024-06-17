@@ -134,7 +134,7 @@ state = {"v": v, "w": w}
 # Define the variational problem
 
 model = NonlinearPlateFVK(mesh, parameters["model"])
-energy = sum(model.energy(state))
+energy = model.energy(state)[0]
 
 # Dead load (transverse)
 # W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
@@ -148,18 +148,22 @@ def transverse_load(x):
     # return (11+ x[0]**2 + x[1]**2)
 
 f.interpolate(transverse_load)
+# f.interpolate(lambda x: 0 * x[0])
 
-def _v_exact(x):
-    return (1 - x[0]**2 - x[1]**2)**2
+def _v_initial_guess(x):
+    return np.cos(np.pi * np.sqrt(x[0]**2 + x[1]**2))
 
-def _w_exact(x, a1=-1/12, a2=-1/18, a3=-1/24):
+def _v_exact(x, a1=-1/12, a2=-1/18, a3=-1/24):
     return a1 * (1 - x[0]**2 - x[1]**2)**2 + a2 * (1 - x[0]**2 - x[1]**2)**3 + a3 * (1 - x[0]**2 - x[1]**2)**4
+
+def _w_exact(x):
+    return (1 - x[0]**2 - x[1]**2)**2
 
 v_exact.interpolate(_v_exact)
 w_exact.interpolate(_w_exact)
 
 state_exact = {"v": v_exact, "w": w_exact}
-exact_energy = sum(model.energy(state_exact))
+exact_energy = model.energy(state_exact)[0]
 
 W_ext = f * w * dx
 # W_ext = w * dx
@@ -184,6 +188,9 @@ solver_parameters = {
 }
 
 
+
+
+
 solver = SNESSolver(
     F_form=F,
     u=q,
@@ -195,13 +202,27 @@ solver = SNESSolver(
 )
 solver.solve()
 
+
+
+energy_components = {"bending": model.energy(state)[1],
+                    "membrane": model.energy(state)[2],
+                    "coupling": model.energy(state)[3]}
+
+computed_energy_terms = {label: comm.allreduce(
+    dolfinx.fem.assemble_scalar(
+        dolfinx.fem.form(energy_term)),
+    op=MPI.SUM,
+) for label, energy_term in energy_components.items()}
+
+for label, energy_term in computed_energy_terms.items():
+    print(f"{label}: {energy_term}")
+
 import matplotlib.pyplot as plt
 
 plt.figure()
 ax = plot_mesh(mesh)
 fig = ax.get_figure()
 fig.savefig(f"{prefix}/mesh.png")
-
 
 # ------------------------------
 
@@ -224,13 +245,11 @@ w.name = "deflection"
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
 
-
 scalar_plot = plot_scalar(v, plotter, subplot=(0, 0), V_sub=V_v, dofs=dofs_v)
 scalar_plot = plot_scalar(w, plotter, subplot=(0, 1), V_sub=V_w, dofs=dofs_w)
 
 scalar_plot = plot_scalar(v_exact, plotter, subplot=(1, 0), V_sub=V_v, dofs=dofs_v)
 scalar_plot = plot_scalar(w_exact, plotter, subplot=(1, 1), V_sub=V_w, dofs=dofs_w)
-
 
 scalar_plot.screenshot(f"{prefix}/test_fvk.png")
 print("plotted scalar")
@@ -255,6 +274,21 @@ _plt, data = plot_profile(
     subplotnumber=1
 )
 
+
+_plt, data = plot_profile(
+    w_exact,
+    points,
+    None,
+    subplot=(1, 2),
+    lineproperties={
+        "c": "r",
+        "label": f"$w_e(x)$",
+        "ls": "--"
+    },
+    fig=fig,
+    subplotnumber=1
+)
+
 _plt, data = plot_profile(
     v,
     points,
@@ -263,6 +297,21 @@ _plt, data = plot_profile(
     lineproperties={
         "c": "k",
         "label": f"$v(x)$"
+    },
+    fig=fig,
+    subplotnumber=2
+)
+
+
+_plt, data = plot_profile(
+    v_exact,
+    points,
+    None,
+    subplot=(1, 2),
+    lineproperties={
+        "c": "r",
+        "label": f"$v_e(x)$",
+        "ls": "--"
     },
     fig=fig,
     subplotnumber=2
