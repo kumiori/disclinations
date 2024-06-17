@@ -66,6 +66,8 @@ from ufl import (
 
 import math
 
+import gc
+
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
 
@@ -105,7 +107,7 @@ bcs = [dolfinx.fem.dirichletbc(value=np.array(0, dtype=PETSc.ScalarType), dofs=d
 
 D = dolfinx.fem.Constant(mesh, 1.)
 #α = dolfinx.fem.Constant(mesh, 10.)
-load = dolfinx.fem.Constant(mesh, 1.)
+load = dolfinx.fem.Constant(mesh, 0.)
 h = ufl.CellDiameter(mesh)
 h_avg = (h('+') + h('-')) / 2.0
 
@@ -124,7 +126,7 @@ x_disclination = 0.2
 y_disclination = 0.0
 z_disclination = 0.0
 dipole_arm = 0.4
-dipole_elastic_energy = (1/D.value.take(0))*dipole_arm/(16*math.pi)*( math.log((4+dipole_arm**2)**2) - math.log(16*dipole_arm**2) )
+dipole_elastic_energy = (1/D.value.take(0))*(dipole_arm**2)/(16*math.pi)*( math.log((4+dipole_arm**2)**2) - math.log(16*dipole_arm**2) )
 #pdb.set_trace()
 
 def computeEnergy(alpha, u):
@@ -153,16 +155,13 @@ def computeEnergy(alpha, u):
     dg3 = lambda u: 1/2 * alpha/h * inner(grad(u), grad(u)) * ds
 
 
-    L = bending + dg1(u) + dg2(u) + dg3(u) - W_ext
+    L = bending - dg1(u) + dg2(u) + dg3(u) - W_ext
     F = ufl.derivative(L, u, ufl.TestFunction(V))
 
     solver = SNESProblem(F, u, bcs, monitor = monitor)
 
     solver.snes.solve(None, u.vector)
     print(solver.snes.getConvergedReason())
-
-
-
 
     # cells, basis_values = compute_cell_contribution_point(V, point)
     _cells, _basis_values = compute_cell_contributions(V, points)
@@ -210,17 +209,36 @@ def computeEnergy(alpha, u):
 
     energy_value = dolfinx.fem.assemble_scalar(dolfinx.fem.form(bending)) # CFe: Added
 
+    del bending, W_ext, b, points, L, F, solver
+    gc.collect()
+
     return u, energy_value
 
+
+import psutil
+import os
+
+# Function to check memory usage
+def check_memory():
+    process = psutil.Process(os.getpid())
+    mem_info = process.memory_info()
+    print(f"Memory usage: {mem_info.rss / (1024 ** 2)} MB")
+
 import numpy as np
-alphaList = list(np.linspace(1.0, 20.0, num=20))
+alphaList = list(np.linspace(1.0, 1000.0, num=20))
 uhList = []
 energy_valueList = []
 energy_errorList = []
 energy_percentErrorList = []
 for alpha in alphaList:
     u = dolfinx.fem.Function(V)
-    uh, energy = computeEnergy(alpha, u)
+    check_memory()
+    try:
+        uh, energy = computeEnergy(alpha, u)
+
+    except Exception as e:
+        logging.exception("An error occurred: ", e)
+    check_memory()
     print("Alpha: ", alpha)
     print("Elastic Energy: ", energy)
     print("Energy Error: ", energy-dipole_elastic_energy)
@@ -238,26 +256,63 @@ print("****************************************")
 print("energy_percentErrorList: ", energy_percentErrorList)
 print("****************************************")
 print("dipole_elastic_energy: ", dipole_elastic_energy)
-import matplotlib.pyplot as plt # CFe: Added
-plt.figure()
-plt.plot(alphaList, energy_valueList) # CFe: Added
+import matplotlib.pyplot as plt
+plt.figure(figsize=(20, 10))
+plt.plot(alphaList, energy_valueList, linewidth="4")
+plt.axhline(y=dipole_elastic_energy, color='red', linewidth="4", linestyle='--', label=f'Exact Energy value = {dipole_elastic_energy}')
 #plt.xscale("log")
-plt.xlabel("Alpha")
-plt.ylabel("Energy")
-plt.xticks(fontsize=10, weight='bold')
-plt.yticks(fontsize=10, weight='bold')
-plt.title("Elastic Energy vs Alpha")
-plt.savefig('Energy_biharmonic_disclination_alpha.png')
+plt.xlabel("Stabilization Term: Alpha", fontsize=25)
+plt.ylabel("Energy", fontsize=25)
+plt.xticks(ticks=np.arange(0, max(alphaList)+1, 1), fontsize=20)
+plt.yticks(fontsize=20) #weight='bold'
+plt.grid(True)
+title = "Elastic Energy vs Stabilization Parameter (Alpha) - Mesh size: "+str(mesh_size)+" load: "+str(load.value.take(0))
+plt.title(title, fontsize=20, weight='bold')
+figureName = "Energy_biharmonic_disclination_alpha - Mesh size: "+str(mesh_size)+" alpha: "+str(max(alphaList))+"lin scale"+".png"
+plt.savefig(figureName)
 
-plt.figure()
-plt.plot(alphaList, energy_errorList) # CFe: Added
+plt.figure(figsize=(20, 10))
+plt.plot(alphaList, energy_percentErrorList, linewidth="4")
+plt.axhline(y=0, color='red', linewidth="4", linestyle='--', label=f'Zero error')
 #plt.xscale("log")
-plt.xticks(fontsize=10, weight='bold')
-plt.yticks(fontsize=10, weight='bold')
-plt.xlabel("Alpha")
-plt.ylabel("Energy Error - Absolute Value")
-plt.title("Elastic Energy Error vs Alpha")
-plt.savefig('Energy_Error_biharmonic_disclination_alpha.png')
+plt.xticks(ticks=np.arange(0, max(alphaList)+1, 1), fontsize=20, weight='bold')
+plt.yticks(fontsize=20)
+plt.xlabel("Stabilization Term: Alpha", fontsize=25)
+plt.ylabel("Percent Energy Error [%]", fontsize=25)
+plt.grid(True)
+title = "Elastic Energy Error vs Stabilization Parameter (Alpha) - Mesh size: "+str(mesh_size)+" load: "+str(load.value.take(0))
+plt.title(title, fontsize=20, weight='bold')
+figureName = "Energy_Error_biharmonic_disclination_alpha- Mesh size: "+str(mesh_size)+" - alpha: "+str(max(alphaList))+" lin scale"+".png"
+plt.savefig(figureName)
+
+
+plt.figure(figsize=(20, 10))
+plt.plot(alphaList, energy_valueList, linewidth="4")
+plt.axhline(y=dipole_elastic_energy, color='red', linewidth="4", linestyle='--', label=f'Exact Energy value = {dipole_elastic_energy}')
+plt.xscale("log")
+plt.xlabel("Stabilization Term: Alpha", fontsize=25)
+plt.ylabel("Energy", fontsize=25)
+plt.xticks(fontsize=20)
+plt.yticks(fontsize=20) #weight='bold'
+plt.grid(True)
+title = "Elastic Energy vs Stabilization Parameter (Alpha) - Mesh size: "+str(mesh_size)+" load: "+str(load.value.take(0))
+plt.title(title, fontsize=20, weight='bold')
+figureName = "Energy_biharmonic_disclination_alpha - Mesh size: "+str(mesh_size)+" alpha: "+str(max(alphaList))+"logscale"+".png"
+plt.savefig(figureName)
+
+plt.figure(figsize=(20, 10))
+plt.plot(alphaList, energy_percentErrorList, linewidth="4")
+plt.axhline(y=0, color='red', linewidth="4", linestyle='--', label=f'Zero error')
+plt.xscale("log")
+plt.xticks(fontsize=20, weight='bold')
+plt.yticks(fontsize=20)
+plt.xlabel("Stabilization Term: Alpha", fontsize=25)
+plt.ylabel("Percent Energy Error [%]", fontsize=25)
+plt.grid(True)
+title = "Elastic Energy Error vs Stabilization Parameter (Alpha) - Mesh size: "+str(mesh_size)+" load: "+str(load.value.take(0))
+plt.title(title, fontsize=20, weight='bold')
+figureName = "Energy_Error_biharmonic_disclination_alpha- Mesh size: "+str(mesh_size)+" alpha: "+str(max(alphaList))+" log scale"+".png"
+plt.savefig(figureName)
 
 #pdb.set_trace() # CFe: Added
 
