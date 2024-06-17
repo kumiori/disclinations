@@ -145,6 +145,7 @@ f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 
 def transverse_load(x):
     return (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+    # return (11+ x[0]**2 + x[1]**2)
 
 f.interpolate(transverse_load)
 
@@ -170,12 +171,26 @@ L = energy - W_ext + penalisation
 
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
 
+print(parameters.get("solvers").get("elasticity").get("snes"))
+
+solver_parameters = {
+    "snes_type": "ksponly",        # Solver type: NGMRES (Nonlinear GMRES)
+    "snes_max_it": 100,          # Maximum number of iterations
+    "snes_rtol": 1e-6,            # Relative tolerance for convergence
+    "snes_atol": 1e-10,           # Absolute tolerance for convergence
+    "snes_stol": 1e-10,           # Tolerance for the change in solution norm
+    "snes_monitor": None,         # Function for monitoring convergence (optional)
+    # "snes_linesearch_type": "basic",  # Type of line search
+}
+
+
 solver = SNESSolver(
     F_form=F,
     u=q,
     bcs=bcs,
     bounds=None,
-    petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
+    # petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
+    petsc_options=solver_parameters,
     prefix='plate_fvk',
 )
 solver.solve()
