@@ -135,9 +135,11 @@ energy = model.energy(state)
 
 # Dead load (transverse)
 W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
+
 penalisation = model.penalisation(state)
 
 # Define the functional
+
 L = energy - W_ext + penalisation
 
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
