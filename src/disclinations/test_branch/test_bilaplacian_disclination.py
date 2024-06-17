@@ -104,7 +104,7 @@ bcs = [dolfinx.fem.dirichletbc(value=np.array(0, dtype=PETSc.ScalarType), dofs=d
 u = dolfinx.fem.Function(V)
 D = dolfinx.fem.Constant(mesh, 1.)
 α = dolfinx.fem.Constant(mesh, 10.)
-load = dolfinx.fem.Constant(mesh, .5)
+load = dolfinx.fem.Constant(mesh, 1.)
 h = ufl.CellDiameter(mesh)
 h_avg = (h('+') + h('-')) / 2.0
 

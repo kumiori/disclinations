@@ -185,7 +185,7 @@ energy = bending + membrane + coupling
 # inner discontinuity penalisations
 dg1_w = lambda u: -1/2 * jump(grad(u), n)*avg(inner(M(w), outer(n, n))) * dS
 dg1_v = lambda u: -1/2 * jump(grad(u), n)*avg(inner(Ph(w), outer(n, n))) * dS
-dg2   = lambda u: 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
+dg2   = lambda u: 1/2 * 0.1*α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
 dgc   = lambda f, g: avg(inner(W(f), outer(n, n)))*jump(grad(g), n)*dS
 
 # exterior boundary penalisations

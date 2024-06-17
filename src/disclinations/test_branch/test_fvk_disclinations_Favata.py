@@ -224,7 +224,7 @@ L = energy + dg1_w(w) + dg2(w) \
            + dg1_v(v) + dg2(v) \
            + bc1_w(w) + bc2(w) \
            + bc1_v(v) + bc2(v) \
-    - W_ext
+           - W_ext
            
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
 J = ufl.derivative(F, q, ufl.TrialFunction(Q))
@@ -267,7 +267,7 @@ computed_energy_terms = {label: comm.allreduce(
     op=MPI.SUM,
 ) for label, energy_term in energy_components.items()}
 
-pdb.set_trace()
+#pdb.set_trace()
 
 # ------------------------------
 
