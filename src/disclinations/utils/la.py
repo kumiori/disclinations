@@ -40,7 +40,6 @@ def compute_cell_contribution_point(V, points):
             (0, num_dofs), dtype=dolfinx.default_scalar_type)
     return cells, basis_values
 
-
 def compute_cell_contributions(V, points):
     # Initialize empty arrays to store cell indices and basis values
     all_cells = []
@@ -60,3 +59,16 @@ def compute_cell_contributions(V, points):
 
     return all_cells, all_basis_values
 
+def compute_disclination_loads(points, signs, V, b=None):
+    cells, basis_values = compute_cell_contributions(V, points)
+    
+    b = dolfinx.fem.Function(V)
+    b.x.array[:] = 0
+    # Loop over the cells, basis values, and signs
+    V = b.function_space
+    for cell, basis_value, sign in zip(cells, basis_values, signs):
+        dofs = V.dofmap.cell_dofs(cell)
+        # Update the function values
+        b.x.array[dofs] += sign * basis_value
+
+    return b
