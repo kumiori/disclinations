@@ -74,11 +74,11 @@ class SNESSolver:
         if prefix is None:
             prefix = "snes_{}".format(str(id(self))[0:4])
 
-        self.prefix = prefix
+        self.prefix = prefix + "_"
 
-        if self.bounds is not None:
-            self.lb = bounds[0]
-            self.ub = bounds[1]
+        # if self.bounds is not None:
+        #     self.lb = bounds[0]
+        #     self.ub = bounds[1]
 
         V = self.u.function_space
         self.comm = V.mesh.comm
@@ -115,7 +115,7 @@ class SNESSolver:
 
         for k, v in self.petsc_options.items():
             opts[k] = v
-
+        __import__('pdb').set_trace()
         opts.prefixPop()
 
     def solver_setup_demo(self):
@@ -152,9 +152,11 @@ class SNESSolver:
         snes.setJacobian(self.J, self.a)
         
         snes.setTolerances(rtol=1.0e-9, max_it=10)
-        snes.getKSP().setType("preonly")
-        snes.getKSP().setTolerances(rtol=1.0e-9)
-        snes.getKSP().getPC().setType("lu")
+
+        ksp = snes.getKSP()
+        ksp.setType("preonly")
+        ksp.setTolerances(rtol=1.0e-9)
+        ksp.getPC().setType("lu")
         self.set_petsc_options()
         
         if self.monitor is not None:
@@ -164,7 +166,8 @@ class SNESSolver:
         #     snes.setVariableBounds(self.lb.vector, self.ub.vector)
 
         snes.setFromOptions()
-
+        snes.view()
+        
         return snes
 
     def F(self, snes: PETSc.SNES, x: PETSc.Vec, b: PETSc.Vec):
