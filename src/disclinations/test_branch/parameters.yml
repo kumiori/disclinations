@@ -35,6 +35,7 @@ solvers:
             snes_max_it: 200
             # snes_divergence_tolerance: -1.0
             snes_monitor: ""
+        ksp:
             ksp_type: preonly
             pc_type: lu
 
