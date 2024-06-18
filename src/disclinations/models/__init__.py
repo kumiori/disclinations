@@ -48,7 +48,6 @@ class Biharmonic:
         
         return - dg1(u) + dg2(u) + bc1(u)
     
-
 class ToyPlateFVK:
     def __init__(self, mesh, model_parameters = {}) -> None:
         self.alpha_penalty = model_parameters.get("alpha_penalty",
@@ -82,16 +81,19 @@ class ToyPlateFVK:
                 - dg1(v) + dg2(v) \
                 - bc1(w) - bc2(w) \
                 - bc1(v) - bc2(v) 
+
 class NonlinearPlateFVK(ToyPlateFVK):
     def __init__(self, mesh, model_parameters = {}) -> None:
         self.alpha_penalty = model_parameters.get("alpha_penalty",
                                                        default_model_parameters["alpha_penalty"])
-        self.D = model_parameters.get("D",
-                                      default_model_parameters["D"])
         self.nu = model_parameters.get("nu",
                                        default_model_parameters["nu"])
         self.E = model_parameters.get("E",
                                       default_model_parameters["E"])
+        self.h = model_parameters.get("h",
+                                        default_model_parameters["h"])
+        self.D = self.E * self.h**3 / (12*(1-self.nu**2))
+        
         self.mesh = mesh
     
     def energy(self, state):
@@ -107,9 +109,8 @@ class NonlinearPlateFVK(ToyPlateFVK):
         laplacian = lambda f : div(grad(f))
         hessian = lambda f : grad(grad(f))
 
-        bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g * self.bracket(w, w)) * dx 
         membrane = (-1/(2*Eh) * inner(hessian(v), hessian(v)) + nu/(2*Eh) * self.bracket(v, v)) * dx 
-        # membrane = 1/2 * inner(Ph(ph_), grad(grad(ph_)))*dx 
+        bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx 
         coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
         energy = bending + membrane + coupling
 

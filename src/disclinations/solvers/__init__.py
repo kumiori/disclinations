@@ -115,7 +115,7 @@ class SNESSolver:
 
         for k, v in self.petsc_options.items():
             opts[k] = v
-        __import__('pdb').set_trace()
+
         opts.prefixPop()
 
     def solver_setup_demo(self):
