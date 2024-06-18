@@ -76,8 +76,6 @@ with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
 
 mesh_size = parameters["geometry"]["mesh_size"]
-parameters["geometry"]["radius"] = 1
-parameters["geometry"]["geom_type"] = "circle"
 
 model_rank = 0
 tdim = 2
@@ -89,14 +87,10 @@ gmsh_model, tdim = mesh_circle_gmshapi(
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
 outdir = "output"
-prefix = os.path.join(outdir, "plate_fvk_analytic")
+prefix = os.path.join(outdir, "plate_fvk_analytic_transverse")
 
 if comm.rank == 0:
     Path(prefix).mkdir(parents=True, exist_ok=True)
-
-if comm.rank == 0:
-    Path(prefix).mkdir(parents=True, exist_ok=True)
-
 h = CellDiameter(mesh)
 n = FacetNormal(mesh)
 
@@ -141,31 +135,34 @@ energy = model.energy(state)[0]
 
 # Explicit dead load (transverse)
 # Cf. thesis ref: 
-f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
+# f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 
-def transverse_load(x):
-    return (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-    # return (11+ x[0]**2 + x[1]**2)
+# def transverse_load(x):
+#     return (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+#     # return (11+ x[0]**2 + x[1]**2)
 
-f.interpolate(transverse_load)
+# f.interpolate(transverse_load)
 # f.interpolate(lambda x: 0 * x[0])
+
+scaling_w = 
+scaling_w = 
 
 def _v_initial_guess(x):
     return np.cos(np.pi * np.sqrt(x[0]**2 + x[1]**2))
 
-def _v_exact(x, a1=-1/12, a2=-1/18, a3=-1/24):
-    return a1 * (1 - x[0]**2 - x[1]**2)**2 + a2 * (1 - x[0]**2 - x[1]**2)**3 + a3 * (1 - x[0]**2 - x[1]**2)**4
+def _v_exact(x):
+    return 0
 
-def _w_exact(x):
-    return (1 - x[0]**2 - x[1]**2)**2
+def _w_exact(x, nu, q = 1):
+    return q/(64*12*(1-nu**2))*(1 - (x[0]**2 + x[1]**2))**2
 
-v_exact.interpolate(_v_exact)
-w_exact.interpolate(_w_exact)
+v_exact.interpolate(lambda x: 0 * x[0])
+w_exact.interpolate(lambda x: _w_exact(x, parameters["model"]["nu"], q=1))
 
 state_exact = {"v": v_exact, "w": w_exact}
 exact_energy = model.energy(state_exact)[0]
 
-W_ext = f * w * dx
+W_ext = dolfinx.fem.Constant(mesh, 1.) * w * dx
 # W_ext = w * dx
 
 penalisation = model.penalisation(state)
@@ -178,20 +175,20 @@ F_v = ufl.derivative(L, v, ufl.TestFunction(Q.sub(AIRY)))
 F_w = ufl.derivative(L, w, ufl.TestFunction(Q.sub(TRANSVERSE)))
 
 Ec_w = ufl.derivative(model.energy(state)[3], w, ufl.TestFunction(Q.sub(TRANSVERSE)))
-Ec_v = ufl.derivative(model.energy(state)[3], v, ufl.TestFunction(Q.sub(AIRY)))
 Em_v = ufl.derivative(model.energy(state)[2], w, ufl.TestFunction(Q.sub(AIRY)))
 
-labels = ["F", "F_v", "F_w", "Ec_w","Ec_v", "Em_v"]
+labels = ["F", "F_v", "F_w", "Ec_w", "Em_v"]
 
 
-print(parameters.get("solvers").get("elasticity").get("snes"))
+
+# print(parameters.get("solvers").get("elasticity").get("snes"))
 
 solver_parameters = {
-    "snes_type": "newtonls",      # Solver type: NGMRES (Nonlinear GMRES)
-    "snes_max_it": 100,           # Maximum number of iterations
+    "snes_type": "newtonls",        # Solver type: NGMRES (Nonlinear GMRES)
+    "snes_max_it": 100,          # Maximum number of iterations
     "snes_rtol": 1e-6,            # Relative tolerance for convergence
-    "snes_atol": 1e-5,           # Absolute tolerance for convergence
-    "snes_stol": 1e-5,           # Tolerance for the change in solution norm
+    "snes_atol": 1e-6,           # Absolute tolerance for convergence
+    "snes_stol": 1e-6,           # Tolerance for the change in solution norm
     "snes_monitor": None,         # Function for monitoring convergence (optional)
     # "snes_linesearch_type": "basic",  # Type of line search
 }
@@ -207,12 +204,22 @@ solver = SNESSolver(
 )
 solver.solve()
 
+
+for label, form in zip(labels, [F, F_v, F_w, Ec_w, Em_v]):
+    _F = create_vector(dolfinx.fem.form(form))
+    assemble_vector(_F, dolfinx.fem.form(form))
+    print(f"Norm of {label}: {_F.norm()}")
+    
+
 v, w = q.split()
 v.name = "Airy"
 w.name = "deflection"
 
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
+
+_Fv = create_vector(dolfinx.fem.form(F_v))
+assemble_vector(_Fv, dolfinx.fem.form(F_v))
 
 energy_components = {"bending": model.energy(state)[1],
                     "membrane": model.energy(state)[2],
@@ -227,14 +234,6 @@ computed_energy_terms = {label: comm.allreduce(
 for label, energy_term in computed_energy_terms.items():
     print(f"{label}: {energy_term}")
 
-
-
-for label, form in zip(labels, [F, F_v, F_w, Ec_w, Em_v]):
-    _F = create_vector(dolfinx.fem.form(form))
-    assemble_vector(_F, dolfinx.fem.form(form))
-    print(f"Norm of {label}: {_F.norm()}")
-    
-    
 import matplotlib.pyplot as plt
 
 plt.figure()
@@ -267,7 +266,7 @@ scalar_plot.screenshot(f"{prefix}/test_fvk.png")
 print("plotted scalar")
 
 tol = 1e-3
-xs = np.linspace(0 + tol, parameters["geometry"]["radius"] - tol, 101)
+xs = np.linspace(0 + tol, parameters["geometry"]["R"] - tol, 101)
 points = np.zeros((3, 101))
 points[0] = xs
 
