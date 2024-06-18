@@ -136,6 +136,21 @@ state = {"v": v, "w": w}
 model = NonlinearPlateFVK(mesh, parameters["model"])
 energy = model.energy(state)[0]
 
+
+_nu = parameters["model"]["nu"]
+_h = parameters["model"]["thickness"]
+_E = parameters["model"]["E"]
+
+w_scale = _h * (6*(1-_nu**2)) ** 1./2.
+v_scale = _E * _h**3 / (12 * (1 - _nu**2))
+f_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
+
+# print numerical values of scalings
+print(f"v_scale: {v_scale}")
+print(f"w_scale: {w_scale}")    
+print(f"f_scale: {f_scale}")
+
+
 # Dead load (transverse)
 # W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
 
@@ -144,7 +159,8 @@ energy = model.energy(state)[0]
 f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 
 def transverse_load(x):
-    return (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+    _f = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+    return _f / f_scale
     # return (11+ x[0]**2 + x[1]**2)
 
 f.interpolate(transverse_load)
@@ -154,10 +170,12 @@ def _v_initial_guess(x):
     return np.cos(np.pi * np.sqrt(x[0]**2 + x[1]**2))
 
 def _v_exact(x, a1=-1/12, a2=-1/18, a3=-1/24):
-    return a1 * (1 - x[0]**2 - x[1]**2)**2 + a2 * (1 - x[0]**2 - x[1]**2)**3 + a3 * (1 - x[0]**2 - x[1]**2)**4
+    _v = a1 * (1 - x[0]**2 - x[1]**2)**2 + a2 * (1 - x[0]**2 - x[1]**2)**3 + a3 * (1 - x[0]**2 - x[1]**2)**4
+    return _v * v_scale
 
 def _w_exact(x):
-    return (1 - x[0]**2 - x[1]**2)**2
+    _w = (1 - x[0]**2 - x[1]**2)**2
+    return _w * w_scale
 
 v_exact.interpolate(_v_exact)
 w_exact.interpolate(_w_exact)
@@ -190,10 +208,10 @@ solver_parameters = {
     "snes_type": "newtonls",      # Solver type: NGMRES (Nonlinear GMRES)
     "snes_max_it": 100,           # Maximum number of iterations
     "snes_rtol": 1e-6,            # Relative tolerance for convergence
-    "snes_atol": 1e-5,           # Absolute tolerance for convergence
+    "snes_atol": 1e-15,           # Absolute tolerance for convergence
     "snes_stol": 1e-5,           # Tolerance for the change in solution norm
     "snes_monitor": None,         # Function for monitoring convergence (optional)
-    # "snes_linesearch_type": "basic",  # Type of line search
+    "snes_linesearch_type": "basic",  # Type of line search
 }
 
 solver = SNESSolver(
@@ -256,7 +274,6 @@ plotter = pyvista.Plotter(
         shape=(2, 2),
     )
 
-
 scalar_plot = plot_scalar(v, plotter, subplot=(0, 0), V_sub=V_v, dofs=dofs_v)
 scalar_plot = plot_scalar(w, plotter, subplot=(0, 1), V_sub=V_w, dofs=dofs_w)
 
@@ -286,6 +303,8 @@ _plt, data = plot_profile(
     subplotnumber=1
 )
 
+ax = _plt.gca()
+axw = ax.twinx()
 
 _plt, data = plot_profile(
     w_exact,
@@ -298,8 +317,10 @@ _plt, data = plot_profile(
         "ls": "--"
     },
     fig=fig,
+    ax=axw,
     subplotnumber=1
 )
+
 
 _plt, data = plot_profile(
     v,
@@ -314,7 +335,8 @@ _plt, data = plot_profile(
     subplotnumber=2
 )
 
-
+ax = _plt.gca()
+axv = ax.twinx()
 _plt, data = plot_profile(
     v_exact,
     points,
@@ -326,6 +348,7 @@ _plt, data = plot_profile(
         "ls": "--"
     },
     fig=fig,
+    ax=axv,
     subplotnumber=2
 )
 
