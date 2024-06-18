@@ -144,8 +144,13 @@ energy = model.energy(state)[0]
 # f.interpolate(transverse_load)
 # f.interpolate(lambda x: 0 * x[0])
 
-scaling_w = 
-scaling_w = 
+_nu = parameters["model"]["nu"]
+_h = parameters["model"]["thickness"]
+_E = parameters["model"]["E"]
+
+w_scale = _h * (6*(1-_nu**2)) ** 1./2.
+v_scale = _E * _h**3 / (12 * (1 - _nu**2))
+p_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
 
 def _v_initial_guess(x):
     return np.cos(np.pi * np.sqrt(x[0]**2 + x[1]**2))
@@ -190,7 +195,7 @@ solver_parameters = {
     "snes_atol": 1e-6,           # Absolute tolerance for convergence
     "snes_stol": 1e-6,           # Tolerance for the change in solution norm
     "snes_monitor": None,         # Function for monitoring convergence (optional)
-    # "snes_linesearch_type": "basic",  # Type of line search
+    "snes_linesearch_type": "basic",  # Type of line search
 }
 
 solver = SNESSolver(
@@ -285,6 +290,8 @@ _plt, data = plot_profile(
     subplotnumber=1
 )
 
+ax = _plt.gca()
+ax2 = ax.twinx()
 
 _plt, data = plot_profile(
     w_exact,
@@ -297,6 +304,7 @@ _plt, data = plot_profile(
         "ls": "--"
     },
     fig=fig,
+    ax=ax2,
     subplotnumber=1
 )
 
