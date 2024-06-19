@@ -14,19 +14,18 @@ geometry:
 #  === Material === #
 model:
     E: 1.
-    h: 1.
-    D: 1.
+    thickness: 1.
     sigma_D0: 1.
-    nu: 0.15
+    nu: 0.
     model_dimension: 2
     model_type: "2D"
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"
     order: 3
-    alpha_penalty: 10.
+    alpha_penalty: 100.
 # === Solver === #
 solvers:
     elasticity:
-        prefix: elasticity
+        prefix: fvk
         snes:
             snes_type: newtonls
             snes_stol: 1e-6
