@@ -13,6 +13,7 @@ from ufl import (
 
 import yaml
 import os
+from dolfinx.fem import Constant
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 with open(f"{dir_path}/default_parameters.yml") as f:
@@ -158,3 +159,30 @@ class NonlinearPlateFVK(ToyPlateFVK):
                 - bc1(w) - bc2(v) \
                 + bc3(w) + bc3(v) \
                 + dgc(w, v) 
+                
+# FVKAdimensional class
+class FVKAdimensional(NonlinearPlateFVK):
+    def __init__(self, mesh, nu = 0, alpha_penalty = 100) -> None:
+        self.alpha_penalty = alpha_penalty
+        self.nu = nu
+        self.mesh = mesh
+        
+    def energy(self, state):
+        v = state["v"]
+        w = state["w"]
+        dx = ufl.Measure("dx")
+
+        nu = self.nu
+        
+        k_g = -(1-nu)
+        k_g = Constant(self.mesh, -(1-self.nu))
+        
+        laplacian = lambda f : div(grad(f))
+        hessian = lambda f : grad(grad(f))
+
+        membrane = (-1/(2) * inner(hessian(v), hessian(v)) + nu/2 * self.bracket(v, v)) * dx 
+        bending = (1/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx 
+        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
+        energy = bending + membrane + coupling
+
+        return energy, bending, membrane, coupling

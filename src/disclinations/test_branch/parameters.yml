@@ -8,7 +8,7 @@ loading:
 geometry:
     geometric_dimension: 2
     geom_type: "circle"
-    R: 1.
+    radius: 1.
     mesh_size: 0.1
 
 #  === Material === #
