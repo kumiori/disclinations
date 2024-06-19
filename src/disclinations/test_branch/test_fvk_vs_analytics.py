@@ -245,7 +245,25 @@ computed_energy_terms = {label: comm.allreduce(
 for label, energy_term in computed_energy_terms.items():
     print(f"{label}: {energy_term}")
 
+# compute maximum of w and v
+max_w = max(w.vector.array)
+max_w_exact = max(w_exact.vector.array)
+print(f"Max w: {max_w}")
+print(f"Max w_exact: {max_w_exact}")
+print(f"Relative error: {np.abs(max_w - max_w_exact) / max_w_exact}")
+print(f"Coeff: {max_w/max_w_exact}")
 
+print("")
+# do the same for v
+max_v = max(v.vector.array)
+max_v_exact = max(v_exact.vector.array)
+print(f"Max v: {max_v}")
+print(f"Max v_exact: {max_v_exact}")
+print(f"Relative error: {np.abs(max_v - max_v_exact) / max_v_exact}")
+print(f"Coeff: {max_v/max_v_exact}")
+
+
+pdb.set_trace()
 
 for label, form in zip(labels, [F, F_v, F_w, Ec_w, Em_v]):
     _F = create_vector(dolfinx.fem.form(form))

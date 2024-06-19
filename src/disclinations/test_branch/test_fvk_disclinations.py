@@ -18,7 +18,7 @@ import yaml
 from disclinations.models import NonlinearPlateFVK
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
-from disclinations.utils.la import compute_cell_contributions
+from disclinations.utils.la import compute_cell_contributions, compute_disclination_loads
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 
 # from damage.utils import ColorPrint
@@ -123,11 +123,11 @@ dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, 
 
 bcs_w = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
-    dofs_v, Q.sub(TRANSVERSE)
+    dofs_w, Q.sub(TRANSVERSE)
 )
 bcs_v = dirichletbc(
     np.array(0, dtype=PETSc.ScalarType),
-    dofs_w, Q.sub(AIRY)
+    dofs_v, Q.sub(AIRY)
 )
 # keep track of the ordering of fields in boundary conditions
 
@@ -139,48 +139,35 @@ dx = ufl.Measure("dx")
 q = dolfinx.fem.Function(Q)
 v, w = ufl.split(q)
 
-# v = dolfinx.fem.Function(Q.sub(1).collapse(), name="sigma")
-# w = dolfinx.fem.Function(Q.sub(0).collapse(), name="Deflection")
-
 state = {"v": v, "w": w}
 
 # Define the variational problem
-
 model = NonlinearPlateFVK(mesh, parameters["model"])
-energy = model.energy(state)
+energy = model.energy(state)[0]
 
 # Dead load (transverse)
-W_ext = Constant(mesh, np.array(-1., dtype=PETSc.ScalarType)) * w * dx
+W_ext = Constant(mesh, np.array(0., dtype=PETSc.ScalarType)) * w * dx
 penalisation = model.penalisation(state)
 
 # Define the functional
-L = energy[0] - W_ext + penalisation
+L = energy - W_ext + penalisation
 
 # Point sources
-b = dolfinx.fem.Function(Q)
-b.x.array[:] = 0
 
+# Point sources
 if mesh.comm.rank == 0:
-    point = np.array([[0., 0., 0]], dtype=mesh.geometry.x.dtype)
-    
+    # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
     points = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
               np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
-    # signs = [0, 0]
     signs = [-1, 1]
 else:
-    point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
+    # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
     points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
               np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
-    signs = [0, 0]
-
-Q_A, Q_A_to_Q_dofs = Q.sub(AIRY).collapse()
-_cells, _basis_values = compute_cell_contributions(Q_A, points)
-
-for cell, basis_value, sign in zip(_cells, _basis_values, signs):
-    subspace_dofs = Q_A.dofmap.cell_dofs(cell)
-    dofs = np.array(Q_A_to_Q_dofs)[subspace_dofs]
-    b.x.array[dofs] += sign * basis_value
     
+Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
+
+b = compute_disclination_loads(points, signs, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)    
 
 F = ufl.derivative(L, q, ufl.TestFunction(Q))
 
@@ -189,7 +176,7 @@ solver = SNESSolver(
     u=q,
     bcs=bcs,
     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
-    prefix='plate_fvk_',
+    prefix='plate_fvk_disclinations',
     b0=b.vector,
     monitor=monitor,
 )
@@ -204,7 +191,7 @@ fig = ax.get_figure()
 fig.savefig(f"{prefix}/mesh.png")
 
 
-energy_components = {"bending": energy[1], "membrane": -energy[2], "coupling": energy[3], "external_work": -W_ext}
+energy_components = {"bending": model.energy(state)[1], "membrane": -model.energy(state)[2], "coupling": model.energy(state)[3], "external_work": -W_ext}
 # penalty_components = {"dg1_w": dg1_w(w), "dg2": dg2(w), "dg1_v": dg1_v(v), "dgc": dgc(v, w)}
 # boundary_components = {"bc1_w": bc1_w(w), "bc2": bc2(w), "bc1_v": bc1_v(v)}
 
@@ -228,16 +215,43 @@ computed_energy_terms = {label: comm.allreduce(
 # ) for label, boundary_term in boundary_components.items()}
 
 
-
-
 print(computed_energy_terms)
 # print(computed_penalty_terms)
 # print(computed_boundary_terms)
 
 
+# ------------------------------
+# check energy vs exact energy of dipole
+lagrangian_components = {
+    "total": model.energy(state)[0],
+    "bending": model.energy(state)[1],
+    "membrane": -model.energy(state)[2],
+    "coupling": model.energy(state)[3],
+    "penalisation": model.penalisation(state),
+}
 
+# compute distance between points 
+energy_terms = {label: comm.allreduce(
+dolfinx.fem.assemble_scalar(
+    dolfinx.fem.form(energy_term)),
+op=MPI.SUM,
+) for label, energy_term in lagrangian_components.items()}
 
+distance = np.linalg.norm(points[0] - points[1])
 
+exact_energy_dipole = parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
+    * parameters["geometry"]["R"]**2 / (8 * np.pi) *  distance**2 * \
+        (np.log(4+distance**2) - np.log(4 * distance))
+
+print(yaml.dump(parameters["model"], default_flow_style=False))
+
+error = np.abs(exact_energy_dipole - energy_terms['membrane'])
+
+print(f"Exact energy: {exact_energy_dipole}")
+print(f"Computed energy: {energy_terms['membrane']}")
+print(f"Abs error: {error}")
+print(f"Rel error: {error/exact_energy_dipole:.3%}")
+print(f"Error: {error/exact_energy_dipole:.1%}")
 
 
 # ------------------------------
@@ -245,6 +259,7 @@ print(computed_energy_terms)
 
 import pyvista
 from pyvista.plotting.utilities import xvfb
+from dolfinx import plot
 
 xvfb.start_xvfb(wait=0.05)
 pyvista.OFF_SCREEN = True
@@ -252,7 +267,7 @@ pyvista.OFF_SCREEN = True
 plotter = pyvista.Plotter(
         title="Displacement",
         window_size=[1600, 600],
-        shape=(1, 2),
+        shape=(1, 3),
     )
 
 v, w = q.split()
@@ -262,16 +277,45 @@ w.name = "deflection"
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
 
-scalar_plot = plot_scalar(w, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w)
-# scalar_plot.screenshot(f"{prefix}/test_fvk-w.png")
+_pv_points = np.array([p[0] for p in points])
+_pv_colours = np.array(-np.array(signs))
 
-# plotter = pyvista.Plotter(
-#         title="Displacement",
-#         window_size=[1600, 600],
-#         shape=(1, 1),
-#     )
+scalar_plot = plot_scalar(w, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w,
+                            lineproperties={'clim': [min(w.vector[:]), max(w.vector[:])]})
+plotter.add_points(
+        _pv_points,
+        scalars = _pv_colours,
+        style = 'points', 
+        render_points_as_spheres=True, 
+        point_size=15.0
+)
 
-scalar_plot = plot_scalar(v, plotter, subplot=(0, 1), V_sub=V_v, dofs=dofs_v)
+scalar_plot = plot_scalar(v, plotter, subplot=(0, 1), V_sub=V_v, dofs=dofs_v,
+                          lineproperties={'clim': [min(v.vector[:]), max(v.vector[:])]})
+plotter.add_points(
+        _pv_points,
+        scalars = _pv_colours,
+        style = 'points', 
+        render_points_as_spheres=True, 
+        point_size=15.0
+)
+
+plotter.subplot(0, 2)
+cells, types, x = plot.vtk_mesh(V_v)
+grid = pyvista.UnstructuredGrid(cells, types, x)
+grid.point_data["v"] = v.x.array.real[dofs_v]
+grid.set_active_scalars("v")
+
+warped = grid.warp_by_scalar("v", scale_factor=100)
+plotter.add_mesh(warped, show_edges=False)
+plotter.add_points(
+        _pv_points,
+        scalars = _pv_colours,
+        style = 'points', 
+        render_points_as_spheres=True, 
+        point_size=15.0
+)
+
 scalar_plot.screenshot(f"{prefix}/test_fvk.png")
 print("plotted scalar")
 
