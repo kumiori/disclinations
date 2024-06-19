@@ -46,7 +46,24 @@ import yaml
 from dolfinx.fem import Constant, dirichletbc
 from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
-from ufl import dx
+from ufl import (
+    CellDiameter,
+    FacetNormal,
+    TestFunction,
+    TrialFunction,
+    avg,
+    ds,
+    dS,
+    dx,
+    div,
+    grad,
+    inner,
+    dot,
+    jump,
+    outer,
+    as_matrix,
+    sym,
+)
 import matplotlib.pyplot as plt
 
 petsc4py.init(sys.argv)
@@ -71,7 +88,7 @@ model_rank = 0
 tdim = 2
 
 outdir = "output"
-prefix = os.path.join(outdir, "biharmonic_monopole")
+prefix = os.path.join(outdir, "biharmonic_disclination")
 
 if comm.rank == 0:
     Path(prefix).mkdir(parents=True, exist_ok=True)
@@ -93,7 +110,6 @@ dofs = dolfinx.fem.locate_dofs_topological(V=V, entity_dim=1, entities=bndry_fac
 bcs = [dolfinx.fem.dirichletbc(value=np.array(0, dtype=PETSc.ScalarType), dofs=dofs, V=V)]
 
 u = dolfinx.fem.Function(V)
-u_exact = dolfinx.fem.Function(V)
 state = {"u": u}
 
 D = dolfinx.fem.Constant(mesh, 1.)
@@ -105,18 +121,10 @@ h_avg = (h('+') + h('-')) / 2.0
 tdim = mesh.topology.dim
 num_cells = mesh.topology.index_map(tdim).size_local
 _h = dolfinx.cpp.mesh.h(mesh._cpp_object, tdim, np.arange(num_cells, dtype=np.int32))
-
-_u_scale = parameters["model"]["E"]
-
-def _u_exact(x, _u_scale = 1, _s = 1, _R = 1):
-    r = np.sqrt(x[0]**2 + x[1]**2)
-    _u = _s * _u_scale / (8.*np.pi) * (r**2 * np.log(r/_R) - r**2/2. + _R**2/2.)
-    
-    return _u
-
-u_exact.interpolate(_u_exact)
+# print(_h)
 
 n = ufl.FacetNormal(mesh)
+
 
 model = Biharmonic(mesh, parameters["model"])
 W_ext = load * u * dx
@@ -129,13 +137,17 @@ dS = ufl.Measure("dS")
 
 # Point sources
 if mesh.comm.rank == 0:
-    points = np.array([[0., 0., 0]], dtype=mesh.geometry.x.dtype)
-
-    signs = [1]
+    # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
+    points = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+              np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
+    signs = [-1, 1]
 else:
-    point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
+    # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
+    points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+              np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
 
 b = compute_disclination_loads(points, signs, V)
+
 
 F = ufl.derivative(L, u, ufl.TestFunction(V))
 
@@ -147,7 +159,7 @@ ax = plot_mesh(mesh)
 fig = ax.get_figure()
 
 for point in points:
-    ax.plot(point[0], point[1], 'ro')
+    ax.plot(point[0][0], point[0][1], 'ro')
 
 fig.savefig(f"{prefix}/coarse-mesh.png")
 
@@ -159,7 +171,7 @@ solver = SNESSolver(
     bcs=bcs,
     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
     prefix='bilaplacian_disclination',
-    b0=-b.vector
+    b0=b.vector
 )
 solver.solve()
 
@@ -180,7 +192,7 @@ plotter = pyvista.Plotter(
 
 scalar_plot = plot_scalar(u, plotter, subplot=(0, 0), lineproperties={"show_edges": True})
 # plotter.subplot(0, 1)
-_pv_points = points
+_pv_points = np.array([p[0] for p in points])
 _pv_colours = np.array(signs)
 plotter.add_points(
         _pv_points,
@@ -200,10 +212,16 @@ grid.set_active_scalars("u")
 warped = grid.warp_by_scalar("u", scale_factor=100)
 plotter.add_mesh(warped, show_edges=False)
 
-exact_energy_monopole = signs[0]**2 * parameters["model"]["E"] * parameters["model"]["thickness"] \
+distance = np.linalg.norm(points[0] - points[1])
+
+exact_energy_monopole = parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
     * parameters["geometry"]["R"]**2 / (32 * np.pi)
 
-print(exact_energy_monopole)
+exact_energy_dipole = parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
+    * parameters["geometry"]["R"]**2 / (8 * np.pi) *  distance**2 * \
+        (np.log(4+distance**2) - np.log(4 * distance))
+
+print(exact_energy_dipole)
 # Check the solution
 check_components = {
     "energy": model.energy(state),
@@ -218,14 +236,14 @@ op=MPI.SUM,
 ) for label, energy_term in check_components.items()}
 
 print(check_terms)
-print(f"Exact energy: {exact_energy_monopole}")
+print(f"Exact energy: {exact_energy_dipole}")
 
 print(f"Computed energy: {check_terms['energy'] + check_terms['penalisation']}")
 # Print error norm
-error = np.abs(exact_energy_monopole - check_terms['energy'])
+error = np.abs(exact_energy_dipole - check_terms['energy'])
 print(f"Abs error: {error}")
-print(f"Rel error: {error/exact_energy_monopole:.3%}")
-print(f"Error: {error/exact_energy_monopole:.1%}")
+print(f"Rel error: {error/exact_energy_dipole:.3%}")
+print(f"Error: {error/exact_energy_dipole:.1%}")
 
 # Print alpha value
 print(f'Computed alpha: {parameters["model"]["alpha_penalty"]}')
@@ -233,47 +251,3 @@ print(f'Computed alpha: {parameters["model"]["alpha_penalty"]}')
 scalar_plot.screenshot(f"{prefix}/test_bilaplacian_disclination.png")
 print("plotted scalar")
 
-
-# ---------------
-# Plot profiles
-
-
-tol = 1e-3
-xs = np.linspace(0 + tol, parameters["geometry"]["radius"] - tol, 101)
-points = np.zeros((3, 101))
-points[0] = xs
-
-fig, axes = plt.subplots(1, 1, figsize=(18, 6))
-
-_plt, data = plot_profile(
-    u,
-    points,
-    None,
-    subplot=(1, 1),
-    lineproperties={
-        "c": "k",
-        "label": f"$u(x)$"
-    },
-    fig=fig,
-    subplotnumber=1
-)
-
-# ax = _plt.gca()
-# axw = ax.twinx()
-
-_plt, data = plot_profile(
-    u_exact,
-    points,
-    None,
-    subplot=(1, 1),
-    lineproperties={
-        "c": "r",
-        "label": f"$u_e(x)$",
-        "ls": "--"
-    },
-    fig=fig,
-    subplotnumber=1
-)
-_plt.legend()
-
-_plt.savefig(f"{prefix}/test_fvk-profiles.png")
