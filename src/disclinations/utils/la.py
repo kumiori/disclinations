@@ -59,15 +59,38 @@ def compute_cell_contributions(V, points):
 
     return all_cells, all_basis_values
 
-def compute_disclination_loads(points, signs, V, b=None):
-    cells, basis_values = compute_cell_contributions(V, points)
+# def compute_disclination_loads(points, signs, V, b=None):
+#     cells, basis_values = compute_cell_contributions(V, points)
     
+#     b = dolfinx.fem.Function(V)
+#     b.x.array[:] = 0
+#     # Loop over the cells, basis values, and signs
+#     V = b.function_space
+#     for cell, basis_value, sign in zip(cells, basis_values, signs):
+#         dofs = V.dofmap.cell_dofs(cell)
+#         # Update the function values
+#         b.x.array[dofs] += sign * basis_value
+
+#     return b
+
+def compute_disclination_loads(points, signs, V, V_sub_to_V_dofs=None, V_sub=None):
     b = dolfinx.fem.Function(V)
     b.x.array[:] = 0
+
+    if V_sub_to_V_dofs is None:
+        # Single space case
+        cells, basis_values = compute_cell_contributions(V, points)
+    else:
+        # Mixed formulation case
+        cells, basis_values = compute_cell_contributions(V_sub, points)
+    
     # Loop over the cells, basis values, and signs
-    V = b.function_space
     for cell, basis_value, sign in zip(cells, basis_values, signs):
-        dofs = V.dofmap.cell_dofs(cell)
+        if V_sub_to_V_dofs is None:
+            dofs = V.dofmap.cell_dofs(cell)
+        else:
+            subspace_dofs = V_sub.dofmap.cell_dofs(cell)
+            dofs = np.array(V_sub_to_V_dofs)[subspace_dofs]
         # Update the function values
         b.x.array[dofs] += sign * basis_value
 
