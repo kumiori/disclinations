@@ -141,9 +141,14 @@ _nu = parameters["model"]["nu"]
 _h = parameters["model"]["thickness"]
 _E = parameters["model"]["E"]
 
-w_scale = _h * (6*(1-_nu**2)) ** 1./2.
-v_scale = _E * _h**3 / (12 * (1 - _nu**2))
-f_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
+# w_scale = _h * (6*(1-_nu**2)) ** 1./2.
+# v_scale = _E * _h**3 / (12 * (1 - _nu**2))
+# f_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
+
+_D = _E * _h**3 / (12 * (1 - _nu**2))
+w_scale = np.sqrt(2 * _D / (_E * _h))
+v_scale = _D
+f_scale = np.sqrt(2 * _D**3 / (_E * _h))
 
 # print numerical values of scalings
 print(f"v_scale: {v_scale}")
@@ -160,7 +165,7 @@ f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 
 def transverse_load(x):
     _f = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-    return _f / f_scale
+    return _f * f_scale
     # return (11+ x[0]**2 + x[1]**2)
 
 f.interpolate(transverse_load)
@@ -263,8 +268,6 @@ print(f"Relative error: {np.abs(max_v - max_v_exact) / max_v_exact}")
 print(f"Coeff: {max_v/max_v_exact}")
 
 
-pdb.set_trace()
-
 for label, form in zip(labels, [F, F_v, F_w, Ec_w, Em_v]):
     _F = create_vector(dolfinx.fem.form(form))
     assemble_vector(_F, dolfinx.fem.form(form))
@@ -321,8 +324,8 @@ _plt, data = plot_profile(
     subplotnumber=1
 )
 
-ax = _plt.gca()
-axw = ax.twinx()
+# ax = _plt.gca()
+# axw = ax.twinx()
 
 _plt, data = plot_profile(
     w_exact,
@@ -335,7 +338,7 @@ _plt, data = plot_profile(
         "ls": "--"
     },
     fig=fig,
-    ax=axw,
+    # ax=axw,
     subplotnumber=1
 )
 
@@ -353,8 +356,8 @@ _plt, data = plot_profile(
     subplotnumber=2
 )
 
-ax = _plt.gca()
-axv = ax.twinx()
+# ax = _plt.gca()
+# axv = ax.twinx()
 _plt, data = plot_profile(
     v_exact,
     points,
@@ -366,7 +369,7 @@ _plt, data = plot_profile(
         "ls": "--"
     },
     fig=fig,
-    ax=axv,
+    # ax=axv,
     subplotnumber=2
 )
 
