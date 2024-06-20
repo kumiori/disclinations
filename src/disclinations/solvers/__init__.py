@@ -19,7 +19,7 @@ from dolfinx.fem.petsc import (
 # pdb.set_trace()
 
 comm = MPI.COMM_WORLD
-
+DEBUG = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
@@ -104,7 +104,7 @@ class SNESSolver:
         self.solver = self.solver_setup()
         # self.solver = self.solver_setup_demo()
 
-    def set_petsc_options(self, debug=True):
+    def set_petsc_options(self):
         """
         Set PETSc solver options.
 
@@ -115,7 +115,8 @@ class SNESSolver:
         """
         opts = PETSc.Options()
         opts.prefixPush(self.prefix)
-        if debug is True:
+        
+        if DEBUG:
             print(self.petsc_options)
 
         for k, v in self.petsc_options.items():
@@ -171,8 +172,10 @@ class SNESSolver:
         #     snes.setVariableBounds(self.lb.vector, self.ub.vector)
 
         snes.setFromOptions()
-        snes.view()
-        
+            
+        if DEBUG:
+            snes.view()
+            
         return snes
 
     def F(self, snes: PETSc.SNES, x: PETSc.Vec, b: PETSc.Vec):

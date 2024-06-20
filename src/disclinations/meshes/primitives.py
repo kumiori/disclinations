@@ -318,7 +318,6 @@ def mesh_bar_gmshapi(name,
 
     return gmsh.model if comm.rank == 0 else None, tdim
 
-
 def mesh_circle_gmshapi(name,
                         R,
                         lc,
@@ -335,7 +334,8 @@ def mesh_circle_gmshapi(name,
         import gmsh
 
         # Initialise gmsh and set options
-        gmsh.initialize()
+        if not gmsh.is_initialized():
+            gmsh.initialize()
         gmsh.option.setNumber("General.Terminal", 1)
 
         gmsh.option.setNumber("Mesh.Algorithm", 6)
@@ -369,7 +369,94 @@ def mesh_circle_gmshapi(name,
         if msh_file is not None:
             gmsh.write(msh_file)
 
+        # gmsh.finalize()
+
     return gmsh.model if comm.rank == 0 else None, tdim
+
+from mpi4py import MPI
+import random
+
+def mesh_circle_with_holes_gmshapi(name,
+                                   R,
+                                   lc,
+                                   tdim,
+                                   num_holes,
+                                   hole_radius,
+                                   hole_positions=None,
+                                   refinement_factor=0.1,
+                                   order=1,
+                                   msh_file=None,
+                                   comm=MPI.COMM_WORLD):
+    """
+    Create 2d circle mesh with holes using the Python API of Gmsh.
+    """
+    # Perform Gmsh work only on rank = 0
+    if comm.rank == 0:
+        import gmsh
+
+        # Initialise gmsh and set options
+        gmsh.initialize()
+        gmsh.option.setNumber("General.Terminal", 1)
+        gmsh.option.setNumber("Mesh.Algorithm", 6)
+
+        model = gmsh.model()
+        model.add("CircleWithHoles")
+        model.setCurrent("CircleWithHoles")
+
+        # Define main circle
+        p0 = model.geo.addPoint(0.0, 0.0, 0, lc)
+        p1 = model.geo.addPoint(R, 0.0, 0, lc)
+        p2 = model.geo.addPoint(0.0, R, 0.0, lc)
+        p3 = model.geo.addPoint(-R, 0, 0, lc)
+        p4 = model.geo.addPoint(0, -R, 0, lc)
+        c1 = model.geo.addCircleArc(p1, p0, p2)
+        c2 = model.geo.addCircleArc(p2, p0, p3)
+        c3 = model.geo.addCircleArc(p3, p0, p4)
+        c4 = model.geo.addCircleArc(p4, p0, p1)
+        outer_circle = model.geo.addCurveLoop([c1, c2, c3, c4])
+        # Define holes
+        hole_points = []
+        hole_loops = []
+        
+        if hole_positions is None:
+            # Generate random positions for the holes
+            hole_positions = [(random.uniform(-R + hole_radius, R - hole_radius), 
+                               random.uniform(-R + hole_radius, R - hole_radius)) 
+                              for _ in range(num_holes)]
+        
+        for i, (hx, hy) in enumerate(hole_positions):
+            h0 = model.geo.addPoint(hx, hy, 0, lc * refinement_factor)
+            h1 = model.geo.addPoint(hx + hole_radius, hy, 0, lc * refinement_factor)
+            h2 = model.geo.addPoint(hx, hy + hole_radius, 0, lc * refinement_factor)
+            h3 = model.geo.addPoint(hx - hole_radius, hy, 0, lc * refinement_factor)
+            h4 = model.geo.addPoint(hx, hy - hole_radius, 0, lc * refinement_factor)
+            hc1 = model.geo.addCircleArc(h1, h0, h2)
+            hc2 = model.geo.addCircleArc(h2, h0, h3)
+            hc3 = model.geo.addCircleArc(h3, h0, h4)
+            hc4 = model.geo.addCircleArc(h4, h0, h1)
+            hole_loop = model.geo.addCurveLoop([hc1, hc2, hc3, hc4])
+            hole_loops.append(hole_loop)
+        
+        # Define the surface with holes
+        plane_surface = model.geo.addPlaneSurface([outer_circle] + hole_loops)
+        
+        model.geo.synchronize()
+        surface_entities = [model[1] for model in model.getEntities(tdim)]
+        model.addPhysicalGroup(tdim, surface_entities, tag=5)
+        model.setPhysicalName(tdim, 5, "Film surface")
+        
+        gmsh.model.mesh.setOrder(order)
+        model.mesh.generate(tdim)
+        
+        # Optional: Write msh file
+        if msh_file is not None:
+            gmsh.write(msh_file)
+        
+        gmsh.finalize()
+    
+    return gmsh.model if comm.rank == 0 else None, tdim
+
+# Example usage:
 
 
 if __name__ == "__main__":

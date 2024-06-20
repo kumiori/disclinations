@@ -11,13 +11,15 @@ from typing import Optional
 
 import numpy as np
 import pandas as pd
-import petsc4py
+import gc
 
 import basix
 import ufl
 import dolfinx
 import dolfinx.mesh
 import dolfinx.plot
+
+from dolfinx.common import list_timings
 from dolfinx.fem import Constant, dirichletbc
 from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
@@ -37,15 +39,23 @@ from disclinations.models import FVKAdimensional
 from disclinations.solvers import SNESSolver
 from disclinations.utils.la import compute_disclination_loads
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
-from disclinations.utils import update_parameters
+from disclinations.utils import update_parameters, memory_usage
 
 logging.basicConfig(level=logging.INFO)
 comm = MPI.COMM_WORLD
 
 def run_experiment(parameters: dict):
+    # Setup, output and file handling
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()[0:6]
     
-    comm = MPI.COMM_WORLD
+    outdir = "output"
+    prefix = os.path.join(outdir, "experiment_01", signature)
+
+    if comm.rank == 0:
+        Path(prefix).mkdir(parents=True, exist_ok=True)
+
+    # MPI communicator and global variables
+    
     AIRY = 0
     TRANSVERSE = 1
 
@@ -54,8 +64,6 @@ def run_experiment(parameters: dict):
     mesh_size = parameters["geometry"]["mesh_size"]
     nu = parameters["model"]["nu"]
     thickness = parameters["model"]["thickness"]
-    print(f"thickness: {thickness}")
-    return
     radius = parameters["geometry"]["radius"]
     E = parameters["model"]["E"]
     
@@ -67,27 +75,17 @@ def run_experiment(parameters: dict):
     b0 = (radius / thickness)**2
 
     # Mesh
-    
-    
     model_rank = 0
     tdim = 2
     # order = 3
-
-    gmsh_model, tdim = mesh_circle_gmshapi(
-        parameters["geometry"]["geom_type"], 1, mesh_size, tdim
-    )
-    mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-    mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
+    with dolfinx.common.Timer("~Mesh Generation") as timer:
+        gmsh_model, tdim = mesh_circle_gmshapi(
+            parameters["geometry"]["geom_type"], 1, mesh_size, tdim
+        )
+        mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
+        mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
     h = CellDiameter(mesh)
     n = FacetNormal(mesh)
-
-    # Output and file handling
-
-    outdir = "output"
-    prefix = os.path.join(outdir, "experiment_01", signature)
-
-    if comm.rank == 0:
-        Path(prefix).mkdir(parents=True, exist_ok=True)
 
     # Functional setting
 
@@ -163,6 +161,10 @@ def run_experiment(parameters: dict):
     solver.solve()
     
     del solver
+    
+    # Postprocessing and viz
+    with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
+        pass
 
 def load_parameters(file_path):
     """
@@ -202,7 +204,8 @@ if __name__ == "__main__":
     outdir = "output"
     parameters, signature = load_parameters("../../src/disclinations/test_branch/parameters.yml")
     experiment_dir = os.path.join(outdir, signature[0::6])
-    
+    max_memory = 0
+    num_runs = 10
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
             
@@ -211,9 +214,23 @@ if __name__ == "__main__":
     
     
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
-        for thickness in np.linspace(0.1, 1, 10):
+        for i, thickness in enumerate(np.linspace(0.1, 1, num_runs)):
+            # Check memory usage before computation
+            mem_before = memory_usage()
+            
             # parameters["model"]["thickness"] = thickness
             update_parameters(parameters, "thickness", thickness)    
             run_experiment(parameters)
-        
-        timings = table_timing_data()
+            
+            # Check memory usage after computation
+            mem_after = memory_usage()
+            max_memory = max(max_memory, mem_after)
+            
+            # Log memory usage
+            logging.info(f"Run {i}/{num_runs}: Memory Usage (MB) - Before: {mem_before}, After: {mem_after}")
+            # Perform garbage collection
+            gc.collect()
+            
+    timings = table_timing_data()
+    list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])
+    
