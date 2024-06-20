@@ -4,9 +4,14 @@
 
 This script contains material for conducting numerical experiments on FVK (Foppl-von Kármán) plates subjected to disclination loading. The experiments aim to investigate the behavior of FVK plates under various loading conditions and parameter configurations.
 
-## Model Description
+## Model Description: monopole
 
 The model used in these experiments is based on the Foppl-von Kármán plate theory, which describes the deformation of thin elastic plates. The equations governing the FVK plate model are solved numerically using finite element methods.
+
+$$
+\mathcal {E}(y) = -E_m(v) + E_b(w) + E_c(v, w) - \frac{R^4}{E h^4} p_0 \mathcal L_{\text{tr}}(w) +\frac{R^2}{h^2} \langle \delta(x-x_0), v\rangle
+$$
+where the state is $y=(v, w)$, $v\in H^2_0(B_R)$ is Airy stress potential, $w\in H^2_0(B_R)$ is the transverse displacement, and $p_0$ is set so that the coefficient of $\mathcal L_{\text{tr}}(w)$ is one.
 
 ## Loading Conditions
 
