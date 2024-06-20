@@ -6,7 +6,7 @@ import sys
 import petsc4py
 
 petsc4py.init(sys.argv)
-
+import logging
 from dolfinx.cpp.log import LogLevel, log
 from dolfinx.fem import form
 # from damage.utils import ColorPrint
@@ -20,6 +20,11 @@ from dolfinx.fem.petsc import (
 
 comm = MPI.COMM_WORLD
 
+
+def monitor(snes, it, norm):
+    logging.info(f"Iteration {it}, residual {norm}")
+    print(f"Iteration {it}, residual {norm}")
+    return PETSc.SNES.ConvergedReason.ITERATING
 
 class SNESSolver:
     """
@@ -61,7 +66,7 @@ class SNESSolver:
         petsc_options={},
         form_compiler_parameters={},
         jit_parameters={},
-        monitor=None,
+        monitor=monitor,
         prefix=None,
         b0=PETSc.Vec | None
     ):
@@ -247,26 +252,27 @@ class SNESSolver:
         
         log(LogLevel.INFO, f"Solving {self.prefix}")
 
-        try:
-            self.solver.solve(None, self.u.vector)
-            print(
-               f"{self.prefix} SNES solver converged in",
-               self.solver.getIterationNumber(),
-               "iterations",
-               "with converged reason",
-               self.solver.getConvergedReason(),
-            )
-            self.u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
-                                      mode=PETSc.ScatterMode.FORWARD)
-            return (self.solver.getIterationNumber(),
-                    self.solver.getConvergedReason())
+        with dolfinx.common.Timer(f"~First Order: min-max equilibrium") as timer:
+            try:
+                self.solver.solve(None, self.u.vector)
+                print(
+                f"{self.prefix} SNES solver converged in",
+                self.solver.getIterationNumber(),
+                "iterations",
+                "with converged reason",
+                self.solver.getConvergedReason(),
+                )
+                self.u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
+                                        mode=PETSc.ScatterMode.FORWARD)
+                return (self.solver.getIterationNumber(),
+                        self.solver.getConvergedReason())
 
-        except Warning:
-            log(
-                LogLevel.WARNING,
-                f"WARNING: {self.prefix} solver failed to converge, what's next?",
-            )
-            raise RuntimeError(f"{self.prefix} solvers did not converge")
+            except Warning:
+                log(
+                    LogLevel.WARNING,
+                    f"WARNING: {self.prefix} solver failed to converge, what's next?",
+                )
+                raise RuntimeError(f"{self.prefix} solvers did not converge")
 
 
 from ufl import TestFunction, TrialFunction, derivative, dx, grad, inner
