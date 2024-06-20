@@ -113,14 +113,10 @@ def run_experiment(mesh: None, parameters: dict, series: str):
     # Loading
     # Disclinations
     if mesh.comm.rank == 0:
-        # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
-        points = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
-                np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
-        signs = [-1, 1]
+        points = np.array([[0.0, 0.0, 0]], dtype=mesh.geometry.x.dtype)
+        signs = [1]
     else:
-        # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
-        points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
-                np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
+        points = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
         
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 
@@ -149,7 +145,8 @@ def run_experiment(mesh: None, parameters: dict, series: str):
     )
     bcs = list({AIRY: bcs_v, TRANSVERSE: bcs_w}.values())
     W_transv_coeff = (radius / thickness)**4 / E 
-    W_ext = f * w * dx
+    W_ext = dolfinx.fem.Constant(mesh, 0.) * f * w * dx
+    print(b_scale)
 
     model = FVKAdimensional(mesh, nu = nu)
     energy = model.energy(state)[0]
@@ -159,7 +156,7 @@ def run_experiment(mesh: None, parameters: dict, series: str):
     # Define the functional
     L = energy - W_ext + penalisation
     F = ufl.derivative(L, q, ufl.TestFunction(Q))
-
+    
     solver = SNESSolver(
         F_form=F,
         u=q,
