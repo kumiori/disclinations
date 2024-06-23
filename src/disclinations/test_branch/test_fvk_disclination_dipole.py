@@ -9,7 +9,7 @@ import math
 import petsc4py
 from petsc4py import PETSc
 import ufl
-from ufl import (CellDiameter, FacetNormal, dx,)
+from ufl import (CellDiameter, FacetNormal, dx)
 import yaml
 from mpi4py import MPI
 

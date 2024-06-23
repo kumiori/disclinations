@@ -1,14 +1,17 @@
 import numpy as np
 import os
 from pathlib import Path
+import pdb
 
 import ufl
-from ufl import dx
+from ufl import dx, grad
 import basix
 import dolfinx
+from dolfinx import plot
 from dolfinx.fem import Constant, dirichletbc
 from petsc4py import PETSc
 import matplotlib.pyplot as plt
+import yaml
 
 from disclinations.models import NonlinearPlateFVK
 from disclinations.solvers import SNESSolver
@@ -42,27 +45,28 @@ class Fvk_plate():
     bcs_list               = [None, None]
     state_function         = None
     state_dic              = None
-    airy_pp                = None
-    tranverse_disp_pp      = None
+    airy_pp                = None   # CFe: Airy function for post processing
+    tranverse_disp_pp      = None   # CFe: Transverse displacement for post processing
     inplane_displacement   = [None, None]
     model                  = None
     penalisation           = None
-    ext_work               = None
+    ext_work               = None   # CFe: External work
     cauchy_stress          = [None, None, None, None]
     output_directory       = ""
-    fe                     = None # CFe: finite element
-    fs                     = None # CFe: funciton space
+    fe                     = None   # CFe: finite element
+    fs                     = None   # CFe: funciton space
     load_set_bool          = False
     disclinations_set_bool = False
     disclinations_list     = []
+    parameters_yaml        = None
+    J = ufl.as_matrix([[0, -1], [1, 0]])
 
-    def __init__(self, mesh, material_properties):
+    def __init__(self, mesh, model_properties):
         self.mesh = mesh
-        self.set_finite_element()
+        self.set_finite_element(polinomia_order = model_properties["order"])
         self.set_function_space()
         self.set_state()
-        #material_properties = parameters["model"]
-        self.set_model(material_properties)
+        self.set_model(model_properties)
         self.load = Constant(self.mesh, np.array(0.0, dtype=PETSc.ScalarType))
 
     def get_out_dir(self): return self.output_directory
@@ -83,14 +87,14 @@ class Fvk_plate():
     def get_external_work_value(self)      : return dolfinx.fem.assemble_scalar(dolfinx.fem.form(self.ext_work))
     def get_penalization_energy_value(self): return dolfinx.fem.assemble_scalar(dolfinx.fem.form(self.penalisation))
 
+    def get_cauchy_stress(self): return self.cauchy_stress
+    def compute_cauchy_stress(self): self.cauchy_stress = self.J.T * grad(grad(self.airy_pp)) * self.J
 
 
     def set_out_dir(self, outdir = "output", subfolder = "fvk_plate"):
         self.output_directory = os.path.join(outdir, subfolder)
         Path(self.output_directory).mkdir(parents=True, exist_ok=True)
 
-
-    #polinomia_order = parameters["model"]["order"]
     def set_finite_element(self, element = "P", polinomia_order = 3):
         self.fe = basix.ufl.element(element, str(self.mesh.ufl_cell()), polinomia_order)
 
@@ -103,8 +107,8 @@ class Fvk_plate():
         self.airy, self.tranverse_disp = ufl.split(self.state_function)
         self.state_dic = {"v": self.airy, "w": self.tranverse_disp}
 
-    def set_model(self, material_properties):
-        self.model = NonlinearPlateFVK(self.mesh, material_properties)
+    def set_model(self, model_properties):
+        self.model = NonlinearPlateFVK(self.mesh, model_properties)
 
     def set_dirichlet_bc(self, value, index):
         self.mesh.topology.create_connectivity(self.mesh.topology.dim - 1, self.mesh.topology.dim)
@@ -189,21 +193,39 @@ class Fvk_plate():
         self.airy_pp, self.tranverse_disp_pp = self.state_function.split()
         self.airy_pp.name = "Airy"
         self.tranverse_disp_pp.name = "Transverse Deflection"
+        self.compute_cauchy_stress()
 
-
-    def plot_profile(self, function, radius, title, compare_function = None):
+    def _plot_profile(self, function, radius, title, compare_function = None):
         tol = 1e-3
         xs = np.linspace(-radius + tol, radius - tol, 202)
         points = np.zeros((3, 202))
         points[0] = xs
-        #fig = plt.plot(figsize=(18, 6))
         _plt, data = plot_profile(function, points, None, None, lineproperties={ "c": "k", "label": f"${title}$"})
         _plt.savefig(self.output_directory+f"/{title}_fvk-profile.png")
 
     def plot_profiles(self, radius):
-        v, w = self.state_function.split()
-        self.plot_profile(v, radius, "Airy")
-        self.plot_profile(w, radius, "Transverse displacement")
+        self._plot_profile(self.airy_pp, radius, "Airy")
+        self._plot_profile(self.tranverse_disp_pp, radius, "Transverse displacement")
+
+    def plot_3D_solutions(self):
+        import pyvista
+        cells, types, x = plot.vtk_mesh(self.fs.sub(AIRY).collapse()[0])
+        grid = pyvista.UnstructuredGrid(cells, types, x)
+        grid.point_data["Airy"] = self.airy_pp.x.array.real[0:13954]
+        grid.set_active_scalars("Airy")
+        plotter = pyvista.Plotter()
+        title = "Airy Stress Function"  # CFe: Added
+        plotter.add_title(title)  # CFe: Added
+        plotter.add_mesh(grid, show_edges=True)
+        warped = grid.warp_by_scalar()
+        plotter.add_mesh(warped)
+
+        if pyvista.OFF_SCREEN:
+            pyvista.start_xvfb(wait=0.1)
+            filename = "Von-Karman Plate - Airy.png"
+            plotter.screenshot(filename)
+        else:
+            plotter.show()
 
 
 
