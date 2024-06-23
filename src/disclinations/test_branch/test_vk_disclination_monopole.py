@@ -37,20 +37,13 @@ logging.basicConfig(level=logging.INFO)
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
 
-comm       = MPI.COMM_WORLD
-AIRY       = 0
-TRANSVERSE = 1
-
-# def monitor(snes, it, norm):
-#     logging.info(f"Iteration {it}, residual {norm}")
-#     print(f"Iteration {it}, residual {norm}")
-#     return PETSc.SNES.ConvergedReason.ITERATING
-
-#import matplotlib.tri as tri
+comm         = MPI.COMM_WORLD
+AIRY         = 0
+TRANSVERSE   = 1
+TEST_PASSED  = False
+ENENRGY_PERC_ERR_THRESHOLD = 1.0
 
 with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
-
-#parameters["geometry"]["geom_type"] = "circle"
 
 model_rank = 0
 tdim = 2
@@ -62,7 +55,7 @@ gmsh_model, tdim = mesh_circle_gmshapi(
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
 outdir = "output"
-dirTest = os.path.join(outdir, "Test - Monopole of disclination, no pressure")
+dirTest = os.path.join(outdir, "Test - Disclination monopole")
 
 if comm.rank == 0: Path(dirTest).mkdir(parents=True, exist_ok=True)
 
@@ -122,6 +115,11 @@ plate.plot_profiles(parameters["geometry"]["R"])
 w = plate.get_tranverse_disp()
 v = plate.get_airy()
 
+energy_absolute_error = exact_energy_monopole - plate.get_membrane_energy_value()
+energy_percent_error  = 100*energy_absolute_error/exact_energy_monopole
+
+if np.abs(energy_percent_error) < ENENRGY_PERC_ERR_THRESHOLD: TEST_PASSED = True
+
 print(" ")
 print("***************** TEST RESULTS *****************")
 print(" ")
@@ -132,10 +130,15 @@ print("Plate's penalization energy: ", plate.get_penalization_energy_value())
 print(" ")
 print("Exact monopole energy: ", exact_energy_monopole)
 print(" ")
-print("Absolute Error: ", exact_energy_monopole - plate.get_membrane_energy_value())
-print("Percent Error: ", 100*(plate.get_membrane_energy_value()-exact_energy_monopole)/exact_energy_monopole)
+print("Absolute Error: ", energy_absolute_error)
+print("Percent Error: ", energy_percent_error, " %")
+print(" ")
+if TEST_PASSED: print("Test Passed")
+else: print("Test Failed")
+print(" ")
+print("***********************************************")
 
-# PLOTS ------------------------------
+# PLOTS
 V_v, dofs_v = fes.sub(AIRY).collapse()
 V_w, dofs_w = fes.sub(TRANSVERSE).collapse()
 import matplotlib.pyplot as plt
@@ -159,7 +162,6 @@ scalar_plot = plot_scalar(v_exact, plotter, subplot=(1, 0), V_sub=V_v, dofs=dofs
 scalar_plot = plot_scalar(w_exact, plotter, subplot=(1, 1), V_sub=V_w, dofs=dofs_w)
 
 scalar_plot.screenshot(f"{dirTest}/test_fvk.png")
-print("plotted scalar")
 
 tol = 1e-3
 xs = np.linspace(-parameters["geometry"]["R"] + tol, parameters["geometry"]["R"] - tol, 101)

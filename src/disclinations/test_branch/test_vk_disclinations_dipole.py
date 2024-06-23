@@ -40,9 +40,12 @@ logging.basicConfig(level=logging.INFO)
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
 
-comm       = MPI.COMM_WORLD
-AIRY       = 0
-TRANSVERSE = 1
+comm         = MPI.COMM_WORLD
+AIRY         = 0
+TRANSVERSE   = 1
+TEST_INVALID = False
+TEST_PASSED  = False
+ENENRGY_PERC_ERR_THRESHOLD = 1.0
 
 with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
 
@@ -56,7 +59,7 @@ mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
 #mesh = dolfinx.mesh.refine(mesh)
 outdir = "output"
-dirTest = os.path.join(outdir, "Test - Dipole of disclination, no pressure")
+dirTest = os.path.join(outdir, "Test - Disclination dipole")
 
 if comm.rank == 0: Path(dirTest).mkdir(parents=True, exist_ok=True)
 
@@ -65,6 +68,19 @@ nu = parameters["model"]["nu"]
 h = parameters["model"]["thickness"]
 E = parameters["model"]["E"]
 D = (E*h**3)/(12*(1-nu**2))
+
+if parameters["geometry"]["geom_type"] != "circle":
+    TEST_INVALID = True
+    REASON       = "Domain is not a circle. Please check parameters.yml file / geometry / geom_type"
+
+if parameters["geometry"]["geom_type"] == "circle" and parameters["geometry"]["R"] != 1.:
+    TEST_INVALID = True
+    REASON       = "Radius is not 1. Please check parameters.yml file / geometry / R"
+
+if TEST_INVALID:
+    print("Test is invalid")
+    print("Reason: ", REASON)
+    exit(1)
 
 print(" ")
 print("***************** TEST INFO *****************")
@@ -121,7 +137,11 @@ v_diff.x.array[:] = np.abs( v.x.array - v_exact.x.array )
 v_exact_max = v_exact.vector.max()[1] if v_exact.vector.max()[1] > -v_exact.vector.min()[1] else -v_exact.vector.min()[1]
 if v_exact_max != 0: error = 100.0*v_diff.vector.max()[1]/v_exact_max
 
-pdb.set_trace()
+energy_absolute_error = exact_energy_dipole - plate.get_membrane_energy_value()
+energy_percent_error  = 100*energy_absolute_error/exact_energy_dipole
+
+if np.abs(energy_percent_error) < ENENRGY_PERC_ERR_THRESHOLD: TEST_PASSED = True
+
 print(" ")
 print("***************** TEST RESULTS *****************")
 print(" ")
@@ -132,10 +152,15 @@ print("Plate's penalization energy: ", plate.get_penalization_energy_value())
 print(" ")
 print("Exact dipole energy: ", exact_energy_dipole)
 print(" ")
-print("Absolute Error: ", exact_energy_dipole - plate.get_membrane_energy_value())
-print("Percent Error: ", 100*(plate.get_membrane_energy_value()-exact_energy_dipole)/exact_energy_dipole)
+print("Absolute Error: ", )
+print("Percent Error: ", energy_percent_error, " %")
+print(" ")
+if TEST_PASSED: print("Test Passed")
+else: print("Test Failed")
+print(" ")
+print("***********************************************")
 
-# PLOTS ------------------------------
+# PLOTS
 V_v, dofs_v = fes.sub(AIRY).collapse()
 V_w, dofs_w = fes.sub(TRANSVERSE).collapse()
 
@@ -156,7 +181,6 @@ scalar_plot = plot_scalar(v_exact, plotter, subplot=(1, 0), V_sub=V_v, dofs=dofs
 scalar_plot = plot_scalar(w_exact, plotter, subplot=(1, 1), V_sub=V_w, dofs=dofs_w)
 
 scalar_plot.screenshot(f"{dirTest}/test_fvk.png")
-print("plotted scalar")
 
 tol = 1e-3
 xs = np.linspace(-parameters["geometry"]["R"] + tol, parameters["geometry"]["R"] - tol, 202)
