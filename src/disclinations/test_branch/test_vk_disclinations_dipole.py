@@ -24,6 +24,7 @@ from dolfinx.fem.petsc import (assemble_matrix, create_vector, create_matrix, as
 import basix
 
 from disclinations.models import NonlinearPlateFVK
+from disclinations.models.Fvk_plate import Fvk_plate
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
@@ -33,7 +34,6 @@ import matplotlib.pyplot as plt
 import pyvista
 from pyvista.plotting.utilities import xvfb
 
-from Fvk_plate import Fvk_plate
 
 logging.basicConfig(level=logging.INFO)
 

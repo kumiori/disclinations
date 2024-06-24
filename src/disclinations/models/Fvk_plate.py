@@ -31,9 +31,6 @@ DEFAULT_SOLVER_PARAMETERS = {
     "snes_linesearch_type": "basic",  # Type of line search
 }
 
-# class mesh():
-#     def __init(mesh)__:
-
 class Fvk_plate():
     bc                     = None
     load                   = None
@@ -58,7 +55,6 @@ class Fvk_plate():
     load_set_bool          = False
     disclinations_set_bool = False
     disclinations_list     = []
-    parameters_yaml        = None
     J = ufl.as_matrix([[0, -1], [1, 0]])
 
     def __init__(self, mesh, model_properties):
