@@ -122,6 +122,7 @@ v, w = ufl.split(q)
 
 q_exact = dolfinx.fem.Function(Q)
 v_exact, w_exact = q_exact.split()
+f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 
 state = {"v": v, "w": w}
 
@@ -137,12 +138,6 @@ energy = model.energy(state)[0]
 # Cf. thesis ref: 
 # f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 
-# def transverse_load(x):
-#     return (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-#     # return (11+ x[0]**2 + x[1]**2)
-
-# f.interpolate(transverse_load)
-# f.interpolate(lambda x: 0 * x[0])
 
 nu = parameters["model"]["nu"]
 # _h = parameters["model"]["thickness"]
@@ -172,13 +167,19 @@ def _w_exact(x):
     # return q/(64*12*(1-nu**2))*(1 - (x[0]**2 + x[1]**2))**2
     return w_scale * (1 - x[0]**2 - x[1]**2)**2
 
+def transverse_load(x):
+    _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+    return f_scale * _p
+
+f.interpolate(transverse_load)
+
 v_exact.interpolate(_v_exact)
 w_exact.interpolate(_w_exact)
 
 state_exact = {"v": v_exact, "w": w_exact}
 exact_energy = model.energy(state_exact)[0]
 
-W_ext = dolfinx.fem.Constant(mesh, 1.) * w * dx
+W_ext = f * w * dx
 # W_ext = w * dx
 
 penalisation = model.penalisation(state)
