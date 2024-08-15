@@ -144,25 +144,36 @@ energy = model.energy(state)[0]
 # f.interpolate(transverse_load)
 # f.interpolate(lambda x: 0 * x[0])
 
-_nu = parameters["model"]["nu"]
-_h = parameters["model"]["thickness"]
+nu = parameters["model"]["nu"]
+# _h = parameters["model"]["thickness"]
+thickness = parameters["model"]["thickness"]
 _E = parameters["model"]["E"]
+_D = _E * thickness**3 / (12 * (1 - nu**2))
 
-w_scale = _h * (6*(1-_nu**2)) ** 1./2.
-v_scale = _E * _h**3 / (12 * (1 - _nu**2))
-p_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
+# w_scale = _h * (6*(1-_nu**2)) ** 1./2.
+w_scale = np.sqrt(2*_D/(_E*thickness))
+v_scale = _D
+# p_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
+f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
 
 def _v_initial_guess(x):
     return np.cos(np.pi * np.sqrt(x[0]**2 + x[1]**2))
 
 def _v_exact(x):
-    return 0
+    v_scale = _D
+    a1=-1/12
+    a2=-1/18
+    a3=-1/24
+    _v = a1 * (1 - x[0]**2 - x[1]**2)**2 + a2 * (1 - x[0]**2 - x[1]**2)**3 + a3 * (1 - x[0]**2 - x[1]**2)**4
+    _v = _v * v_scale
+    return _v
 
-def _w_exact(x, nu, q = 1):
-    return q/(64*12*(1-nu**2))*(1 - (x[0]**2 + x[1]**2))**2
+def _w_exact(x):
+    # return q/(64*12*(1-nu**2))*(1 - (x[0]**2 + x[1]**2))**2
+    return w_scale * (1 - x[0]**2 - x[1]**2)**2
 
-v_exact.interpolate(lambda x: 0 * x[0])
-w_exact.interpolate(lambda x: _w_exact(x, parameters["model"]["nu"], q=1))
+v_exact.interpolate(_v_exact)
+w_exact.interpolate(_w_exact)
 
 state_exact = {"v": v_exact, "w": w_exact}
 exact_energy = model.energy(state_exact)[0]
@@ -271,7 +282,7 @@ scalar_plot.screenshot(f"{prefix}/test_fvk.png")
 print("plotted scalar")
 
 tol = 1e-3
-xs = np.linspace(0 + tol, parameters["geometry"]["R"] - tol, 101)
+xs = np.linspace(0 + tol, parameters["geometry"]["radius"] - tol, 101)
 points = np.zeros((3, 101))
 points[0] = xs
 

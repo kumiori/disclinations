@@ -1,7 +1,7 @@
 #  === Material === #
 model:
     E: 1.
-    h: 1.
+    thickness: 1.
     D: 1.
     sigma_D0: 1.
     nu: 0.15

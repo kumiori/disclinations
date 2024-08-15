@@ -1,20 +1,9 @@
 import ufl
-from ufl import (
-    avg,
-    ds,
-    dS,
-    outer,
-    div,
-    grad,
-    inner,
-    dot,
-    jump,
-)
-from basix.ufl import element
-from dolfinx.fem import functionspace, Expression, Function
+from ufl import (avg, ds, dS, outer, div, grad, inner, dot, jump)
+import basix 
+import dolfinx
 import yaml
 import os
-from dolfinx.fem import Constant
 
 dir_path = os.path.dirname(os.path.realpath(__file__))
 with open(f"{dir_path}/default_parameters.yml") as f:
@@ -28,12 +17,12 @@ class Biharmonic:
         self.alpha_penalty = model_parameters.get("alpha_penalty",
                                                        default_model_parameters["alpha_penalty"])
         self.mesh = mesh
-
+    
     def energy(self, state):
         u = state["u"]
         dx = ufl.Measure("dx")
 
-        return (1/2 * (inner(div(grad(u)), div(grad(u))))) * dx 
+        return (1/2 * (inner(div(grad(u)), div(grad(u))))) * dx
     
     def penalisation(self, state):
         u = state["u"]
@@ -54,17 +43,6 @@ class ToyPlateFVK:
     def __init__(self, mesh, model_parameters = {}) -> None:
         self.alpha_penalty = model_parameters.get("alpha_penalty",
                                                        default_model_parameters["alpha_penalty"])
-
-    def gaussian_curvature(self, w, order = 1):
-        mesh = self.mesh
-        DG_e = element("DG", str(mesh.ufl_cell()), order)
-        DG = functionspace(mesh, DG_e)
-        kappa = self.bracket(w, w)
-        kappa_expr = Expression(kappa, DG.element.interpolation_points())
-        Kappa = Function(DG)
-        Kappa.interpolate(kappa_expr)
-        
-        return Kappa
     
     def σ(self, v):
         # J = ufl.as_matrix([[0, -1], [1, 0]])
@@ -90,22 +68,20 @@ class ToyPlateFVK:
         bc1 = lambda u: 1/2 * inner(grad(u), grad(grad(u)) * n) * ds
         bc2 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
         
-        return - (dg1(w) + dg2(w)) \
+        return - dg1(w) + dg2(w) \
                 - dg1(v) + dg2(v) \
                 - bc1(w) - bc2(w) \
-                - bc1(v) - bc2(v) 
+                - bc1(v) + bc2(v)
 
 class NonlinearPlateFVK(ToyPlateFVK):
     def __init__(self, mesh, model_parameters = {}) -> None:
-        self.alpha_penalty = model_parameters.get("alpha_penalty",
-                                                       default_model_parameters["alpha_penalty"])
-        self.nu = model_parameters.get("nu",
-                                       default_model_parameters["nu"])
-        self.E = model_parameters.get("E",
-                                      default_model_parameters["E"])
-        self.h = model_parameters.get("h",
-                                        default_model_parameters["h"])
-        self.D = self.E * self.h**3 / (12*(1-self.nu**2))
+        self.alpha_penalty = model_parameters.get(
+            "alpha_penalty",
+            default_model_parameters["alpha_penalty"])
+        self.nu = model_parameters.get("nu", default_model_parameters["nu"])
+        self.E = model_parameters.get("E", default_model_parameters["E"])
+        self.t = model_parameters.get("thickness", default_model_parameters["thickness"])
+        self.D = self.E * self.t**3 / (12*(1-self.nu**2))
         
         self.mesh = mesh
     
@@ -116,16 +92,16 @@ class NonlinearPlateFVK(ToyPlateFVK):
 
         D = self.D
         nu = self.nu
-        Eh = self.E
+        Eh = self.E*self.t
         k_g = -D*(1-nu)
 
         laplacian = lambda f : div(grad(f))
         hessian = lambda f : grad(grad(f))
 
-        membrane = (-1/(2*Eh) * inner(hessian(v), hessian(v)) + nu/(2*Eh) * self.bracket(v, v)) * dx 
-        bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx 
+        membrane = (1/(2*Eh) * inner(hessian(v), hessian(v)) + nu/(2*Eh) * self.bracket(v, v)) * dx
+        bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx
         coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
-        energy = bending + membrane + coupling
+        energy = bending - membrane + coupling
 
         return energy, bending, membrane, coupling
 
@@ -133,7 +109,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
         return grad(grad(f)) + self.nu*self.σ(f)
     
     def P(self, f):
-        c_nu = 12*(1-self.nu**2)
+        c_nu = 1. #12*(1-self.nu**2)
         return (1.0/c_nu)*grad(grad(f)) - self.nu*self.σ(f)
 
     def W(self, f):
@@ -160,41 +136,25 @@ class NonlinearPlateFVK(ToyPlateFVK):
         
         dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
         dg2 = lambda u: + 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
-        dgc   = lambda f, g: avg(inner(W(f), outer(n, n)))*jump(grad(g), n)*dS
+        dgc = lambda f, g: avg(inner(W(f), outer(n, n)))*jump(grad(g), n)*dS
 
-        bc1 = lambda u: 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
-        bc2 = lambda u: 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
+        bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
+        bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
         bc3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
         
         return   (dg1(w) + dg2(w)) \
-                + dg1(v) + dg2(v) \
-                - bc1(w) - bc2(v) \
-                + bc3(w) + bc3(v) \
-                + dgc(w, v) 
-                
-# FVKAdimensional class
-class FVKAdimensional(NonlinearPlateFVK):
-    def __init__(self, mesh, nu = 0, alpha_penalty = 100) -> None:
-        self.alpha_penalty = alpha_penalty
-        self.nu = nu
-        self.mesh = mesh
-        
-    def energy(self, state):
-        v = state["v"]
-        w = state["w"]
-        dx = ufl.Measure("dx")
+                - dg1(v) - dg2(v) \
+                + bc1(w) - bc2(v) \
+                + bc3(w) - bc3(v) + dgc(w, v)
 
-        nu = self.nu
-        
-        k_g = -(1-nu)
-        k_g = Constant(self.mesh, -(1-self.nu))
-        
-        laplacian = lambda f : div(grad(f))
-        hessian = lambda f : grad(grad(f))
+    def gaussian_curvature(self, w, order = 1):
+        mesh = self.mesh
+        DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), order)
+        DG = dolfinx.fem.functionspace(mesh, DG_e)
+        kappa = self.bracket(w, w)
+        kappa_expr = dolfinx.fem.Expression(kappa, DG.element.interpolation_points())
+        Kappa = dolfinx.fem.Function(DG)
+        Kappa.interpolate(kappa_expr)
 
-        membrane = (-1/(2) * inner(hessian(v), hessian(v)) + nu/2 * self.bracket(v, v)) * dx 
-        bending = (1/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx 
-        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
-        energy = bending + membrane + coupling
-
-        return energy, bending, membrane, coupling
+        return Kappa
+     
