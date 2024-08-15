@@ -15,6 +15,7 @@ import numpy as np
 import petsc4py
 import ufl
 import yaml
+
 from disclinations.models import FVKAdimensional
 from disclinations.utils.la import compute_disclination_loads
 from disclinations.meshes.primitives import mesh_circle_gmshapi
@@ -91,8 +92,6 @@ mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 outdir = "output"
 prefix = os.path.join(outdir, "plate_fvk_adim")
 
-if comm.rank == 0:
-    Path(prefix).mkdir(parents=True, exist_ok=True)
 
 if comm.rank == 0:
     Path(prefix).mkdir(parents=True, exist_ok=True)

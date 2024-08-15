@@ -1,7 +1,9 @@
+import hashlib
 import json
 import logging
 import sys
 from typing import List
+import resource
 
 import mpi4py
 import numpy as np
@@ -90,7 +92,7 @@ def setup_logger_mpi(root_priority: int = logging.INFO):
     logger.propagate = False
     # StreamHandler to log messages to the console
     console_handler = logging.StreamHandler()
-    file_handler = logging.FileHandler('evolution.log')
+    file_handler = logging.FileHandler('disclinations.log')
 
     # formatter = logging.Formatter('%(asctime)s - %(name)s - [%(levelname)s] - %(message)s')
     formatter = MPIFormatter('%(asctime)s  [Rank %(rank)d, Size %(size)d]  - %(name)s - [%(levelname)s] - %(message)s')
@@ -194,6 +196,7 @@ def table_timing_data(tasks=None):
     timing_data = []
     if tasks is None:
         tasks = [
+            "~Mesh Generation",
             "~First Order: min-max equilibrium",
             "~Postprocessing and Vis",
             "~Computation Experiment"
@@ -205,6 +208,16 @@ def table_timing_data(tasks=None):
     df = pd.DataFrame(timing_data, columns=["reps", "wall tot", "usr", "sys"], index=tasks)
 
     return df
+
+def save_parameters(parameters, prefix):
+    signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
+    if MPI.COMM_WORLD.rank == 0:
+        with open(f"{prefix}/parameters.yaml", "w") as file:
+            yaml.dump(parameters, file)
+        with open(f"{prefix}/signature.md5", "w") as f:
+            f.write(signature)
+
+    return signature
 
 from dolfinx.io import XDMFFile
 
@@ -248,7 +261,7 @@ class ResultsStorage:
 
 # Visualization functions/classes
 
-class Visualization:
+class Visualisation:
     """
     Class for visualizing simulation results.
     """
@@ -276,9 +289,10 @@ class Visualization:
         """
 
         if MPI.COMM_WORLD.rank == 0:
-            a_file = open(f"{self.prefix}/{name}.json", "w")
-            json.dump(data.to_json(), a_file)
-            a_file.close()
+            data.to_json(f"{self.prefix}/{name}.json")
+            # a_file = open(f"{self.prefix}/{name}.json", "w")
+            # json.dump(data.to_json(), a_file)
+            # a_file.close()
 
 history_data = {
     "load": [],
@@ -349,3 +363,8 @@ def update_parameters(d, key, value):
                 return True
     
     return False
+
+def memory_usage():
+    """Get the current memory usage of the Python process."""
+    mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
+    return mem / 1024  # Convert to MB

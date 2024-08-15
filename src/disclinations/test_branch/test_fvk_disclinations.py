@@ -153,8 +153,6 @@ penalisation = model.penalisation(state)
 L = energy - W_ext + penalisation
 
 # Point sources
-
-# Point sources
 if mesh.comm.rank == 0:
     # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
     points = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
@@ -240,7 +238,7 @@ op=MPI.SUM,
 distance = np.linalg.norm(points[0] - points[1])
 
 exact_energy_dipole = parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
-    * parameters["geometry"]["R"]**2 / (8 * np.pi) *  distance**2 * \
+    * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
         (np.log(4+distance**2) - np.log(4 * distance))
 
 print(yaml.dump(parameters["model"], default_flow_style=False))

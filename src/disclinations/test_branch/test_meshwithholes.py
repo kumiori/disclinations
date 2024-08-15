@@ -27,7 +27,6 @@ class SimpleMeshWithHoles:
             hole = gmsh.model.occ.addCircle(0, 0, 0, .1, tag=2)
             gmsh.model.occ.synchronize()
 
-
             # Create curve loops from the circles
             main_loop = gmsh.model.occ.addCurveLoop([domain])
             hole_loop = gmsh.model.occ.addCurveLoop([hole])

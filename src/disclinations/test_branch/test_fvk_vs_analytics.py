@@ -268,6 +268,7 @@ print(f"Relative error: {np.abs(max_v - max_v_exact) / max_v_exact}")
 print(f"Coeff: {max_v/max_v_exact}")
 
 
+
 for label, form in zip(labels, [F, F_v, F_w, Ec_w, Em_v]):
     _F = create_vector(dolfinx.fem.form(form))
     assemble_vector(_F, dolfinx.fem.form(form))
@@ -288,6 +289,28 @@ from pyvista.plotting.utilities import xvfb
 
 xvfb.start_xvfb(wait=0.05)
 pyvista.OFF_SCREEN = True
+
+# Gaussian curvature
+
+DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), parameters["model"]["order"]-2)
+
+DG = dolfinx.fem.functionspace(mesh, DG_e)
+kappa = model.bracket(w, w)
+kappa_expr = dolfinx.fem.Expression(kappa, DG.element.interpolation_points())
+Kappa = dolfinx.fem.Function(DG)
+Kappa.interpolate(kappa_expr)
+
+plotter = pyvista.Plotter(
+        title="Curvature",
+        window_size=[600, 600],
+        shape=(1, 1),
+    )
+scalar_plot = plot_scalar(Kappa, plotter, subplot=(0, 0))
+scalar_plot.screenshot(f"{prefix}/curvature_fvk.png")
+print("plotted curvature")
+
+# --------------------------
+
 
 plotter = pyvista.Plotter(
         title="Displacement",

@@ -38,12 +38,3 @@ solvers:
             ksp_type: preonly
             pc_type: lu
 
-stability:
-    order: 3
-    maxmodes: 10
-    checkstability: "True"
-    continuation: "False"
-    cont_rtol: 1.0e-10
-    inactiveset_gatol: 1.e-6
-    inactiveset_pwtol: 1.e-6
-    is_elastic_tol: 1.e-6

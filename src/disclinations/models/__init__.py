@@ -10,7 +10,8 @@ from ufl import (
     dot,
     jump,
 )
-
+from basix.ufl import element
+from dolfinx.fem import functionspace, Expression, Function
 import yaml
 import os
 from dolfinx.fem import Constant
@@ -27,7 +28,7 @@ class Biharmonic:
         self.alpha_penalty = model_parameters.get("alpha_penalty",
                                                        default_model_parameters["alpha_penalty"])
         self.mesh = mesh
-    
+
     def energy(self, state):
         u = state["u"]
         dx = ufl.Measure("dx")
@@ -53,6 +54,17 @@ class ToyPlateFVK:
     def __init__(self, mesh, model_parameters = {}) -> None:
         self.alpha_penalty = model_parameters.get("alpha_penalty",
                                                        default_model_parameters["alpha_penalty"])
+
+    def gaussian_curvature(self, w, order = 1):
+        mesh = self.mesh
+        DG_e = element("DG", str(mesh.ufl_cell()), order)
+        DG = functionspace(mesh, DG_e)
+        kappa = self.bracket(w, w)
+        kappa_expr = Expression(kappa, DG.element.interpolation_points())
+        Kappa = Function(DG)
+        Kappa.interpolate(kappa_expr)
+        
+        return Kappa
     
     def σ(self, v):
         # J = ufl.as_matrix([[0, -1], [1, 0]])
