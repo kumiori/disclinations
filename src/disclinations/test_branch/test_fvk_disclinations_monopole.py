@@ -87,7 +87,7 @@ gmsh_model, tdim = mesh_circle_gmshapi(
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
 outdir = "output"
-prefix = os.path.join(outdir, "plate_fvk_disclinations_dipole")
+prefix = os.path.join(outdir, "plate_fvk_disclinations_monopole")
 
 if comm.rank == 0:
     Path(prefix).mkdir(parents=True, exist_ok=True)
@@ -109,7 +109,6 @@ thickness = parameters["model"]["thickness"]
 _E = parameters["model"]["E"]
 _D = _E * thickness**3 / (12 * (1 - nu**2))
 
-# w_scale = _h * (6*(1-_nu**2)) ** 1./2.
 w_scale = np.sqrt(2*_D/(_E*thickness))
 v_scale = _D
 # p_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
@@ -152,25 +151,25 @@ state = {"v": v, "w": w}
 # Point sources
 if mesh.comm.rank == 0:
     # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
-    disclinations = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
-              np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
-    signs = [-1, 1]
+    disclinations = [np.array([[-0.0, 0.0, 0]], dtype=mesh.geometry.x.dtype)]
+    signs = [1]
 else:
     # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
     disclinations = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
               np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
 
-# compute distance between disclinations 
-distance = np.linalg.norm(disclinations[0] - disclinations[1])
 
 def _v_exact(x):
     rq = (x[0]**2 + x[1]**2)
-    _v = (1/(16*np.pi))*( ( x[1]**2 + (x[0]-distance/2)**2 )*( np.log(4.0) + np.log( x[1]**2 + (x[0]-distance/2)**2 ) - np.log( 4 - 4*x[0]*distance + rq*distance**2 ) ) - (1/4)*( 4*(x[1]**2) + ( 2*x[0]+distance)**2 ) * ( np.log(4) + np.log( x[1]**2 + (x[0]+distance/2)**2 ) - np.log( 4 + 4*x[0]*distance + rq*distance**2 ) ) )
-    return _v * (_E*thickness)
+    radius = parameters["geometry"]["radius"]
+    _v = _E*signs[0]/(16.0*np.pi)*(rq*np.log(rq/radius**2) - rq + radius**2)
+
+    # return _v * (_E*thickness)
+    return _v * v_scale
 
 def _w_exact(x):
-    _w = (1 - x[0]**2 - x[1]**2)**2
-    _w = 0.0*_w
+
+    _w = 0.0 * x[0]
     return _w
 
 v_exact.interpolate(_v_exact)
@@ -240,12 +239,9 @@ computed_energy_terms = {label: comm.allreduce(
 
 
 print(computed_energy_terms)
-# print(computed_penalty_terms)
-# print(computed_boundary_terms)
-
 
 # ------------------------------
-# check energy vs exact energy of dipole
+# check energy vs exact energy of monopole
 lagrangian_components = {
     "total": model.energy(state)[0],
     "bending": model.energy(state)[1],
@@ -261,19 +257,18 @@ op=MPI.SUM,
 ) for label, energy_term in lagrangian_components.items()}
 
 
-exact_energy_dipole = parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
-    * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
-        (np.log(4+distance**2) - np.log(4 * distance))
+exact_energy_monopole = parameters["model"]["E"] * parameters["geometry"]["radius"]**2 / (32 * np.pi)
+# check, there is no thickness in here, compare with dipole
 
 print(yaml.dump(parameters["model"], default_flow_style=False))
 
-error = np.abs(exact_energy_dipole - energy_terms['membrane'])
+error = np.abs(exact_energy_monopole - energy_terms['membrane'])
 
-print(f"Exact energy: {exact_energy_dipole}")
+print(f"Exact energy: {exact_energy_monopole}")
 print(f"Computed energy: {energy_terms['membrane']}")
 print(f"Abs error: {error}")
-print(f"Rel error: {error/exact_energy_dipole:.3%}")
-print(f"Error: {error/exact_energy_dipole:.1%}")
+print(f"Rel error: {error/exact_energy_monopole:.3%}")
+print(f"Error: {error/exact_energy_monopole:.1%}")
 
 
 # ------------------------------

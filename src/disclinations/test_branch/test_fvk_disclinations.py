@@ -87,7 +87,7 @@ gmsh_model, tdim = mesh_circle_gmshapi(
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
 outdir = "output"
-prefix = os.path.join(outdir, "plate_fvk_disclinations_dipole")
+prefix = os.path.join(outdir, "plate_fvk_disclinations")
 
 if comm.rank == 0:
     Path(prefix).mkdir(parents=True, exist_ok=True)
@@ -240,9 +240,6 @@ computed_energy_terms = {label: comm.allreduce(
 
 
 print(computed_energy_terms)
-# print(computed_penalty_terms)
-# print(computed_boundary_terms)
-
 
 # ------------------------------
 # check energy vs exact energy of dipole

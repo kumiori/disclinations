@@ -77,6 +77,7 @@ with open("parameters.yml") as f:
 mesh_size = parameters["geometry"]["mesh_size"]
 parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
+N = 5
 
 model_rank = 0
 tdim = 2
@@ -86,8 +87,9 @@ gmsh_model, tdim = mesh_circle_gmshapi(
 )
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
+
 outdir = "output"
-prefix = os.path.join(outdir, "plate_fvk_disclinations_dipole")
+prefix = os.path.join(outdir, f"plate_fvk_disclinations_{N}-pole")
 
 if comm.rank == 0:
     Path(prefix).mkdir(parents=True, exist_ok=True)
@@ -149,34 +151,28 @@ v_exact, w_exact = q_exact.split()
 state = {"v": v, "w": w}
 
 
+def random_points_in_disc(n, radius=1, boundary_distance = .1):
+    # Generate random angles and radii
+    angles = np.random.uniform(0, 2 * np.pi, n)
+    radii = np.random.uniform(0, 1-boundary_distance, n) * radius
+    print(f"radii {radii}")
+    # Convert polar coordinates to Cartesian coordinates
+    x = radii * np.cos(angles)
+    y = radii * np.sin(angles)
+    z = np.zeros(n)  # Assuming the disc is in the xy-plane
+    
+    # Stack into a single array
+    points = np.stack((x, y, z), axis=-1)
+    return points
+
 # Point sources
 if mesh.comm.rank == 0:
-    # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
-    disclinations = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
-              np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
-    signs = [-1, 1]
+    disclinations = random_points_in_disc(N, radius=1, boundary_distance=0.3)
+    signs = np.random.uniform(-1, 1, N)
 else:
     # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
     disclinations = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
               np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
-
-# compute distance between disclinations 
-distance = np.linalg.norm(disclinations[0] - disclinations[1])
-
-def _v_exact(x):
-    rq = (x[0]**2 + x[1]**2)
-    _v = (1/(16*np.pi))*( ( x[1]**2 + (x[0]-distance/2)**2 )*( np.log(4.0) + np.log( x[1]**2 + (x[0]-distance/2)**2 ) - np.log( 4 - 4*x[0]*distance + rq*distance**2 ) ) - (1/4)*( 4*(x[1]**2) + ( 2*x[0]+distance)**2 ) * ( np.log(4) + np.log( x[1]**2 + (x[0]+distance/2)**2 ) - np.log( 4 + 4*x[0]*distance + rq*distance**2 ) ) )
-    return _v * (_E*thickness)
-
-def _w_exact(x):
-    _w = (1 - x[0]**2 - x[1]**2)**2
-    _w = 0.0*_w
-    return _w
-
-v_exact.interpolate(_v_exact)
-w_exact.interpolate(_w_exact)
-
-
 
 # Define the variational problem
 model = NonlinearPlateFVK(mesh, parameters["model"])
@@ -226,23 +222,7 @@ computed_energy_terms = {label: comm.allreduce(
     op=MPI.SUM,
 ) for label, energy_term in energy_components.items()}
 
-# computed_penalty_terms = {label: comm.allreduce(
-#     dolfinx.fem.assemble_scalar(
-#         dolfinx.fem.form(penalty_term)),
-#     op=MPI.SUM,
-# ) for label, penalty_term in penalty_components.items()}
-
-# computed_boundary_terms = {label: comm.allreduce(
-#     dolfinx.fem.assemble_scalar(
-#         dolfinx.fem.form(boundary_term)),
-#     op=MPI.SUM,
-# ) for label, boundary_term in boundary_components.items()}
-
-
 print(computed_energy_terms)
-# print(computed_penalty_terms)
-# print(computed_boundary_terms)
-
 
 # ------------------------------
 # check energy vs exact energy of dipole
@@ -261,20 +241,9 @@ op=MPI.SUM,
 ) for label, energy_term in lagrangian_components.items()}
 
 
-exact_energy_dipole = parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
-    * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
-        (np.log(4+distance**2) - np.log(4 * distance))
-
 print(yaml.dump(parameters["model"], default_flow_style=False))
 
-error = np.abs(exact_energy_dipole - energy_terms['membrane'])
-
-print(f"Exact energy: {exact_energy_dipole}")
 print(f"Computed energy: {energy_terms['membrane']}")
-print(f"Abs error: {error}")
-print(f"Rel error: {error/exact_energy_dipole:.3%}")
-print(f"Error: {error/exact_energy_dipole:.1%}")
-
 
 # ------------------------------
 
@@ -299,14 +268,14 @@ w.name = "deflection"
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
 
-_pv_points = np.array([p[0] for p in disclinations])
-_pv_colours = np.array(-np.array(signs))
+# _pv_points = np.array([p[0] for p in disclinations])
+# _pv_colours = np.array(-np.array(signs))
 
 scalar_plot = plot_scalar(w, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w,
                             lineproperties={'clim': [min(w.vector[:]), max(w.vector[:])]})
 plotter.add_points(
-        _pv_points,
-        scalars = _pv_colours,
+        disclinations,
+        scalars = signs,
         style = 'points', 
         render_points_as_spheres=True, 
         point_size=15.0
@@ -315,8 +284,8 @@ plotter.add_points(
 scalar_plot = plot_scalar(v, plotter, subplot=(0, 1), V_sub=V_v, dofs=dofs_v,
                           lineproperties={'clim': [min(v.vector[:]), max(v.vector[:])]})
 plotter.add_points(
-        _pv_points,
-        scalars = _pv_colours,
+        disclinations,
+        scalars = signs,
         style = 'points', 
         render_points_as_spheres=True, 
         point_size=15.0
@@ -331,8 +300,8 @@ grid.set_active_scalars("v")
 warped = grid.warp_by_scalar("v", scale_factor=100)
 plotter.add_mesh(warped, show_edges=False)
 plotter.add_points(
-        _pv_points,
-        scalars = _pv_colours,
+        disclinations,
+        scalars = signs,
         style = 'points', 
         render_points_as_spheres=True, 
         point_size=15.0
@@ -361,19 +330,8 @@ _plt, data = plot_profile(
     fig=fig,
     subplotnumber=1
 )
-_plt, data = plot_profile(
-    w_exact,
-    points,
-    None,
-    subplot=(1, 2),
-    lineproperties={
-        "c": "r",
-        "label": f"$w_e(x)$",
-        "ls": "--"
-    },
-    fig=fig,
-    subplotnumber=1
-)
+
+
 _plt, data = plot_profile(
     v,
     points,
@@ -382,20 +340,6 @@ _plt, data = plot_profile(
     lineproperties={
         "c": "k",
         "label": f"$v(x)$"
-    },
-    fig=fig,
-    subplotnumber=2
-)
-
-_plt, data = plot_profile(
-    v_exact,
-    points,
-    None,
-    subplot=(1, 2),
-    lineproperties={
-        "c": "r",
-        "label": f"$v_e(x)$",
-        "ls": "--"
     },
     fig=fig,
     subplotnumber=2
