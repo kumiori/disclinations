@@ -141,7 +141,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
         bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
         bc3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
         
-        return   (dg1(w) + dg2(w)) \
-                - dg1(v) - dg2(v) \
-                + bc1(w) - bc2(v) \
-                + bc3(w) - bc3(v) + dgc(w, v)
+        return   (self.D*dg1(w) + self.D*dg2(w)) \
+                - (1/(self.E*self.t))*dg1(v) - (1/(self.E*self.t))*dg2(v) \
+                + self.D*bc1(w) - (1/(self.E*self.t))*bc2(v) \
+                + self.D*bc3(w) - (1/(self.E*self.t))*bc3(v) + dgc(w, v)
