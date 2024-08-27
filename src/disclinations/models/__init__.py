@@ -132,7 +132,8 @@ class NonlinearPlateFVK(ToyPlateFVK):
         P = lambda f : self.P(f)
         W = lambda f : self.W(f)
         
-        dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
+        #dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
+        dg1 = lambda u: - 1/2 * dot( jump(grad(u)), avg( dot(M(u), n) ) ) * dS
         dg2 = lambda u: + 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
         dgc = lambda f, g: avg(inner(W(f), outer(n, n)))*jump(grad(g), n)*dS
 
