@@ -96,7 +96,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
         laplacian = lambda f : div(grad(f))
         hessian = lambda f : grad(grad(f))
 
-        membrane = (1/(2*Eh) * inner(hessian(v), hessian(v)) + nu/(2*Eh) * self.bracket(v, v)) * dx
+        membrane = (1/(2*Eh) * inner(hessian(v), hessian(v)) - nu/(2*Eh) * self.bracket(v, v)) * dx
         bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx
         coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
         energy = bending - membrane + coupling
@@ -108,7 +108,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
     
     def P(self, f):
         c_nu = 1. #12*(1-self.nu**2)
-        return (1.0/c_nu)*grad(grad(f)) - self.nu*self.σ(f)
+        return (1.0/c_nu)*( grad(grad(f)) - self.nu*self.σ(f) )
 
     def W(self, f):
         J = ufl.as_matrix([[0, -1], [1, 0]])

@@ -23,6 +23,9 @@ from dolfinx.fem import Constant, dirichletbc
 from dolfinx.fem.petsc import (assemble_matrix, create_vector, create_matrix, assemble_vector)
 import basix
 
+from ufl import (avg, ds, dS, outer, div, grad, inner, dot, jump)
+from dolfinx.fem import FunctionSpace, Function, Expression, assemble_scalar, form
+
 from disclinations.models import NonlinearPlateFVK
 from disclinations.models.Fvk_plate import Fvk_plate
 from disclinations.meshes import mesh_bounding_box
@@ -109,6 +112,25 @@ def _w_exact(x):
     _w = (1 - x[0]**2 - x[1]**2)**2
     return _w*w_scale
 
+def exact_bending_energy(w):
+    laplacian = lambda f : ufl.div(grad(f))
+    hessian = lambda f : ufl.grad(ufl.grad(f))
+
+    #assemble_scalar(form( ufl.dot(ufl.grad(v_exact), ufl.grad(v_exact)) * ufl.dx ))
+    return assemble_scalar( form( (D*nu/2 * ufl.inner(laplacian(w), laplacian(w)) + D*(1-nu)/2 * (ufl.inner(hessian(w), hessian(w))) )* ufl.dx) )
+
+def exact_membrane_energy(v):
+    laplacian = lambda f : div(grad(f))
+    hessian = lambda f : grad(grad(f))
+    return assemble_scalar( form( ( ((1+nu)/(2*E*h)) * ufl.inner(hessian(v), hessian(v)) - nu/(2*E*h) * ufl.inner(laplacian(v), laplacian(v)) ) * ufl.dx ) )
+
+
+def exact_coupling_energy(v, w):
+    laplacian = lambda f : div(grad(f))
+    hessian = lambda f : grad(grad(f))
+    cof = lambda v : ufl.Identity(2)*laplacian(v) - hessian(v)
+    return assemble_scalar( form( 0.5* ufl.inner(cof(v), ufl.outer(grad(w),grad(w)) ) * ufl.dx ) )
+
 v_exact.interpolate(_v_exact)
 w_exact.interpolate(_w_exact)
 load.interpolate(transverse_load)
@@ -123,13 +145,45 @@ plate.plot_profiles(parameters["geometry"]["R"])
 w = plate.get_tranverse_disp()
 v = plate.get_airy()
 
+fem_membrane_e = plate.get_membrane_energy_value()
+fem_bending_e  = plate.get_bending_energy_value()
+fem_coupling_e = plate.get_coupling_energy_value()
+
+exact_membrane_e = exact_membrane_energy(v_exact)
+exact_bending_e  = exact_bending_energy(w_exact)
+exact_coupling_e = exact_coupling_energy(v_exact, w_exact)
+
+abs_membrane_e_error = exact_membrane_e - fem_membrane_e
+abs_bending_e_error  = exact_bending_e  - fem_bending_e
+abs_coupling_e_error = exact_coupling_e - fem_coupling_e
+
+percent_membrane_e_error = 100*abs_membrane_e_error/exact_membrane_e
+percent_bending_e_error  = 100*abs_bending_e_error/exact_bending_e
+percent_coupling_e_error = 100*abs_coupling_e_error/exact_coupling_e
+
 print(" ")
 print("***************** TEST RESULTS *****************")
 print(" ")
-print("Plate's membrane energy: "    , plate.get_membrane_energy_value())
-print("Plate's bending energy: "     , plate.get_bending_energy_value())
-print("Plate's coupling energy: "    , plate.get_coupling_energy_value())
+print("Plate's membrane energy: "    , fem_membrane_e)
+print("Plate's bending energy: "     , fem_bending_e)
+print("Plate's coupling energy: "    , fem_coupling_e)
 print("Plate's penalization energy: ", plate.get_penalization_energy_value())
+print(" ")
+print("Exact membrane energy: ", exact_membrane_e )
+print("Exact bending energy: " , exact_bending_e )
+print("Exact coupling energy: ", exact_coupling_e )
+print(" ")
+print("Absolute membrane energy Error: ", abs_membrane_e_error)
+print("Absolute bending energy Error: ", percent_bending_e_error)
+print("Absolute coupling energy Error: ", percent_coupling_e_error)
+print(" ")
+print("Percent membrane energy Error: ", percent_membrane_e_error, " %")
+print("Percent bending energy Error: " , percent_bending_e_error, " %")
+print("Percent coupling energy Error: ", percent_coupling_e_error, " %")
+print(" ")
+#if TEST_PASSED: print("Test Passed")
+#else: print("Test Failed")
+print(" ")
 print(" ")
 
 
