@@ -107,13 +107,37 @@ class NonlinearPlateFVK(ToyPlateFVK):
         return grad(grad(f)) + self.nu*self.σ(f)
     
     def P(self, f):
-        c_nu = 1. #12*(1-self.nu**2)
-        return (1.0/c_nu)*( grad(grad(f)) - self.nu*self.σ(f) )
+        return grad(grad(f)) - self.nu*self.σ(f)
 
     def W(self, f):
         J = ufl.as_matrix([[0, -1], [1, 0]])
         return -0.5*J.T*(outer(grad(f), grad(f))) * J
     
+    def coupling_term(self, state, test_func_v, test_func_w):
+        v = state["v"]
+        w = state["w"]
+        dx = ufl.Measure("dx")
+        dS = ufl.Measure("dS")
+        ds = ufl.Measure("ds")
+        n = ufl.FacetNormal(self.mesh)
+        laplacian = lambda f : div(grad(f))
+        hessian = lambda f : grad(grad(f))
+
+        #coupling_in_edge = lambda f1, f2, test_func: jump(dot(avg(self.σ(f1)),grad(f2)), n) * test_func * dS
+        coupling_in_edge = lambda f1, f2, test_func: ( dot(dot(avg(self.σ(f1)),grad(f2('+'))), n('+')) + dot(dot(avg(self.σ(f1)),grad(f2('-'))), n('-')) )* avg(test_func) * dS
+
+        coupling_bnd_edge = lambda f1, f2, test_func: dot(dot(self.σ(f1),grad(f2)), n) * test_func * ds
+
+        cw_bulk = - self.bracket(w,v) * test_func_w * dx
+        cw_in_edges = 0.5*coupling_in_edge(v, w, test_func_w) + 0.5*coupling_in_edge(w, v, test_func_w)
+        cw_bnd_edges = 0.5*coupling_bnd_edge(v, w, test_func_w) + 0.5*coupling_bnd_edge(w, v, test_func_w)
+
+        cv_bulk = - 0.5*self.bracket(w,w) * test_func_v * dx
+        cv_in_edges = 0.5*coupling_in_edge(w, w, test_func_v)
+        cv_bnd_edges = 0.5*coupling_bnd_edge(w, w, test_func_v)
+
+        return cw_bulk + cv_bulk + cw_bnd_edges + cv_bnd_edges + cv_in_edges + cw_in_edges
+
     def penalisation(self, state):
         v = state["v"]
         w = state["w"]
@@ -132,16 +156,22 @@ class NonlinearPlateFVK(ToyPlateFVK):
         P = lambda f : self.P(f)
         W = lambda f : self.W(f)
         
-        #dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
-        dg1 = lambda u: - 1/2 * dot( jump(grad(u)), avg( dot(M(u), n) ) ) * dS
-        dg2 = lambda u: + 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
+        #dg1 = lambda u: - 1/2 * jump(grad(u), n) * avg(dot(dot(grad(grad(u)), n ), n) ) * dS
+        dg1 = lambda u: - 1/2 * jump(grad(u), n) * avg(div(grad(u))) * dS
+        #dg1w = lambda u: - 1/2 * jump(grad(u),n) * avg( dot(dot(M(u), n), n) ) * dS
+        #dg1v = lambda u: 1/2 * jump(grad(u),n) * avg( dot(dot(P(u), n), n) ) * dS
+        dg2 = lambda u: + 1/2 * α/avg(h) * jump(grad(u), n) * jump(grad(u), n) * dS
         dgc = lambda f, g: avg(inner(W(f), outer(n, n)))*jump(grad(g), n)*dS
 
         bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
         bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
-        bc3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
-        
-        return   (self.D*dg1(w) + self.D*dg2(w)) \
-                - (1/(self.E*self.t))*dg1(v) - (1/(self.E*self.t))*dg2(v) \
+        bc3 = lambda u: 1/2 * α/h * (dot(grad(u),n))**2 * ds
+
+        return   self.D*dg1(w) + self.D*dg2(w)  \
+            - (1/(self.E*self.t))*dg1(v) - (1/(self.E*self.t))*dg2(v) \
                 + self.D*bc1(w) - (1/(self.E*self.t))*bc2(v) \
-                + self.D*bc3(w) - (1/(self.E*self.t))*bc3(v) + dgc(w, v)
+                    + self.D*bc3(w) - (1/(self.E*self.t))*bc3(v) #+ dgc(w, v)
+"""
+        return   dg1(w) + dg2(w)  - dg1(v) - dg2(v)  + bc1(w) - bc2(v) + bc3(w) - bc3(v) #+ dgc(w, v)
+
+"""

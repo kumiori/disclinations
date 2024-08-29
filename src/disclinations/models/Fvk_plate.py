@@ -145,7 +145,7 @@ class Fvk_plate():
         self.set_bending_energy()
         self.set_membrane_energy()
         self.set_coupling_energy()
-        self.elastic_energy = self.bending_energy - self.membrane_energy + self.coupling_energy
+        self.elastic_energy = self.bending_energy - self.membrane_energy #+ self.coupling_energy
 
     def set_penalization_energy(self):
         self.penalisation = self.model.penalisation(self.state_dic)
@@ -156,9 +156,15 @@ class Fvk_plate():
         self.set_penalization_energy()
 
         self.ext_work = self.load * self.tranverse_disp * dx
-
         L = self.elastic_energy - self.ext_work + self.penalisation
-        F = ufl.derivative(L, self.state_function, ufl.TestFunction(self.fs))
+
+        #self.ext_work = self.load * ufl.TestFunction(self.fs)[TRANSVERSE_DISP] * dx
+        #L = self.elastic_energy + self.penalisation
+
+        #pdb.set_trace()
+
+        F = ufl.derivative(L, self.state_function, ufl.TestFunction(self.fs)) + self.model.coupling_term(self.state_dic, ufl.TestFunction(self.fs)[AIRY], ufl.TestFunction(self.fs)[TRANSVERSE_DISP])
+        #pdb.set_trace()
 
         # CFe: compute disclination contribution
         b = dolfinx.fem.Function(self.fs)
