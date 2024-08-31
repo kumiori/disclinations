@@ -29,8 +29,9 @@ from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 from disclinations.solvers import SNESSolver, SNESProblem
+from disclinations.utils.sample_function import sample_function, interpolate_sample
 
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import pyvista
 from pyvista.plotting.utilities import xvfb
 
@@ -161,6 +162,108 @@ print(" ")
 print("***********************************************")
 
 # PLOTS
+x_samples, y_samples, v_samples = sample_function(v, parameters["geometry"]["R"])
+grid_x, grid_y, v_interp = interpolate_sample(x_samples, y_samples, v_samples, parameters["geometry"]["R"])
+
+x_samples, y_samples, v_exact_samples = sample_function(v_exact, parameters["geometry"]["R"])
+grid_x, grid_y, v_exact_interp = interpolate_sample(x_samples, y_samples, v_exact_samples, parameters["geometry"]["R"])
+
+x_samples, y_samples, w_samples = sample_function(w_exact, parameters["geometry"]["R"])
+grid_x, grid_y, w_exact_interp = interpolate_sample(x_samples, y_samples, w_samples, parameters["geometry"]["R"])
+
+x_samples, y_samples, w_exact_samples = sample_function(w, parameters["geometry"]["R"])
+grid_x, grid_y, w_interp = interpolate_sample(x_samples, y_samples, w_exact_samples, parameters["geometry"]["R"])
+
+x0_samples = []
+v0_samples = []
+v0_exact_samples = []
+w0_samples = []
+w0_exact_samples = []
+for i in range(len(y_samples)):
+    if abs(y_samples[i]) < 1e-10:
+        x0_samples.append(x_samples[i])
+        v0_samples.append(v_samples[i])
+        v0_exact_samples.append(v_exact_samples[i])
+        w0_samples.append(w_samples[i])
+        w0_exact_samples.append(w_exact_samples[i])
+
+import matplotlib
+matplotlib.use('WebAgg')
+import matplotlib.pyplot as plt
+
+# SURFACE PLOT
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+surface = ax.plot_surface(grid_x, grid_y, v_interp, cmap='viridis', edgecolor='none')
+fig.colorbar(surface, ax=ax, shrink=0.5, aspect=5)
+ax.set_xlabel('x axis', fontsize=20)
+ax.set_ylabel('y axis', fontsize=20)
+ax.set_zlabel('v', fontsize=20)
+ax.set_title('Airy\'strees function', fontsize=20)
+plt.show()
+plt.savefig(f"{dirTest}/surface_Airy.png", dpi=300)
+
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+surface = ax.plot_surface(grid_x, grid_y, v_exact_interp-v_interp, cmap='viridis', edgecolor='none')
+fig.colorbar(surface, ax=ax, shrink=0.5, aspect=5)
+ax.set_xlabel('x axis', fontsize=20)
+ax.set_ylabel('y axis', fontsize=20)
+ax.set_zlabel('v - v_fem', fontsize=20)
+ax.set_title('Airy\'strees function: difference between solutions - $v_ext - v_fem$')
+plt.show()
+plt.savefig(f"{dirTest}/surface_Airy_fem_vs_exact.png", dpi=300)
+
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+surface = ax.plot_surface(grid_x, grid_y, w_interp, cmap='viridis', edgecolor='none')
+fig.colorbar(surface, ax=ax, shrink=0.5, aspect=5)
+ax.set_xlabel('x axis', fontsize=20)
+ax.set_ylabel('y axis', fontsize=20)
+ax.set_zlabel('$w$', fontsize=20)
+ax.set_title('Transverse displacement', fontsize=20)
+plt.show()
+plt.savefig(f"{dirTest}/surface_Transv_displacement.png", dpi=300)
+
+fig = plt.figure(figsize=(10, 8))
+ax = fig.add_subplot(111, projection='3d')
+surface = ax.plot_surface(grid_x, grid_y, w_exact_interp-w_interp, cmap='viridis', edgecolor='none')
+fig.colorbar(surface, ax=ax, shrink=0.5, aspect=5)
+ax.set_xlabel('x axis', fontsize=20)
+ax.set_ylabel('y axis', fontsize=20)
+ax.set_zlabel('Transverse displacement', fontsize=20)
+ax.set_title('Transverse displacement: difference between solutions - w_ext - w_fem', fontsize=20)
+plt.show()
+plt.savefig(f"{dirTest}/surface_Transv_displacement_fem_vs_exact.png", dpi=300)
+
+# PROFILE PLOTS
+plt.figure(figsize=(10, 6))
+plt.plot(x0_samples, v0_samples, color='red', linestyle='-', label='FE solution', linewidth=3)
+plt.plot(x0_samples, v0_exact_samples, color='blue', linestyle='dotted', label='Exact solution', linewidth=3)
+plt.xlabel('x axes', fontsize=20)
+plt.ylabel('Airy\' stress function', fontsize=20)
+plt.title('Comparison of FE and exact solutions - Airy\'s stress function',  fontsize=20)
+plt.legend(fontsize=20)
+plt.grid(True)
+
+plt.tight_layout()
+plt.show()
+plt.savefig(f"{dirTest}/profile_FE and exact solutions - Airy\'s stress function.png", dpi=300)
+
+plt.figure(figsize=(10, 6))
+plt.plot(x0_samples, w0_samples, color='red', linestyle='-', label='FE solution', linewidth=3)
+plt.plot(x0_samples, w0_exact_samples, color='blue', linestyle='dotted', label='Exact solution', linewidth=3)
+plt.xlabel('x axes', fontsize=20)
+plt.ylabel('Transverse displacement', fontsize=20)
+plt.title('Comparison of FE and exact solutions - Transverse displacement',  fontsize=20)
+plt.legend(fontsize=20)
+plt.grid(True)
+
+plt.tight_layout()
+plt.show()
+plt.savefig(f"{dirTest}/profile_FE and exact solutions - Transverse displacement.png", dpi=300)
+
+"""
 V_v, dofs_v = fes.sub(AIRY).collapse()
 V_w, dofs_w = fes.sub(TRANSVERSE).collapse()
 
@@ -206,3 +309,5 @@ _plt, data = plot_profile(v_exact, points, None, subplot=(1, 2),
 
 _plt.legend()
 _plt.savefig(f"{dirTest}/test_fvk-profiles.png")
+
+"""
