@@ -182,7 +182,44 @@ def run_experiment(mesh: None, parameters: dict, series: str):
         b0=b_scale*b.vector,
     )
     solver.solve()
+
+
+    V_P1 = dolfinx.fem.FunctionSpace(mesh, ("CG", 1))  # "CG" stands for continuous Galerkin (Lagrange)
+
+    with XDMFFile(comm, f"{prefix}/fields-vs-thickness.xdmf", "w",
+                encoding=XDMFFile.Encoding.HDF5) as file:
+        file.write_mesh(mesh)
     
+    
+    with XDMFFile(comm, f"{prefix}/v-vs-thickness.xdmf", "w",
+                    encoding=XDMFFile.Encoding.HDF5) as file:
+        
+        _v, _w = q.split()
+        _v.name = "potential"
+        _w.name = "displacement"
+        
+        file.write_mesh(mesh)
+        interpolation = dolfinx.fem.Function(V_P1)
+
+        interpolation.interpolate(_v)
+        file.write_function(interpolation, thickness)  # Specify unique mesh_xpath for velocity
+
+        # interpolation_w.interpolate(_w)
+        # file.write_function(interpolation_w, mesh_xpath=f"/fields/{_w.name}")  # Specify unique mesh_xpath for velocity
+    
+    with XDMFFile(comm, f"{prefix}/w-vs-thickness.xdmf", "w",
+                    encoding=XDMFFile.Encoding.HDF5) as file:
+        
+        _v, _w = q.split()
+        _v.name = "potential"
+        _w.name = "displacement"
+        
+        file.write_mesh(mesh)
+        interpolation = dolfinx.fem.Function(V_P1)
+
+        interpolation.interpolate(_w)
+        file.write_function(interpolation, thickness)  # Specify unique mesh_xpath for velocity
+
     del solver
     
     # Postprocessing and viz
@@ -304,9 +341,12 @@ if __name__ == "__main__":
             # Check memory usage before computation
             mem_before = memory_usage()
             
-            # parameters["model"]["thickness"] = thickness
-            update_parameters(parameters, "thickness", thickness)    
+            update_parameters(parameters, "thickness", thickness)  
+            print(f"Running experiment for thickness: {thickness}")
+            # print(parameters)
+
             data = run_experiment(mesh, parameters, series)
+
             _experimental_data.append(data)
             
             # Check memory usage after computation
@@ -325,6 +365,7 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     
     # Plot energy terms versus thickness
+    __import__('pdb').set_trace()
     plt.figure(figsize=(10, 6))
     plt.plot(experimental_data["thickness"], experimental_data["membrane_energy"], label="Membrane Energy")
     plt.plot(experimental_data["thickness"], experimental_data["bending_energy"], label="Bending Energy")
