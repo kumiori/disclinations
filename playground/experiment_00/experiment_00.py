@@ -186,39 +186,41 @@ def run_experiment(mesh: None, parameters: dict, series: str):
 
     V_P1 = dolfinx.fem.FunctionSpace(mesh, ("CG", 1))  # "CG" stands for continuous Galerkin (Lagrange)
 
-    with XDMFFile(comm, f"{prefix}/fields-vs-thickness.xdmf", "w",
-                encoding=XDMFFile.Encoding.HDF5) as file:
-        file.write_mesh(mesh)
+    # with XDMFFile(comm, f"{prefix}/fields-vs-thickness.xdmf", "w",
+    #             encoding=XDMFFile.Encoding.HDF5) as file:
+    #     file.write_mesh(mesh)
     
     
-    with XDMFFile(comm, f"{prefix}/v-vs-thickness.xdmf", "w",
+    with XDMFFile(comm, f"output/fields-vs-thickness.xdmf", "a",
                     encoding=XDMFFile.Encoding.HDF5) as file:
         
         _v, _w = q.split()
         _v.name = "potential"
         _w.name = "displacement"
         
-        file.write_mesh(mesh)
         interpolation = dolfinx.fem.Function(V_P1)
 
         interpolation.interpolate(_v)
+        interpolation.name = 'v'
+        
+        print(f"saving interpolation, {thickness}")
         file.write_function(interpolation, thickness)  # Specify unique mesh_xpath for velocity
-
-        # interpolation_w.interpolate(_w)
-        # file.write_function(interpolation_w, mesh_xpath=f"/fields/{_w.name}")  # Specify unique mesh_xpath for velocity
-    
-    with XDMFFile(comm, f"{prefix}/w-vs-thickness.xdmf", "w",
-                    encoding=XDMFFile.Encoding.HDF5) as file:
-        
-        _v, _w = q.split()
-        _v.name = "potential"
-        _w.name = "displacement"
-        
-        file.write_mesh(mesh)
-        interpolation = dolfinx.fem.Function(V_P1)
 
         interpolation.interpolate(_w)
+        interpolation.name = 'w'
         file.write_function(interpolation, thickness)  # Specify unique mesh_xpath for velocity
+    
+    # with XDMFFile(comm, f"{prefix}/w-vs-thickness.xdmf", "w",
+    #                 encoding=XDMFFile.Encoding.HDF5) as file:
+    #     _v, _w = q.split()
+    #     _v.name = "potential"
+    #     _w.name = "displacement"
+        
+    #     file.write_mesh(mesh)
+    #     interpolation = dolfinx.fem.Function(V_P1)
+
+    #     interpolation.interpolate(_w)
+    #     file.write_function(interpolation, thickness)  # Specify unique mesh_xpath for velocity
 
     del solver
     
@@ -336,7 +338,11 @@ if __name__ == "__main__":
                 parameters["geometry"]["geom_type"], 1, mesh_size, tdim
             )
             mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-    
+
+        with XDMFFile(comm, f"output/fields-vs-thickness.xdmf", "w",
+                    encoding=XDMFFile.Encoding.HDF5) as file:
+            file.write_mesh(mesh)
+        
         for i, thickness in enumerate(np.linspace(0.1, 1, num_runs)):
             # Check memory usage before computation
             mem_before = memory_usage()
@@ -365,7 +371,6 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     
     # Plot energy terms versus thickness
-    __import__('pdb').set_trace()
     plt.figure(figsize=(10, 6))
     plt.plot(experimental_data["thickness"], experimental_data["membrane_energy"], label="Membrane Energy")
     plt.plot(experimental_data["thickness"], experimental_data["bending_energy"], label="Bending Energy")
