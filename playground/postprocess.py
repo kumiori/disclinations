@@ -41,10 +41,7 @@ element_v = basix.ufl.element("P", str(mesh.ufl_cell()), degree=1)
 V_v = dolfinx.fem.functionspace(mesh, element_v)
 w = dolfinx.fem.Function(V_v, name="Transverse")
 v = dolfinx.fem.Function(V_v, name="Airy")
-# pxx = dolfinx.fem.Function(V_v, name="Pxx")
 
-# DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), 
-#                         parameters["model"]["order"]-2)
 DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), 
                         parameters["model"]["order"]-2,
                         shape=(2,2))
@@ -195,6 +192,73 @@ components = [('xx', (0, 0)), ('xy', (0, 1)), ('yy', (1, 1))]
 
 # Reconstruct tensor M
 M = load_and_reconstruct_tensor(mesh, xdmf_file_path, 'M', components, V_v, DG)
-__import__('pdb').set_trace()
 # Reconstruct tensor P
 P = load_and_reconstruct_tensor(mesh, xdmf_file_path, 'P', components, V_v, DG)
+
+from ufl import tr, inner
+
+V_scalar = V_v
+# Compute the trace of M
+trace_M_expr = tr(M)
+trace_M = Function(V_scalar, name="TraceM")
+trace_M.interpolate(Expression(trace_M_expr, V_scalar.element.interpolation_points()))
+
+# Compute the Frobenius norm of P
+frobenius_P_expr = inner(P, P)
+frobenius_P = Function(V_scalar, name="FrobeniusP")
+frobenius_P.interpolate(Expression(frobenius_P_expr, V_scalar.element.interpolation_points()))
+
+from dolfinx import fem
+from ufl import sqrt, conditional, gt, as_vector
+from ufl import sqrt, conditional, ge, lt, as_vector
+
+degree = 1
+# Assume M is the tensor field
+M_expr = P  # M is a dolfinx Function in a tensor FunctionSpace
+# Assume 'mesh', 'M', 'degree', and 'prefix' are defined
+V_scalar = fem.functionspace(mesh, ("CG", degree))
+
+V_vector = fem.functionspace(mesh, basix.ufl.element("CG", str(mesh.ufl_cell()), degree=1, shape=(2,)))
+
+# Create functions to hold eigenvalues and eigenvectors
+lambda1 = fem.Function(V_scalar, name="Lambda1")
+lambda2 = fem.Function(V_scalar, name="Lambda2")
+eigvec1 = fem.Function(V_vector, name="Eigenvector1")
+eigvec2 = fem.Function(V_vector, name="Eigenvector2")
+
+# Extract tensor components
+M00 = M[0, 0]
+M01 = M[0, 1]
+M11 = M[1, 1]
+
+# Compute eigenvalues
+trace_M = M00 + M11
+discriminant = sqrt((M00 - M11)**2 + 4 * M01 * M01)
+lambda1_expr = 0.5 * (trace_M + discriminant)
+lambda2_expr = 0.5 * (trace_M - discriminant)
+
+# Interpolate eigenvalues
+lambda1.interpolate(fem.Expression(lambda1_expr, V_scalar.element.interpolation_points()))
+lambda2.interpolate(fem.Expression(lambda2_expr, V_scalar.element.interpolation_points()))
+
+def compute_eigenvector(M00, M01, M11, lambda_expr):
+    # Components before normalization
+    v1 = M01
+    v2 = lambda_expr - M00
+
+    # Handle the case when both components are zero
+    zero = fem.Constant(mesh, 0.0)
+    v_norm = sqrt(v1**2 + v2**2)
+    tol = 1e-9
+    v1_norm = conditional(gt(v_norm, tol), v1 / v_norm, zero)
+    v2_norm = conditional(gt(v_norm, tol), v2 / v_norm, zero)
+
+    return as_vector([v1_norm, v2_norm])
+# Compute eigenvectors
+eigvec1_expr = compute_eigenvector(M00, M01, M11, lambda1_expr)
+eigvec1.interpolate(fem.Expression(eigvec1_expr, V_vector.element.interpolation_points()))
+
+eigvec2_expr = compute_eigenvector(M00, M01, M11, lambda2_expr)
+eigvec2.interpolate(fem.Expression(eigvec2_expr, V_vector.element.interpolation_points()))
+
+__import__('pdb').set_trace()
