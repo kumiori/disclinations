@@ -214,10 +214,9 @@ from ufl import sqrt, conditional, ge, lt, as_vector
 
 degree = 1
 # Assume M is the tensor field
-M_expr = P  # M is a dolfinx Function in a tensor FunctionSpace
+# M_expr = P  # M is a dolfinx Function in a tensor FunctionSpace
 # Assume 'mesh', 'M', 'degree', and 'prefix' are defined
 V_scalar = fem.functionspace(mesh, ("CG", degree))
-
 V_vector = fem.functionspace(mesh, basix.ufl.element("CG", str(mesh.ufl_cell()), degree=1, shape=(2,)))
 
 # Create functions to hold eigenvalues and eigenvectors
@@ -226,25 +225,10 @@ lambda2 = fem.Function(V_scalar, name="Lambda2")
 eigvec1 = fem.Function(V_vector, name="Eigenvector1")
 eigvec2 = fem.Function(V_vector, name="Eigenvector2")
 
-# Extract tensor components
-M00 = M[0, 0]
-M01 = M[0, 1]
-M11 = M[1, 1]
-
-# Compute eigenvalues
-trace_M = M00 + M11
-discriminant = sqrt((M00 - M11)**2 + 4 * M01 * M01)
-lambda1_expr = 0.5 * (trace_M + discriminant)
-lambda2_expr = 0.5 * (trace_M - discriminant)
-
-# Interpolate eigenvalues
-lambda1.interpolate(fem.Expression(lambda1_expr, V_scalar.element.interpolation_points()))
-lambda2.interpolate(fem.Expression(lambda2_expr, V_scalar.element.interpolation_points()))
-
-def compute_eigenvector(M00, M01, M11, lambda_expr):
+def compute_eigenvector(T00, T01, T11, lambda_expr):
     # Components before normalization
-    v1 = M01
-    v2 = lambda_expr - M00
+    v1 = T01
+    v2 = lambda_expr - T00
 
     # Handle the case when both components are zero
     zero = fem.Constant(mesh, 0.0)
@@ -254,11 +238,35 @@ def compute_eigenvector(M00, M01, M11, lambda_expr):
     v2_norm = conditional(gt(v_norm, tol), v2 / v_norm, zero)
 
     return as_vector([v1_norm, v2_norm])
-# Compute eigenvectors
-eigvec1_expr = compute_eigenvector(M00, M01, M11, lambda1_expr)
-eigvec1.interpolate(fem.Expression(eigvec1_expr, V_vector.element.interpolation_points()))
 
-eigvec2_expr = compute_eigenvector(M00, M01, M11, lambda2_expr)
-eigvec2.interpolate(fem.Expression(eigvec2_expr, V_vector.element.interpolation_points()))
+# Extract tensor components
+def compute_eigen(T, lambda1, lambda2, eigvec1, eigvec2):
+    T00 = T[0, 0]
+    T01 = T[0, 1]
+    T11 = T[1, 1]
+
+# Compute eigenvalues
+    trace_T = T00 + T11
+    discriminant = sqrt((T00 - T11)**2 + 4 * T01 * T01)
+    lambda1_expr = 0.5 * (trace_T + discriminant)
+    lambda2_expr = 0.5 * (trace_T - discriminant)
+
+# Interpolate eigenvalues
+    lambda1.interpolate(fem.Expression(lambda1_expr, V_scalar.element.interpolation_points()))
+    lambda2.interpolate(fem.Expression(lambda2_expr, V_scalar.element.interpolation_points()))
+
+# Compute eigenvectors
+    eigvec1_expr = compute_eigenvector(T00, T01, T11, lambda1_expr)
+    eigvec1.interpolate(fem.Expression(eigvec1_expr, V_vector.element.interpolation_points()))
+
+    eigvec2_expr = compute_eigenvector(T00, T01, T11, lambda2_expr)
+    eigvec2.interpolate(fem.Expression(eigvec2_expr, V_vector.element.interpolation_points()))
+
+    return (lambda1, lambda2), (eigvec1, eigvec2)
+
+
+eigenval, eigenvect = compute_eigen(M, lambda1, lambda2, eigvec1, eigvec2)
+
+eigenval, eigenvect = compute_eigen(P, lambda1, lambda2, eigvec1, eigvec2)
 
 __import__('pdb').set_trace()
