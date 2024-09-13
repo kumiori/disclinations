@@ -41,11 +41,17 @@ element_v = basix.ufl.element("P", str(mesh.ufl_cell()), degree=1)
 V_v = dolfinx.fem.functionspace(mesh, element_v)
 w = dolfinx.fem.Function(V_v, name="Transverse")
 v = dolfinx.fem.Function(V_v, name="Airy")
+# pxx = dolfinx.fem.Function(V_v, name="Pxx")
+
+# DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), 
+#                         parameters["model"]["order"]-2)
+DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), 
+                        parameters["model"]["order"]-2,
+                        shape=(2,2))
+DG = dolfinx.fem.functionspace(mesh, DG_e)
 
 with h5py.File(h5_file_path, "r") as h5file:
     print_datasets(h5file)
-
-__import__('pdb').set_trace()
 
 # Read function data from HDF5
 with h5py.File(h5_file_path, "r") as h5file:
@@ -63,6 +69,9 @@ print((len(timesteps), timesteps))
 
 read_timestep_data(h5_file_path, w, "w", timesteps[0])
 read_timestep_data(h5_file_path, v, "v", timesteps[0])
+# read_timestep_data(h5_file_path, mxx, "Mxx", timesteps[0])
+# read_timestep_data(h5_file_path, pxx, "Pxx", timesteps[0])
+
 
 w_norm = w.vector.norm()
 v_norm = v.vector.norm()
@@ -85,49 +94,107 @@ z = dolfinx.fem.Function(V_v, name="Trial")
 
 from ufl import (avg, ds, dS, outer, div, grad, inner, dot, jump)
 
-
 form = dolfinx.fem.form(ufl.inner(grad(v), grad(v))*dx)
 scalar_value = dolfinx.fem.assemble_scalar(form)
-
 
 D = model.D
 nu = model.nu
 Eh = model.E*model.t
 k_g = -D*(1-nu)
 
-laplacian = lambda f : div(grad(f))
-hessian = lambda f : grad(grad(f))
-
-
-element_z = basix.ufl.element("P", str(mesh.ufl_cell()), degree=2)
-V_z = functionspace(mesh, element_z)
-z = Function(V_z)
-
-z.interpolate(v)
-__import__('pdb').set_trace()
-
-bending = (D/2 * (ufl.inner(laplacian(w), laplacian(w)))) * dx
-membrane = (1/(2*Eh) * inner(grad(v), grad(v))) * dx
-membrane = (1/(2*Eh) * inner(laplacian(v), laplacian(v))) * dx
-
-dolfinx.fem.form(bending)
-dolfinx.fem.form(membrane)
-
-energy_terms = {label: comm.allreduce(
-    dolfinx.fem.assemble_scalar(
-        dolfinx.fem.form(energy_term)),
-    op=MPI.SUM,
-    ) for label, energy_term in energy_components.items()}
-
-exact_energy_monopole = parameters["model"]["E"] * parameters["geometry"]["radius"]**2 / (32 * np.pi)
-
 print(yaml.dump(parameters["model"], default_flow_style=False))
 
-error = np.abs(exact_energy_monopole - energy_terms['membrane'])
+import dolfinx
+from dolfinx.io import XDMFFile
+from dolfinx.fem import Function, Expression
+from ufl import as_tensor
+from mpi4py import MPI
 
-print(f"Exact energy: {exact_energy_monopole}")
-print(f"Computed energy: {energy_terms['membrane']}")
-print(f"Abs error: {error}")
-print(f"Rel error: {error/exact_energy_monopole:.3%}")
-print(f"Error: {error/exact_energy_monopole:.1%}")
+def load_and_reconstruct_tensor(mesh, file_path, tensor_name, components, V_scalar, V_tensor, timestep=0):
+    """
+    Load tensor components from file and reconstruct the tensor field.
 
+    Parameters:
+    mesh : dolfinx.mesh.Mesh
+        The mesh on which the tensor is defined.
+    file_path : str
+        Path to the XDMF file containing the tensor components.
+    tensor_name : str
+        Base name of the tensor (e.g., 'M', 'P').
+    components : list of tuples
+        List of component names and their indices, e.g., [('xx', (0, 0)), ('xy', (0, 1)), ('yy', (1, 1))].
+    V_scalar : dolfinx.fem.FunctionSpace
+        Function space for scalar components.
+    V_tensor : dolfinx.fem.FunctionSpace
+        Function space for the reconstructed tensor field.
+    timestep : int
+        Timestep to load
+        
+    Returns:
+    tensor_field : dolfinx.fem.Function
+        The reconstructed tensor field.
+    """
+    # Dictionary to hold the scalar functions for tensor components
+    components_dict = {}
+
+    # Open the XDMF file for reading
+    # with XDMFFile(mesh.comm, file_path, "r") as xdmf_file:
+    #     # Loop over the components
+    #     for comp_name, (i, j) in components:
+    #         # Create a Function to hold the component
+    #         comp_function = Function(V_scalar, name=f"{tensor_name}{comp_name}")
+    #         # Read the function from the file
+    #         __import__('pdb').set_trace()
+    #         xdmf_file.read_function(comp_function, f"{tensor_name}{comp_name}")
+    #         # Store the component in the dictionary
+    #         components_dict[(i, j)] = comp_function
+    
+    with h5py.File(h5_file_path, "r") as h5file:
+        # Loop over the components
+        for comp_name, (i, j) in components:
+            function_name = f"{tensor_name}{comp_name}"
+            dataset_path = f"Function/{function_name}/{timestep}"
+            if dataset_path in h5file:
+                data = h5file[dataset_path][:]
+                # Create a Function to hold the component
+                comp_function = Function(V_scalar, name=function_name)
+                # Get local ownership range
+                local_range = comp_function.function_space.dofmap.index_map.local_range
+                # Assign data to the function vector
+                local_size = local_range[1] - local_range[0]
+                # local_data 
+                comp_function.x.array[:local_size] = data[local_range[0]:local_range[1]].flatten()
+                # Update ghost values
+                comp_function.x.scatter_forward()
+                # Store the component in the dictionary
+                components_dict[(i, j)] = comp_function
+            else:
+                print(f"Dataset {dataset_path} not found in the HDF5 file.")
+    # Now reconstruct the tensor field
+    # Create a Function to hold the tensor field
+    tensor_field = Function(V_tensor, name=tensor_name)
+
+    # Build the tensor expression
+    tensor_expr_entries = [[None]*2 for _ in range(2)]
+    for (i, j), comp_function in components_dict.items():
+        tensor_expr_entries[i][j] = comp_function
+        # If the tensor is symmetric, set the symmetric entry
+        if i != j:
+            tensor_expr_entries[j][i] = comp_function  # Assuming symmetry
+
+    # Create the UFL tensor expression
+    tensor_expr = as_tensor(tensor_expr_entries)
+
+    # Interpolate the tensor expression into the tensor function
+    tensor_interpolation = Expression(tensor_expr, V_tensor.element.interpolation_points())
+    tensor_field.interpolate(tensor_interpolation)
+
+    return tensor_field
+
+components = [('xx', (0, 0)), ('xy', (0, 1)), ('yy', (1, 1))]
+
+# Reconstruct tensor M
+M = load_and_reconstruct_tensor(mesh, xdmf_file_path, 'M', components, V_v, DG)
+__import__('pdb').set_trace()
+# Reconstruct tensor P
+P = load_and_reconstruct_tensor(mesh, xdmf_file_path, 'P', components, V_v, DG)

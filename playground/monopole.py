@@ -279,42 +279,24 @@ with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
     print(f"Rel error: {error/exact_energy_monopole:.3%}")
     print(f"Error: {error/exact_energy_monopole:.1%}")
 
-    with XDMFFile(comm, f"{prefix}/fields.xdmf", "a",
-                    encoding=XDMFFile.Encoding.HDF5) as file:
-        
-        _v, _w = q.split()
-        _v.name = "potential"
-        _w.name = "displacement"
-        
-        # file.write_function(_v)  # Specify unique mesh_xpath for velocity
-        
-        interpolation = dolfinx.fem.Function(V_P1)
+    _v, _w = q.split()
+    extra_fields = [
+    {'field': _v_exact, 'name': 'v_exact'},
+    {'field': _w_exact, 'name': 'w_exact'},
+    {
+        'field': model.M(_w),  # Tensor expression
+        'name': 'M',
+        'components': 'tensor',
+        # 'function_space': T  # Function space for tensor components
+    },
+    {
+        'field': model.P(_v),  # Tensor expression
+        'name': 'P',
+        'components': 'tensor',
+        # 'function_space': T  # Function space for tensor components
+    }
+    ]
 
-        interpolation.interpolate(_v)
-        interpolation.name = 'v'
-        
-        file.write_function(interpolation)  # Specify unique mesh_xpath for velocity
-
-        interpolation.interpolate(_w)
-        interpolation.name = 'w'
-        file.write_function(interpolation)  # Specify unique mesh_xpath for velocity
-
-        interpolation.interpolate(_v_exact)
-        interpolation.name = 'v_exact'
-        file.write_function(interpolation)  # Specify unique mesh_xpath for velocity
-        
-        interpolation.interpolate(_w_exact)
-        interpolation.name = 'w_exact'
-        file.write_function(interpolation)  # Specify unique mesh_xpath for velocity
-        
-        M = model.M(w)
-        P = model.M(w)
-        
-        mxx = model.M(w)[0, 0]
-        mxx_expr = dolfinx.fem.Expression(mxx, T.element.interpolation_points())
-        Mxx = dolfinx.fem.Function(T)
-        Mxx.interpolate(mxx_expr)
-        Mxx.name = 'Mxx'
-        file.write_function(Mxx)
-
-        __import__('pdb').set_trace()
+    # Call the function
+    from disclinations.utils import write_to_output
+    write_to_output(prefix, q, extra_fields)
