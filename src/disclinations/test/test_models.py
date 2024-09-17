@@ -13,6 +13,7 @@ from dolfinx.fem import locate_dofs_topological, dirichletbc, Constant
 from disclinations.utils.la import compute_disclination_loads
 from disclinations.utils import monitor
 from disclinations.solvers import SNESSolver
+from disclinations.utils import write_to_output
 
 from disclinations.models import NonlinearPlateFVK
 import dolfinx
@@ -93,11 +94,11 @@ def test_model_computation(model):
         energy = model.energy(state)[0]
 
         # Dead load (transverse)
-        W_ext = Constant(mesh, np.array(0., dtype=PETSc.ScalarType)) * w * dx
+        model.W_ext = Constant(mesh, np.array(0., dtype=PETSc.ScalarType)) * w * dx
         penalisation = model.penalisation(state)
 
         # Define the functional
-        L = energy - W_ext + penalisation
+        L = energy - model.W_ext + penalisation
 
         Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
         b = compute_disclination_loads(disclinations, params["loading"]["signs"],
@@ -126,16 +127,16 @@ def test_model_computation(model):
     save_params_to_yaml(params, "params_with_scaling.yml")
     
     # 8. Solve
-    solution = solver.solve()
+    solver.solve()
     
     # 9. Postprocess (if any)
-    postprocess(solution)
+    postprocess(state, model, mesh, exact_solution, prefix)
     
     # 10. Compute absolute and relative error with respect to the exact solution
-    abs_error, rel_error = compute_error(solution, exact_solution)
+    # abs_error, rel_error = compute_error(solution, exact_solution)
     
-    # 11. Display error results
-    print(f"Model: {model}, Absolute Error: {abs_error}, Relative Error: {rel_error}")
+    # # 11. Display error results
+    # print(f"Model: {model}, Absolute Error: {abs_error}, Relative Error: {rel_error}")
     
     # 12. Assert that the relative error is within an acceptable range
     assert rel_error < params["error_tolerance"], f"Relative error too high for {model} model."
@@ -359,6 +360,64 @@ def create_disclinations(mesh, params, points=[0., 0., 0.], signs=[1.]):
 
     return disclinations, params
 
+def compute_energy_terms(energy_components, comm):
+    """Assemble and sum energy terms over all processes."""
+    computed_energy_terms = {
+        label: comm.allreduce(
+            dolfinx.fem.assemble_scalar(
+                dolfinx.fem.form(energy_term)
+            ),
+            op=MPI.SUM,
+        )
+        for label, energy_term in energy_components.items()
+    }
+    return computed_energy_terms
+
+
+def print_energy_analysis(energy_terms, exact_energy_monopole):
+    """Print computed energy vs exact energy analysis."""
+    computed_membrane_energy = energy_terms['membrane']
+    error = np.abs(exact_energy_monopole - computed_membrane_energy)
+
+    print(f"Exact energy: {exact_energy_monopole}")
+    print(f"Computed energy: {computed_membrane_energy}")
+    print(f"Abs error: {error}")
+    print(f"Rel error: {error/exact_energy_monopole:.3%}")
+    print(f"Error: {error/exact_energy_monopole:.1%}")
+
+
+
+def postprocess(state, model, mesh, params, exact_solution, prefix):
+    
+    with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
+        energy_components = {"bending": model.energy(state)[1],
+        "membrane": -model.energy(state)[2],
+        "coupling": model.energy(state)[3],
+        "external_work": -model.W_ext}
+    
+        energy_terms = compute_energy_terms(energy_components, mesh.comm)
+
+        exact_energy_monopole = params["model"]["E"] * params["geometry"]["radius"] ** 2 / (32 * np.pi)
+        print(yaml.dump(params["model"], default_flow_style=False))
+        print_energy_analysis(energy_terms, exact_energy_monopole)
+        
+        _v_exact, _w_exact = exact_solution
+        extra_fields = [
+            {'field': _v_exact, 'name': 'v_exact'},
+            {'field': _w_exact, 'name': 'w_exact'},
+            {
+                'field': model.M(state["w"]),  # Tensor expression
+                'name': 'M',
+                'components': 'tensor',
+            },
+            {
+                'field': model.P(state["v"]),  # Tensor expression
+                'name': 'P',
+                'components': 'tensor',
+            }
+        ]
+        # write_to_output(prefix, q, extra_fields)
+
 if __name__ == "__main__":
     import pytest
     # pytest.main()
@@ -366,3 +425,4 @@ if __name__ == "__main__":
     test_model_computation("variational")
     # test_model_computation("brenner")
     # test_model_computation("carstensen")
+    
