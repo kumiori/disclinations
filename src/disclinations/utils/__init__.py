@@ -12,6 +12,9 @@ import yaml
 from dolfinx.fem import assemble_scalar, form
 from mpi4py import MPI
 from petsc4py import PETSc
+from dolfinx.io import XDMFFile
+import dolfinx
+import ufl
 
 comm = MPI.COMM_WORLD
 
@@ -373,3 +376,70 @@ def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
     print(f"Iteration {it}, residual {norm}")
     return PETSc.SNES.ConvergedReason.ITERATING
+
+def write_to_output(prefix, q, extra_fields = {}):
+    # Obtain the communicator from q's mesh
+    import basix
+    comm = q.function_space.mesh.comm
+    
+    # V_P1 = 
+    # create function space based on mesh
+    V_P1 = dolfinx.fem.functionspace(q.function_space.mesh, ("CG", 1))
+    DG_e = basix.ufl.element("DG", str(q.function_space.mesh.ufl_cell()), order=1)
+    V_DG = dolfinx.fem.functionspace(q.function_space.mesh, DG_e)  # 
+    
+    with XDMFFile(comm, f"{prefix}/fields.xdmf", "a", encoding=XDMFFile.Encoding.HDF5) as file:
+        # Split q into components: potential (_v) and displacement (_w)
+        _v, _w = q.split()
+        _v.name, _w.name = "potential", "displacement"
+
+        # Create an interpolation function
+        interpolation = dolfinx.fem.Function(V_P1)
+
+        # Interpolate and write potential (_v)
+        interpolate_and_write(file, interpolation, _v, "v")
+
+        # Interpolate and write displacement (_w)
+        interpolate_and_write(file, interpolation, _w, "w")
+
+        # Process extra fields
+        for field_info in extra_fields:
+            field = field_info['field']
+            name = field_info['name']
+
+            # Check if the field requires special handling (e.g., tensor components)
+            if field_info.get('components') == 'tensor':
+                interpolation = dolfinx.fem.Function(V_DG)
+                
+                write_tensor_components(file, interpolation, field, name)
+            else:
+                # Interpolate and write scalar or vector fields
+                interpolate_and_write(file, interpolation, field, name)
+        __import__('pdb').set_trace()
+
+
+def interpolate_and_write(file, interpolation, field, name):
+    """Interpolate a field to V_P1 and write it to an XDMF file."""
+    interpolation.interpolate(field)
+    interpolation.name = name
+    file.write_function(interpolation)
+
+
+def write_tensor_components(file, interpolation, tensor_expr, tensor_name):
+    """Interpolate and write specified components of a tensor expression."""
+    components = {
+        'xx': (0, 0),
+        'xy': (0, 1),
+        'yy': (1, 1)
+    }
+    for comp_name, (i, j) in components.items():
+        # Extract the component expression
+        component_expr = tensor_expr[i, j]
+        # Create an expression for interpolation
+        expr = dolfinx.fem.Expression(component_expr, interpolation.function_space.element.interpolation_points())
+        # Create a function to hold the interpolated values
+        interpolation.interpolate(expr)
+        # Set the name accordingly
+        interpolation.name = f"{tensor_name}{comp_name}"
+        # Write to file
+        file.write_function(interpolation)

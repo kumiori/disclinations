@@ -175,8 +175,6 @@ def _w_exact(x):
 v_exact.interpolate(_v_exact)
 w_exact.interpolate(_w_exact)
 
-
-
 # Define the variational problem
 model = NonlinearPlateFVK(mesh, parameters["model"])
 energy = model.energy(state)[0]
