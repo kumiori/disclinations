@@ -14,6 +14,7 @@ from disclinations.utils.la import compute_disclination_loads
 from disclinations.utils import monitor
 from disclinations.solvers import SNESSolver
 from disclinations.utils import write_to_output
+import hashlib
 
 from disclinations.models import NonlinearPlateFVK
 import dolfinx
@@ -130,7 +131,8 @@ def test_model_computation(model):
     solver.solve()
     
     # 9. Postprocess (if any)
-    postprocess(state, model, mesh, exact_solution, prefix)
+    abs_error, rel_error = postprocess(state, model, mesh, 
+                params=params, exact_solution=exact_solution, prefix=prefix)
     
     # 10. Compute absolute and relative error with respect to the exact solution
     # abs_error, rel_error = compute_error(solution, exact_solution)
@@ -139,7 +141,8 @@ def test_model_computation(model):
     # print(f"Model: {model}, Absolute Error: {abs_error}, Relative Error: {rel_error}")
     
     # 12. Assert that the relative error is within an acceptable range
-    assert rel_error < params["error_tolerance"], f"Relative error too high for {model} model."
+    rel_tol = float(params["solvers"]["elasticity"]["snes"]["snes_rtol"])
+    assert rel_error < rel_tol, f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
 
 
 def load_parameters(file_path):
@@ -178,9 +181,12 @@ def create_or_load_mesh(parameters, prefix):
     mesh_size = parameters["geometry"]["mesh_size"]
     parameters["geometry"]["radius"] = 1  # Assuming the radius is 1
     parameters["geometry"]["geom_type"] = "circle"
+    geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
+    sha_hash = hashlib.sha256(geometry_json.encode()).hexdigest()
+
     
     # Set up file prefix for mesh storage
-    mesh_file_path = f"{prefix}/fields.xdmf"
+    mesh_file_path = f"{prefix}/mesh-{sha_hash}.xdmf"
     
     # Check if the mesh file already exists
     if os.path.exists(mesh_file_path):
@@ -304,11 +310,11 @@ def calculate_rescaling_factors(params):
     w_scale = np.sqrt(2 * _D / (_E * thickness))
     v_scale = _D
     f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
-    
+
     # Store rescaling factors in the params dictionary
-    params["model"]["w_scale"] = w_scale
-    params["model"]["v_scale"] = v_scale
-    params["model"]["f_scale"] = f_scale
+    params["model"]["w_scale"] = float(w_scale)
+    params["model"]["v_scale"] = float(v_scale)
+    params["model"]["f_scale"] = float(f_scale)
 
     return params
 
@@ -381,17 +387,17 @@ def print_energy_analysis(energy_terms, exact_energy_monopole):
 
     print(f"Exact energy: {exact_energy_monopole}")
     print(f"Computed energy: {computed_membrane_energy}")
-    print(f"Abs error: {error}")
+    print(f"Abs error: {error:.3%}")
     print(f"Rel error: {error/exact_energy_monopole:.3%}")
-    print(f"Error: {error/exact_energy_monopole:.1%}")
 
+    return error, error/exact_energy_monopole
 
 
 def postprocess(state, model, mesh, params, exact_solution, prefix):
     
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
         energy_components = {"bending": model.energy(state)[1],
-        "membrane": -model.energy(state)[2],
+        "membrane": model.energy(state)[2],
         "coupling": model.energy(state)[3],
         "external_work": -model.W_ext}
     
@@ -399,7 +405,7 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
 
         exact_energy_monopole = params["model"]["E"] * params["geometry"]["radius"] ** 2 / (32 * np.pi)
         print(yaml.dump(params["model"], default_flow_style=False))
-        print_energy_analysis(energy_terms, exact_energy_monopole)
+        abs_error, rel_error = print_energy_analysis(energy_terms, exact_energy_monopole)
         
         _v_exact, _w_exact = exact_solution
         extra_fields = [
@@ -417,7 +423,8 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
             }
         ]
         # write_to_output(prefix, q, extra_fields)
-
+        return abs_error, rel_error 
+    
 if __name__ == "__main__":
     import pytest
     # pytest.main()
