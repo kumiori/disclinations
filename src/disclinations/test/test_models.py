@@ -18,7 +18,7 @@ import hashlib
 from disclinations.utils import table_timing_data, Visualisation
 from dolfinx.common import list_timings
 
-from disclinations.models import NonlinearPlateFVK
+from disclinations.models import NonlinearPlateFVK, NonlinearPlateFVK_brenner, NonlinearPlateFVK_carstensen
 import dolfinx
 from dolfinx import fem
 
@@ -41,8 +41,8 @@ outdir = "output"
 AIRY = 0
 TRANSVERSE = 1
 
-@pytest.mark.parametrize("model", models)
-def test_model_computation(model):
+@pytest.mark.parametrize("variant", models)
+def test_model_computation(variant):
     """
     Parametric unit test for testing three different models:
     variational, brenner, and carstensen.
@@ -89,33 +89,42 @@ def test_model_computation(model):
     q = dolfinx.fem.Function(Q)
     v, w = ufl.split(q)
     state = {"v": v, "w": w}
-    
+    _W_ext = W_ext = Constant(mesh, np.array(0., dtype=PETSc.ScalarType)) * w * dx
+    # Define the variational problem
+
+    Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
+    b = compute_disclination_loads(disclinations, params["loading"]["signs"],
+                                    Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)    
+
     # 6. Define variational form (depends on the model)
-    if model == "variational":
-        # Define the variational problem
+    if variant == "variational":
         model = NonlinearPlateFVK(mesh, params["model"])
+        energy = model.energy(state)[0]
+        # Dead load (transverse)
+        model.W_ext = _W_ext
+        penalisation = model.penalisation(state)
+
+        L = energy - model.W_ext + penalisation
+        F = ufl.derivative(L, q, ufl.TestFunction(Q))
+
+    elif variant == "brenner":
+        # F = define_brenner_form(fem, params)
+        model = NonlinearPlateFVK_brenner(mesh, params["model"])
         energy = model.energy(state)[0]
 
         # Dead load (transverse)
-        model.W_ext = Constant(mesh, np.array(0., dtype=PETSc.ScalarType)) * w * dx
+        model.W_ext = _W_ext
         penalisation = model.penalisation(state)
 
-        # Define the functional
         L = energy - model.W_ext + penalisation
+        # F = ufl.derivative(L, q, ufl.TestFunction(Q))
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) \
+            + model.coupling_term(state)
 
-        Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
-        b = compute_disclination_loads(disclinations, params["loading"]["signs"],
-                                       Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)    
-
-        F = ufl.derivative(L, q, ufl.TestFunction(Q))
-
-    elif model == "brenner":
-        F = define_brenner_form(fem, params)
-    elif model == "carstensen":
+    elif variant == "carstensen":
         F = define_carstensen_form(fem, params)
     
     # 7. Set up the solver
-
     solver = SNESSolver(
         F_form=F,
         u=q,
@@ -424,6 +433,16 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         ]
         # write_to_output(prefix, q, extra_fields)
         return abs_error, rel_error 
+
+def define_brenner_form():
+    L = energy - model.W_ext + penalisation
+    F = ufl.derivative(L, self.state_function, ufl.TestFunction(self.fs)) + \
+        self.model.coupling_term(self.state_dic, 
+                                   ufl.TestFunction(self.fs)[AIRY], 
+                                   ufl.TestFunction(self.fs)[TRANSVERSE_DISP])
+
+    
+    
     
 if __name__ == "__main__":
     from disclinations.utils import memory_usage
@@ -433,7 +452,9 @@ if __name__ == "__main__":
     max_memory = 0
     mem_before = memory_usage()
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
-        test_model_computation("variational")
+        # test_model_computation("variational")
+        test_model_computation("brenner")
+        # test_model_computation("carstensen")
 
     mem_after = memory_usage()
     max_memory = max(max_memory, mem_after)
@@ -441,6 +462,4 @@ if __name__ == "__main__":
     gc.collect()
     timings = table_timing_data()
     list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])
-    # test_model_computation("brenner")
-    # test_model_computation("carstensen")
     
