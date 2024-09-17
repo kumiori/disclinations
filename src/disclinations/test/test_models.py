@@ -15,6 +15,8 @@ from disclinations.utils import monitor
 from disclinations.solvers import SNESSolver
 from disclinations.utils import write_to_output
 import hashlib
+from disclinations.utils import table_timing_data, Visualisation
+from dolfinx.common import list_timings
 
 from disclinations.models import NonlinearPlateFVK
 import dolfinx
@@ -144,7 +146,6 @@ def test_model_computation(model):
     rel_tol = float(params["solvers"]["elasticity"]["snes"]["snes_rtol"])
     assert rel_error < rel_tol, f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
 
-
 def load_parameters(file_path):
     """
     Load parameters from a YAML file.
@@ -187,33 +188,34 @@ def create_or_load_mesh(parameters, prefix):
     
     # Set up file prefix for mesh storage
     mesh_file_path = f"{prefix}/mesh-{sha_hash}.xdmf"
-    
-    # Check if the mesh file already exists
-    if os.path.exists(mesh_file_path):
-        print("Loading existing mesh...")
-        with XDMFFile(comm, mesh_file_path, "r") as file:
-            mesh = file.read_mesh()
-            mts = None  # Assuming facet tags are needed
-            # mts = file.read_meshtags(mesh, "facet")  # Assuming facet tags are needed
-            fts = None  # Modify as needed if facet topology structure is available
-        return mesh, mts, fts
+    with dolfinx.common.Timer("~Mesh Generation") as timer:
+        
+        # Check if the mesh file already exists
+        if os.path.exists(mesh_file_path):
+            print("Loading existing mesh...")
+            with XDMFFile(comm, mesh_file_path, "r") as file:
+                mesh = file.read_mesh()
+                mts = None  # Assuming facet tags are needed
+                # mts = file.read_meshtags(mesh, "facet")  # Assuming facet tags are needed
+                fts = None  # Modify as needed if facet topology structure is available
+            return mesh, mts, fts
 
-    else:
-        # If no mesh file exists, create a new mesh
-        print("Creating new mesh...")
-        model_rank = 0
-        tdim = 2
-        
-        gmsh_model, tdim = mesh_circle_gmshapi(
-            parameters["geometry"]["geom_type"], 1, mesh_size, tdim
-        )
-        
-        mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-        
-        # Save the mesh for future use
-        os.makedirs(prefix, exist_ok=True)
-        with XDMFFile(comm, mesh_file_path, "w", encoding=XDMFFile.Encoding.HDF5) as file:
-            file.write_mesh(mesh)
+        else:
+            # If no mesh file exists, create a new mesh
+            print("Creating new mesh...")
+            model_rank = 0
+            tdim = 2
+            
+            gmsh_model, tdim = mesh_circle_gmshapi(
+                parameters["geometry"]["geom_type"], 1, mesh_size, tdim
+            )
+            
+            mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
+            
+            # Save the mesh for future use
+            os.makedirs(prefix, exist_ok=True)
+            with XDMFFile(comm, mesh_file_path, "w", encoding=XDMFFile.Encoding.HDF5) as file:
+                file.write_mesh(mesh)
         
         return mesh, mts, fts 
     
@@ -379,7 +381,6 @@ def compute_energy_terms(energy_components, comm):
     }
     return computed_energy_terms
 
-
 def print_energy_analysis(energy_terms, exact_energy_monopole):
     """Print computed energy vs exact energy analysis."""
     computed_membrane_energy = energy_terms['membrane']
@@ -391,7 +392,6 @@ def print_energy_analysis(energy_terms, exact_energy_monopole):
     print(f"Rel error: {error/exact_energy_monopole:.3%}")
 
     return error, error/exact_energy_monopole
-
 
 def postprocess(state, model, mesh, params, exact_solution, prefix):
     
@@ -426,10 +426,21 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         return abs_error, rel_error 
     
 if __name__ == "__main__":
+    from disclinations.utils import memory_usage
     import pytest
+    import gc
     # pytest.main()
-    
-    test_model_computation("variational")
+    max_memory = 0
+    mem_before = memory_usage()
+    with dolfinx.common.Timer(f"~Computation Experiment") as timer:
+        test_model_computation("variational")
+
+    mem_after = memory_usage()
+    max_memory = max(max_memory, mem_after)
+    logging.info(f"Run Memory Usage (MB) - Before: {mem_before}, After: {mem_after}")
+    gc.collect()
+    timings = table_timing_data()
+    list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])
     # test_model_computation("brenner")
     # test_model_computation("carstensen")
     
