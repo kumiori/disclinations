@@ -368,3 +368,8 @@ def memory_usage():
     """Get the current memory usage of the Python process."""
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return mem / 1024  # Convert to MB
+
+def monitor(snes, it, norm):
+    logging.info(f"Iteration {it}, residual {norm}")
+    print(f"Iteration {it}, residual {norm}")
+    return PETSc.SNES.ConvergedReason.ITERATING

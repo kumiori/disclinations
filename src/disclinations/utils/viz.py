@@ -19,9 +19,16 @@ comm = MPI.COMM_WORLD
 # import pdb
 import pyvista
 from pyvista.plotting.utilities import xvfb
+try:
+    xvfb.start_xvfb(wait=0.05)
+    print("Xvfb started successfully.")
+except OSError as e:
+    # If Xvfb fails to start, you can handle the error here
+    print("Xvfb could not be started, proceeding without it.")
+    print(f"Error details: {e}")
 
-xvfb.start_xvfb(wait=0.05)
-
+# Enable off-screen rendering
+pyvista.OFF_SCREEN = True
 import dolfinx.plot
 import matplotlib
 import matplotlib.collections
