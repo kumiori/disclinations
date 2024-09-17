@@ -122,7 +122,17 @@ def test_model_computation(variant):
             + model.coupling_term(state)
 
     elif variant == "carstensen":
-        F = define_carstensen_form(fem, params)
+        model = NonlinearPlateFVK_carstensen(mesh, params["model"])
+        energy = model.energy(state)[0]
+
+        # Dead load (transverse)
+        model.W_ext = _W_ext
+        penalisation = model.penalisation(state)
+
+        L = energy - model.W_ext + penalisation
+        # F = ufl.derivative(L, q, ufl.TestFunction(Q))
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) \
+            + model.coupling_term(state)
     
     # 7. Set up the solver
     solver = SNESSolver(
@@ -434,27 +444,19 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         # write_to_output(prefix, q, extra_fields)
         return abs_error, rel_error 
 
-def define_brenner_form():
-    L = energy - model.W_ext + penalisation
-    F = ufl.derivative(L, self.state_function, ufl.TestFunction(self.fs)) + \
-        self.model.coupling_term(self.state_dic, 
-                                   ufl.TestFunction(self.fs)[AIRY], 
-                                   ufl.TestFunction(self.fs)[TRANSVERSE_DISP])
-
-    
-    
-    
 if __name__ == "__main__":
     from disclinations.utils import memory_usage
     import pytest
     import gc
-    # pytest.main()
     max_memory = 0
     mem_before = memory_usage()
+    
+    # pytest.main()
+    
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
-        # test_model_computation("variational")
+        test_model_computation("variational")
         test_model_computation("brenner")
-        # test_model_computation("carstensen")
+        test_model_computation("carstensen")
 
     mem_after = memory_usage()
     max_memory = max(max_memory, mem_after)

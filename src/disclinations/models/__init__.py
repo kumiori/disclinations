@@ -202,22 +202,27 @@ class NonlinearPlateFVK_carstensen(NonlinearPlateFVK):
     def coupling_term(self, state):
         v = state["v"]
         w = state["w"]
+        # w_function_space = w.ufl_operands[0].ufl_function_space()
+        # v_function_space = v.ufl_operands[0].ufl_function_space()
+        _function_space = v.ufl_operands[0].ufl_function_space()
+        _test = ufl.TestFunction(_function_space)
+
+        # Split the test function into subspaces for _w_test and _v_test
+        _w_test, _v_test = ufl.split(_test)
         
         dx = ufl.Measure("dx")
         dS = ufl.Measure("dS")
         ds = ufl.Measure("ds")
         
         n = ufl.FacetNormal(self.mesh)
+
+        coupling_bnd_edge = lambda f1, f2, test: dot(dot(self.σ(f1),grad(f2)), n) * test * ds
+
+        cw_bulk = - self.bracket(w,v) * _w_test * dx
+        cw_bnd_edges = 0.5*coupling_bnd_edge(v, w, _w_test) + 0.5*coupling_bnd_edge(w, v, _w_test)
+
+        cv_bulk = - 0.5*self.bracket(w,w) * _v_test * dx
+        cv_bnd_edges = 0.5*coupling_bnd_edge(w, w, _v_test)
         
-        coupling_in_edge = lambda f1, f2, test_func: ( dot(dot(avg(self.σ(f1)),grad(f2('+'))), n('+')) + dot(dot(avg(self.σ(f1)),grad(f2('-'))), n('-')) )* avg(test_func) * dS
-        coupling_bnd_edge = lambda f1, f2, test_func: dot(dot(self.σ(f1),grad(f2)), n) * test_func * ds
-
-        cw_bulk = - self.bracket(w,v) * test_func_w * dx
-        cw_in_edges = 0.5*coupling_in_edge(v, w, test_func_w) + 0.5*coupling_in_edge(w, v, test_func_w)
-        cw_bnd_edges = 0.5*coupling_bnd_edge(v, w, test_func_w) + 0.5*coupling_bnd_edge(w, v, test_func_w)
-
-        cv_bulk = - 0.5*self.bracket(w,w) * test_func_v * dx
-        cv_in_edges = 0.5*coupling_in_edge(w, w, test_func_v)
-        cv_bnd_edges = 0.5*coupling_bnd_edge(w, w, test_func_v)
-
-        return cw_bulk + cv_bulk + cw_bnd_edges + cv_bnd_edges + cv_in_edges + cw_in_edges
+        return cw_bulk + cv_bulk + cw_bnd_edges + cv_bnd_edges
+    
