@@ -9,8 +9,12 @@ import sys
 from pathlib import Path
 from dolfinx.io import XDMFFile, gmshio
 from disclinations.meshes.primitives import mesh_circle_gmshapi
-from dolfinx.fem import locate_dofs_topological, dirichletbc
+from dolfinx.fem import locate_dofs_topological, dirichletbc, Constant
+from disclinations.utils.la import compute_disclination_loads
+from disclinations.utils import monitor
+from disclinations.solvers import SNESSolver
 
+from disclinations.models import NonlinearPlateFVK
 import dolfinx
 from dolfinx import fem
 
@@ -78,16 +82,47 @@ def test_model_computation(model):
     # 5. Initialize exact solutions (for comparison later)
     exact_solution = initialise_exact_solution(Q, params)
     
+    q = dolfinx.fem.Function(Q)
+    v, w = ufl.split(q)
+    state = {"v": v, "w": w}
+    
     # 6. Define variational form (depends on the model)
     if model == "variational":
-        form = define_variational_form(fem, params)
+        # Define the variational problem
+        model = NonlinearPlateFVK(mesh, params["model"])
+        energy = model.energy(state)[0]
+
+        # Dead load (transverse)
+        W_ext = Constant(mesh, np.array(0., dtype=PETSc.ScalarType)) * w * dx
+        penalisation = model.penalisation(state)
+
+        # Define the functional
+        L = energy - W_ext + penalisation
+
+        Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
+        b = compute_disclination_loads(disclinations, params["loading"]["signs"],
+                                       Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)    
+
+        F = ufl.derivative(L, q, ufl.TestFunction(Q))
+
     elif model == "brenner":
-        form = define_brenner_form(fem, params)
+        F = define_brenner_form(fem, params)
     elif model == "carstensen":
-        form = define_carstensen_form(fem, params)
+        F = define_carstensen_form(fem, params)
     
     # 7. Set up the solver
-    solver = setup_solver(form, fem, boundary_conditions)
+
+    solver = SNESSolver(
+        F_form=F,
+        u=q,
+        bcs=boundary_conditions,
+        petsc_options=params["solvers"]["elasticity"]["snes"],
+        prefix='plate_fvk_disclinations',
+        b0=b.vector,
+        monitor=monitor,
+    )
+
+    solver.solve()    
     save_params_to_yaml(params, "params_with_scaling.yml")
     
     # 8. Solve
