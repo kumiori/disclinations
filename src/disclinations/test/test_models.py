@@ -1,45 +1,51 @@
-import pytest
-import disclinations
-
+import gc
+import hashlib
 import json
 import logging
 import os
 import pdb
 import sys
 from pathlib import Path
-from dolfinx.io import XDMFFile, gmshio
-from disclinations.meshes.primitives import mesh_circle_gmshapi
-from dolfinx.fem import locate_dofs_topological, dirichletbc, Constant
-from disclinations.utils.la import compute_disclination_loads
-from disclinations.utils import monitor
-from disclinations.solvers import SNESSolver
-from disclinations.utils import write_to_output
-import hashlib
-from disclinations.utils import table_timing_data, Visualisation
-from dolfinx.common import list_timings
-
-from disclinations.models import NonlinearPlateFVK, NonlinearPlateFVK_brenner, NonlinearPlateFVK_carstensen
-import dolfinx
-from dolfinx import fem
 
 import basix
+import disclinations
+import dolfinx
 import numpy as np
 import petsc4py
-from petsc4py import PETSc
+import pytest
 import ufl
 import yaml
-from mpi4py import MPI
-comm = MPI.COMM_WORLD
-from ufl import (
-    CellDiameter,
-    FacetNormal,
-    dx,
+from disclinations.meshes.primitives import mesh_circle_gmshapi
+from disclinations.models import (
+    NonlinearPlateFVK,
+    NonlinearPlateFVK_brenner,
+    NonlinearPlateFVK_carstensen,
 )
+from disclinations.solvers import SNESSolver
+from disclinations.utils import (
+    Visualisation,
+    memory_usage,
+    monitor,
+    table_timing_data,
+    write_to_output,
+)
+from disclinations.utils.la import compute_disclination_loads
+from dolfinx import fem
+from dolfinx.common import list_timings
+from dolfinx.fem import Constant, dirichletbc, locate_dofs_topological
+from dolfinx.io import XDMFFile, gmshio
+from mpi4py import MPI
+from petsc4py import PETSc
+
+comm = MPI.COMM_WORLD
+from ufl import CellDiameter, FacetNormal, dx
+
 models = ["variational", "brenner", "carstensen"]
 outdir = "output"
 
 AIRY = 0
 TRANSVERSE = 1
+
 
 @pytest.mark.parametrize("variant", models)
 def test_model_computation(variant):
@@ -47,7 +53,7 @@ def test_model_computation(variant):
     Parametric unit test for testing three different models:
     variational, brenner, and carstensen.
     """
-    
+
     # 1. Load parameters from YML file
     params, signature = load_parameters(f"parameters.yml")
     params = calculate_rescaling_factors(params)
@@ -58,43 +64,50 @@ def test_model_computation(variant):
     if comm.rank == 0:
         Path(prefix).mkdir(parents=True, exist_ok=True)
 
-    mesh, mts, fts = create_or_load_mesh(params, prefix = prefix)
-    
+    mesh, mts, fts = create_or_load_mesh(params, prefix=prefix)
+
     # 3. Construct FEM approximation
     h = CellDiameter(mesh)
     n = FacetNormal(mesh)
 
     # Function spaces
 
-    X = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"]) 
+    X = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"])
     Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
-    V_P1 = dolfinx.fem.functionspace(mesh, ("CG", 1))  # "CG" stands for continuous Galerkin (Lagrange)
+    V_P1 = dolfinx.fem.functionspace(
+        mesh, ("CG", 1)
+    )  # "CG" stands for continuous Galerkin (Lagrange)
 
-    DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), params["model"]["order"]-2)
+    DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), params["model"]["order"] - 2)
     DG = dolfinx.fem.functionspace(mesh, DG_e)
 
-    T_e = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"]-2)
+    T_e = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"] - 2)
     T = dolfinx.fem.functionspace(mesh, T_e)
 
     # 4. Construct boundary conditions
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
-    
-    disclinations, params = create_disclinations(mesh, params,
-                                         points=[-0.0, 0.0, 0],
-                                         signs=[1.])
+
+    disclinations, params = create_disclinations(
+        mesh, params, points=[-0.0, 0.0, 0], signs=[1.0]
+    )
     # 5. Initialize exact solutions (for comparison later)
     exact_solution = initialise_exact_solution(Q, params)
-    
+
     q = dolfinx.fem.Function(Q)
     v, w = ufl.split(q)
     state = {"v": v, "w": w}
-    _W_ext = W_ext = Constant(mesh, np.array(0., dtype=PETSc.ScalarType)) * w * dx
+    _W_ext = W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w * dx
     # Define the variational problem
 
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
-    b = compute_disclination_loads(disclinations, params["loading"]["signs"],
-                                    Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)    
+    b = compute_disclination_loads(
+        disclinations,
+        params["loading"]["signs"],
+        Q,
+        V_sub_to_V_dofs=Q_v_to_Q_dofs,
+        V_sub=Q_v,
+    )
 
     # 6. Define variational form (depends on the model)
     if variant == "variational":
@@ -118,8 +131,7 @@ def test_model_computation(variant):
 
         L = energy - model.W_ext + penalisation
         # F = ufl.derivative(L, q, ufl.TestFunction(Q))
-        F = ufl.derivative(L, q, ufl.TestFunction(Q)) \
-            + model.coupling_term(state)
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state)
 
     elif variant == "carstensen":
         model = NonlinearPlateFVK_carstensen(mesh, params["model"])
@@ -131,39 +143,42 @@ def test_model_computation(variant):
 
         L = energy - model.W_ext + penalisation
         # F = ufl.derivative(L, q, ufl.TestFunction(Q))
-        F = ufl.derivative(L, q, ufl.TestFunction(Q)) \
-            + model.coupling_term(state)
-    
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state)
+
     # 7. Set up the solver
     solver = SNESSolver(
         F_form=F,
         u=q,
         bcs=boundary_conditions,
         petsc_options=params["solvers"]["elasticity"]["snes"],
-        prefix='plate_fvk_disclinations',
+        prefix="plate_fvk_disclinations",
         b0=b.vector,
         monitor=monitor,
     )
 
-    solver.solve()    
+    solver.solve()
     save_params_to_yaml(params, "params_with_scaling.yml")
-    
+
     # 8. Solve
     solver.solve()
-    
+
     # 9. Postprocess (if any)
-    abs_error, rel_error = postprocess(state, model, mesh, 
-                params=params, exact_solution=exact_solution, prefix=prefix)
-    
+    abs_error, rel_error = postprocess(
+        state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
+    )
+
     # 10. Compute absolute and relative error with respect to the exact solution
     # abs_error, rel_error = compute_error(solution, exact_solution)
-    
+
     # # 11. Display error results
     # print(f"Model: {model}, Absolute Error: {abs_error}, Relative Error: {rel_error}")
-    
+
     # 12. Assert that the relative error is within an acceptable range
     rel_tol = float(params["solvers"]["elasticity"]["snes"]["snes_rtol"])
-    assert rel_error < rel_tol, f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
+    assert (
+        rel_error < rel_tol
+    ), f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
+
 
 def load_parameters(file_path):
     """
@@ -183,15 +198,16 @@ def load_parameters(file_path):
 
     return parameters, signature
 
+
 def create_or_load_mesh(parameters, prefix):
     """
     Create a new mesh if it doesn't exist, otherwise load the existing one.
-    
+
     Args:
     - parameters (dict): A dictionary containing the geometry and mesh parameters.
     - comm (MPI.Comm): MPI communicator.
     - outdir (str): Directory to store the mesh file.
-    
+
     Returns:
     - mesh: The generated or loaded mesh.
     - mts: Mesh topology data structure.
@@ -204,11 +220,9 @@ def create_or_load_mesh(parameters, prefix):
     geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
     sha_hash = hashlib.sha256(geometry_json.encode()).hexdigest()
 
-    
     # Set up file prefix for mesh storage
     mesh_file_path = f"{prefix}/mesh-{sha_hash}.xdmf"
     with dolfinx.common.Timer("~Mesh Generation") as timer:
-        
         # Check if the mesh file already exists
         if os.path.exists(mesh_file_path):
             print("Loading existing mesh...")
@@ -224,25 +238,28 @@ def create_or_load_mesh(parameters, prefix):
             print("Creating new mesh...")
             model_rank = 0
             tdim = 2
-            
+
             gmsh_model, tdim = mesh_circle_gmshapi(
                 parameters["geometry"]["geom_type"], 1, mesh_size, tdim
             )
-            
+
             mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-            
+
             # Save the mesh for future use
             os.makedirs(prefix, exist_ok=True)
-            with XDMFFile(comm, mesh_file_path, "w", encoding=XDMFFile.Encoding.HDF5) as file:
+            with XDMFFile(
+                comm, mesh_file_path, "w", encoding=XDMFFile.Encoding.HDF5
+            ) as file:
                 file.write_mesh(mesh)
-        
-        return mesh, mts, fts 
-    
+
+        return mesh, mts, fts
+
+
 def homogeneous_dirichlet_bc_H20(mesh, Q):
     """
-    Apply homogeneous Dirichlet boundary conditions (H^2_0 Sobolev space) 
+    Apply homogeneous Dirichlet boundary conditions (H^2_0 Sobolev space)
     to both AIRY and TRANSVERSE fields.
-    
+
     Args:
     - mesh: The mesh of the domain.
     - Q: The function space.
@@ -252,36 +269,39 @@ def homogeneous_dirichlet_bc_H20(mesh, Q):
     """
     # Create connectivity between topological dimensions
     mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
-    
+
     # Identify the boundary facets
     bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-    
+
     # Locate DOFs for AIRY field
     dofs_v = locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
-    
+
     # Locate DOFs for TRANSVERSE field
-    dofs_w = locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
-    
+    dofs_w = locate_dofs_topological(
+        V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets
+    )
+
     # Create homogeneous Dirichlet BC (value = 0) for both fields
     bcs_v = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_v, Q.sub(AIRY))
     bcs_w = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_w, Q.sub(TRANSVERSE))
-    
+
     # Return the boundary conditions as a list
     return [bcs_v, bcs_w]
+
 
 def initialise_exact_solution(Q, params):
     """
     Initialize the exact solutions for v and w using the provided parameters.
-    
+
     Args:
     - Q: The function space.
     - params: A dictionary of parameters containing geometric properties (e.g., radius).
-    
+
     Returns:
     - v_exact: Exact solution for v.
     - w_exact: Exact solution for w.
     """
-    
+
     # Extract the necessary parameters
     radius = params["geometry"]["radius"]
     v_scale = params["model"]["v_scale"]
@@ -298,8 +318,13 @@ def initialise_exact_solution(Q, params):
 
     # Define the exact solution for v
     def _v_exact(x):
-        rq = (x[0]**2 + x[1]**2)
-        _v = _E * signs[0] / (16.0 * np.pi) * (rq * np.log(rq / radius**2) - rq + radius**2)
+        rq = x[0] ** 2 + x[1] ** 2
+        _v = (
+            _E
+            * signs[0]
+            / (16.0 * np.pi)
+            * (rq * np.log(rq / radius**2) - rq + radius**2)
+        )
         return _v * v_scale  # Apply scaling
 
     # Define the exact solution for w
@@ -312,13 +337,14 @@ def initialise_exact_solution(Q, params):
 
     return v_exact, w_exact
 
+
 def calculate_rescaling_factors(params):
     """
     Calculate rescaling factors and store them in the params dictionary.
-    
+
     Args:
     - params (dict): Dictionary containing geometry, material, and model parameters.
-    
+
     Returns:
     - params (dict): Updated dictionary with rescaling factors.
     """
@@ -339,18 +365,20 @@ def calculate_rescaling_factors(params):
 
     return params
 
+
 def save_params_to_yaml(params, filename):
     """
     Save the updated params dictionary to a YAML file.
-    
+
     Args:
     - params (dict): Dictionary containing all parameters.
     - filename (str): Path to the YAML file to save.
     """
-    with open(filename, 'w') as file:
+    with open(filename, "w") as file:
         yaml.dump(params, file, default_flow_style=False)
 
-def create_disclinations(mesh, params, points=[0., 0., 0.], signs=[1.]):
+
+def create_disclinations(mesh, params, points=[0.0, 0.0, 0.0], signs=[1.0]):
     """
     Create disclinations based on the list of points and signs or the params dictionary.
 
@@ -367,7 +395,12 @@ def create_disclinations(mesh, params, points=[0., 0., 0.], signs=[1.]):
     """
 
     # Check if "loading" exists in the parameters and contains "points" and "signs"
-    if "loading" in params and params["loading"] is not None and "points" in params["loading"] and "signs" in params["loading"]:
+    if (
+        "loading" in params
+        and params["loading"] is not None
+        and "points" in params["loading"]
+        and "signs" in params["loading"]
+    ):
         # Use points and signs from the params dictionary
         points = params["loading"]["points"]
         signs = params["loading"]["signs"]
@@ -380,29 +413,31 @@ def create_disclinations(mesh, params, points=[0., 0., 0.], signs=[1.]):
     # Handle the case where rank is not 0 (for distributed computing)
     if mesh.comm.rank == 0:
         # Convert the points into a numpy array with the correct dtype from the mesh geometry
-        disclinations = [np.array([point], dtype=mesh.geometry.x.dtype) for point in points]
+        disclinations = [
+            np.array([point], dtype=mesh.geometry.x.dtype) for point in points
+        ]
     else:
         # If not rank 0, return empty arrays for parallel processing
         disclinations = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype) for _ in points]
 
     return disclinations, params
 
+
 def compute_energy_terms(energy_components, comm):
     """Assemble and sum energy terms over all processes."""
     computed_energy_terms = {
         label: comm.allreduce(
-            dolfinx.fem.assemble_scalar(
-                dolfinx.fem.form(energy_term)
-            ),
+            dolfinx.fem.assemble_scalar(dolfinx.fem.form(energy_term)),
             op=MPI.SUM,
         )
         for label, energy_term in energy_components.items()
     }
     return computed_energy_terms
 
+
 def print_energy_analysis(energy_terms, exact_energy_monopole):
     """Print computed energy vs exact energy analysis."""
-    computed_membrane_energy = energy_terms['membrane']
+    computed_membrane_energy = energy_terms["membrane"]
     error = np.abs(exact_energy_monopole - computed_membrane_energy)
 
     print(f"Exact energy: {exact_energy_monopole}")
@@ -410,49 +445,55 @@ def print_energy_analysis(energy_terms, exact_energy_monopole):
     print(f"Abs error: {error:.3%}")
     print(f"Rel error: {error/exact_energy_monopole:.3%}")
 
-    return error, error/exact_energy_monopole
+    return error, error / exact_energy_monopole
+
 
 def postprocess(state, model, mesh, params, exact_solution, prefix):
-    
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-        energy_components = {"bending": model.energy(state)[1],
-        "membrane": model.energy(state)[2],
-        "coupling": model.energy(state)[3],
-        "external_work": -model.W_ext}
-    
+        energy_components = {
+            "bending": model.energy(state)[1],
+            "membrane": model.energy(state)[2],
+            "coupling": model.energy(state)[3],
+            "external_work": -model.W_ext,
+        }
+
         energy_terms = compute_energy_terms(energy_components, mesh.comm)
 
-        exact_energy_monopole = params["model"]["E"] * params["geometry"]["radius"] ** 2 / (32 * np.pi)
+        exact_energy_monopole = (
+            params["model"]["E"] * params["geometry"]["radius"] ** 2 / (32 * np.pi)
+        )
         print(yaml.dump(params["model"], default_flow_style=False))
-        abs_error, rel_error = print_energy_analysis(energy_terms, exact_energy_monopole)
-        
+        abs_error, rel_error = print_energy_analysis(
+            energy_terms, exact_energy_monopole
+        )
+
         _v_exact, _w_exact = exact_solution
         extra_fields = [
-            {'field': _v_exact, 'name': 'v_exact'},
-            {'field': _w_exact, 'name': 'w_exact'},
+            {"field": _v_exact, "name": "v_exact"},
+            {"field": _w_exact, "name": "w_exact"},
             {
-                'field': model.M(state["w"]),  # Tensor expression
-                'name': 'M',
-                'components': 'tensor',
+                "field": model.M(state["w"]),  # Tensor expression
+                "name": "M",
+                "components": "tensor",
             },
             {
-                'field': model.P(state["v"]),  # Tensor expression
-                'name': 'P',
-                'components': 'tensor',
-            }
+                "field": model.P(state["v"]),  # Tensor expression
+                "name": "P",
+                "components": "tensor",
+            },
         ]
         # write_to_output(prefix, q, extra_fields)
-        return abs_error, rel_error 
+        return abs_error, rel_error
+
 
 if __name__ == "__main__":
-    from disclinations.utils import memory_usage
-    import pytest
-    import gc
+    logging.basicConfig(level=logging.INFO)
+
     max_memory = 0
     mem_before = memory_usage()
-    
+
     # pytest.main()
-    
+
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
         test_model_computation("variational")
         test_model_computation("brenner")
@@ -464,4 +505,3 @@ if __name__ == "__main__":
     gc.collect()
     timings = table_timing_data()
     list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])
-    
