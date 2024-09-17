@@ -9,16 +9,29 @@ import sys
 from pathlib import Path
 from dolfinx.io import XDMFFile, gmshio
 from disclinations.meshes.primitives import mesh_circle_gmshapi
+from dolfinx.fem import locate_dofs_topological, dirichletbc
 
 import dolfinx
+from dolfinx import fem
+
+import basix
 import numpy as np
 import petsc4py
+from petsc4py import PETSc
 import ufl
 import yaml
 from mpi4py import MPI
 comm = MPI.COMM_WORLD
-
+from ufl import (
+    CellDiameter,
+    FacetNormal,
+    dx,
+)
 models = ["variational", "brenner", "carstensen"]
+outdir = "output"
+
+AIRY = 0
+TRANSVERSE = 1
 
 @pytest.mark.parametrize("model", models)
 def test_model_computation(model):
@@ -28,20 +41,53 @@ def test_model_computation(model):
     """
     
     # 1. Load parameters from YML file
-    params = load_parameters(f"parameters.yml")
+    params, signature = load_parameters(f"parameters.yml")
+    params = calculate_rescaling_factors(params)
+
     # params = load_parameters(f"{model}_params.yml")
-    
     # 2. Construct or load mesh
-    mesh = create_or_load_mesh(params)
+    prefix = os.path.join(outdir, "plate_fvk_disclinations_monopole")
+    if comm.rank == 0:
+        Path(prefix).mkdir(parents=True, exist_ok=True)
+
+    mesh = create_or_load_mesh(params, prefix = prefix)
     
     # 3. Construct FEM approximation
-    fem = setup_fem(mesh, params["fem_degree"])
-    
+
+    h = CellDiameter(mesh)
+    n = FacetNormal(mesh)
+
+    # Function spaces
+
+    X = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"]) 
+    Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
+
+    V_P1 = dolfinx.fem.functionspace(mesh, ("CG", 1))  # "CG" stands for continuous Galerkin (Lagrange)
+
+    DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), params["model"]["order"]-2)
+    DG = dolfinx.fem.functionspace(mesh, DG_e)
+
+    T_e = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"]-2)
+    T = dolfinx.fem.functionspace(mesh, T_e)
+
+
+    # Material parameters
+    nu = params["model"]["nu"]
+    # _h = params["model"]["thickness"]
+    thickness = params["model"]["thickness"]
+    _E = params["model"]["E"]
+    _D = _E * thickness**3 / (12 * (1 - nu**2))
+
+    w_scale = np.sqrt(2*_D/(_E*thickness))
+    v_scale = _D
+    # p_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
+    f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
+
     # 4. Construct boundary conditions
-    boundary_conditions = setup_boundary_conditions(mesh, params["boundary_conditions"])
+    boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
     
     # 5. Initialize exact solutions (for comparison later)
-    exact_solution = initialize_exact_solution(params["exact_solution"])
+    exact_solution = initialise_exact_solution(params)
     
     # 6. Define variational form (depends on the model)
     if model == "variational":
@@ -53,6 +99,7 @@ def test_model_computation(model):
     
     # 7. Set up the solver
     solver = setup_solver(form, fem, boundary_conditions)
+    save_params_to_yaml(params, "params_with_scaling.yml")
     
     # 8. Solve
     solution = solver.solve()
@@ -88,7 +135,7 @@ def load_parameters(file_path):
 
     return parameters, signature
 
-def create_or_load_mesh(parameters, comm, outdir):
+def create_or_load_mesh(parameters, prefix):
     """
     Create a new mesh if it doesn't exist, otherwise load the existing one.
     
@@ -108,7 +155,6 @@ def create_or_load_mesh(parameters, comm, outdir):
     parameters["geometry"]["geom_type"] = "circle"
     
     # Set up file prefix for mesh storage
-    prefix = os.path.join(outdir, "plate_fvk_disclinations_monopole")
     mesh_file_path = f"{prefix}/fields.xdmf"
     
     # Check if the mesh file already exists
@@ -138,3 +184,121 @@ def create_or_load_mesh(parameters, comm, outdir):
             file.write_mesh(mesh)
         
         return mesh, mts, fts 
+    
+def homogeneous_dirichlet_bc_H20(mesh, Q):
+    """
+    Apply homogeneous Dirichlet boundary conditions (H^2_0 Sobolev space) 
+    to both AIRY and TRANSVERSE fields.
+    
+    Args:
+    - mesh: The mesh of the domain.
+    - Q: The function space.
+
+    Returns:
+    - A list of boundary conditions (bcs) for the problem.
+    """
+    # Create connectivity between topological dimensions
+    mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
+    
+    # Identify the boundary facets
+    bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
+    
+    # Locate DOFs for AIRY field
+    dofs_v = locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
+    
+    # Locate DOFs for TRANSVERSE field
+    dofs_w = locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
+    
+    # Create homogeneous Dirichlet BC (value = 0) for both fields
+    bcs_v = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_v, Q.sub(AIRY))
+    bcs_w = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_w, Q.sub(TRANSVERSE))
+    
+    # Return the boundary conditions as a list
+    return [bcs_v, bcs_w]
+
+def initialize_exact_solution(Q, params):
+    """
+    Initialize the exact solutions for v and w using the provided parameters.
+    
+    Args:
+    - Q: The function space.
+    - params: A dictionary of parameters containing geometric properties (e.g., radius).
+    
+    Returns:
+    - v_exact: Exact solution for v.
+    - w_exact: Exact solution for w.
+    """
+    
+    # Extract the necessary parameters
+    radius = params["geometry"]["radius"]
+    v_scale = params["model"]["v_scale"]
+    _E = params["material"]["E"]
+    thickness = params["geometry"]["thickness"]
+    signs = params["model"]["signs"]
+
+    # Create function placeholders for the exact solutions in the function space Q
+    v_exact = fem.Function(Q.sub(0))  # Assuming v is in the first component of Q
+    w_exact = fem.Function(Q.sub(1))  # Assuming w is in the second component of Q
+
+    # Define the exact solution for v
+    def _v_exact(x):
+        rq = (x[0]**2 + x[1]**2)
+        _v = _E * signs[0] / (16.0 * np.pi) * (rq * np.log(rq / radius**2) - rq + radius**2)
+        return _v * v_scale  # Apply scaling
+
+    # Define the exact solution for w
+    def _w_exact(x):
+        return 0.0 * x[0]  # Zero function as per your code
+
+    # Interpolate the exact solutions over the mesh
+    v_exact.interpolate(_v_exact)
+    w_exact.interpolate(_w_exact)
+
+    return v_exact, w_exact
+
+
+def calculate_rescaling_factors(params):
+    """
+    Calculate rescaling factors and store them in the params dictionary.
+    
+    Args:
+    - params (dict): Dictionary containing geometry, material, and model parameters.
+    
+    Returns:
+    - params (dict): Updated dictionary with rescaling factors.
+    """
+    # Extract necessary parameters
+    _E = params["material"]["E"]
+    _D = params["model"]["D"]
+    thickness = params["geometry"]["thickness"]
+
+    # Calculate rescaling factors
+    w_scale = np.sqrt(2 * _D / (_E * thickness))
+    v_scale = _D
+    f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
+    
+    # Store rescaling factors in the params dictionary
+    params["model"]["w_scale"] = w_scale
+    params["model"]["v_scale"] = v_scale
+    params["model"]["f_scale"] = f_scale
+
+    return params
+
+def save_params_to_yaml(params, filename):
+    """
+    Save the updated params dictionary to a YAML file.
+    
+    Args:
+    - params (dict): Dictionary containing all parameters.
+    - filename (str): Path to the YAML file to save.
+    """
+    with open(filename, 'w') as file:
+        yaml.dump(params, file, default_flow_style=False)
+
+if __name__ == "__main__":
+    import pytest
+    # pytest.main()
+    
+    test_model_computation("variational")
+    # test_model_computation("brenner")
+    # test_model_computation("carstensen")
