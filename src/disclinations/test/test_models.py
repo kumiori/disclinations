@@ -50,10 +50,9 @@ def test_model_computation(model):
     if comm.rank == 0:
         Path(prefix).mkdir(parents=True, exist_ok=True)
 
-    mesh = create_or_load_mesh(params, prefix = prefix)
+    mesh, mts, fts = create_or_load_mesh(params, prefix = prefix)
     
     # 3. Construct FEM approximation
-
     h = CellDiameter(mesh)
     n = FacetNormal(mesh)
 
@@ -70,24 +69,14 @@ def test_model_computation(model):
     T_e = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"]-2)
     T = dolfinx.fem.functionspace(mesh, T_e)
 
-
-    # Material parameters
-    nu = params["model"]["nu"]
-    # _h = params["model"]["thickness"]
-    thickness = params["model"]["thickness"]
-    _E = params["model"]["E"]
-    _D = _E * thickness**3 / (12 * (1 - nu**2))
-
-    w_scale = np.sqrt(2*_D/(_E*thickness))
-    v_scale = _D
-    # p_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
-    f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
-
     # 4. Construct boundary conditions
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
     
+    disclinations, params = create_disclinations(mesh, params,
+                                         points=[-0.0, 0.0, 0],
+                                         signs=[1.])
     # 5. Initialize exact solutions (for comparison later)
-    exact_solution = initialise_exact_solution(params)
+    exact_solution = initialise_exact_solution(Q, params)
     
     # 6. Define variational form (depends on the model)
     if model == "variational":
@@ -162,7 +151,8 @@ def create_or_load_mesh(parameters, prefix):
         print("Loading existing mesh...")
         with XDMFFile(comm, mesh_file_path, "r") as file:
             mesh = file.read_mesh()
-            mts = file.read_meshtags(mesh, "facet")  # Assuming facet tags are needed
+            mts = None  # Assuming facet tags are needed
+            # mts = file.read_meshtags(mesh, "facet")  # Assuming facet tags are needed
             fts = None  # Modify as needed if facet topology structure is available
         return mesh, mts, fts
 
@@ -216,7 +206,7 @@ def homogeneous_dirichlet_bc_H20(mesh, Q):
     # Return the boundary conditions as a list
     return [bcs_v, bcs_w]
 
-def initialize_exact_solution(Q, params):
+def initialise_exact_solution(Q, params):
     """
     Initialize the exact solutions for v and w using the provided parameters.
     
@@ -232,13 +222,16 @@ def initialize_exact_solution(Q, params):
     # Extract the necessary parameters
     radius = params["geometry"]["radius"]
     v_scale = params["model"]["v_scale"]
-    _E = params["material"]["E"]
-    thickness = params["geometry"]["thickness"]
-    signs = params["model"]["signs"]
+    _E = params["model"]["E"]
+    thickness = params["model"]["h"]
+    signs = params["loading"]["signs"]
+
+    q_exact = dolfinx.fem.Function(Q)
+    v_exact, w_exact = q_exact.split()
 
     # Create function placeholders for the exact solutions in the function space Q
-    v_exact = fem.Function(Q.sub(0))  # Assuming v is in the first component of Q
-    w_exact = fem.Function(Q.sub(1))  # Assuming w is in the second component of Q
+    # v_exact = fem.Function(Q.sub(0).collapse())  # Assuming v is in the first component of Q
+    # w_exact = fem.Function(Q.sub(1).collapse())  # Assuming w is in the second component of Q
 
     # Define the exact solution for v
     def _v_exact(x):
@@ -256,7 +249,6 @@ def initialize_exact_solution(Q, params):
 
     return v_exact, w_exact
 
-
 def calculate_rescaling_factors(params):
     """
     Calculate rescaling factors and store them in the params dictionary.
@@ -268,9 +260,9 @@ def calculate_rescaling_factors(params):
     - params (dict): Updated dictionary with rescaling factors.
     """
     # Extract necessary parameters
-    _E = params["material"]["E"]
+    _E = params["model"]["E"]
     _D = params["model"]["D"]
-    thickness = params["geometry"]["thickness"]
+    thickness = params["model"]["h"]
 
     # Calculate rescaling factors
     w_scale = np.sqrt(2 * _D / (_E * thickness))
@@ -294,6 +286,43 @@ def save_params_to_yaml(params, filename):
     """
     with open(filename, 'w') as file:
         yaml.dump(params, file, default_flow_style=False)
+
+def create_disclinations(mesh, params, points=[0., 0., 0.], signs=[1.]):
+    """
+    Create disclinations based on the list of points and signs or the params dictionary.
+
+    Args:
+    - mesh: The mesh object, used to determine the data type for points.
+    - points: A list of 3D coordinates (x, y, z) representing the disclination points.
+    - signs: A list of signs (+1., -1.) associated with each point.
+    - params: A dictionary containing model parameters, possibly including loading points and signs.
+
+    Returns:
+    - disclinations: A list of disclination points (coordinates).
+    - signs: The same list of signs associated with each point.
+    - params: Updated params dictionary with disclinations if not already present.
+    """
+
+    # Check if "loading" exists in the parameters and contains "points" and "signs"
+    if "loading" in params and params["loading"] is not None and "points" in params["loading"] and "signs" in params["loading"]:
+        # Use points and signs from the params dictionary
+        points = params["loading"]["points"]
+        signs = params["loading"]["signs"]
+        print("Using points and signs from params dictionary.")
+    else:
+        # Otherwise, add the provided points and signs to the params dictionary
+        print("Using provided points and signs, adding them to the params dictionary.")
+        params["loading"] = {"points": points, "signs": signs}
+
+    # Handle the case where rank is not 0 (for distributed computing)
+    if mesh.comm.rank == 0:
+        # Convert the points into a numpy array with the correct dtype from the mesh geometry
+        disclinations = [np.array([point], dtype=mesh.geometry.x.dtype) for point in points]
+    else:
+        # If not rank 0, return empty arrays for parallel processing
+        disclinations = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype) for _ in points]
+
+    return disclinations, params
 
 if __name__ == "__main__":
     import pytest
