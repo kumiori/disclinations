@@ -15,6 +15,7 @@ from petsc4py import PETSc
 from dolfinx.io import XDMFFile
 import dolfinx
 import ufl
+from dolfinx.fem import dirichletbc, locate_dofs_topological
 
 comm = MPI.COMM_WORLD
 
@@ -211,6 +212,25 @@ def table_timing_data(tasks=None):
     df = pd.DataFrame(timing_data, columns=["reps", "wall tot", "usr", "sys"], index=tasks)
 
     return df
+
+
+def load_parameters(file_path):
+    """
+    Load parameters from a YAML file.
+
+    Args:
+        file_path (str): Path to the YAML parameter file.
+
+    Returns:
+        dict: Loaded parameters.
+    """
+    import hashlib
+
+    with open(file_path) as f:
+        parameters = yaml.load(f, Loader=yaml.FullLoader)
+    signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
+
+    return parameters, signature
 
 def save_parameters(parameters, prefix):
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
@@ -417,13 +437,11 @@ def write_to_output(prefix, q, extra_fields = {}):
                 interpolate_and_write(file, interpolation, field, name)
         __import__('pdb').set_trace()
 
-
 def interpolate_and_write(file, interpolation, field, name):
     """Interpolate a field to V_P1 and write it to an XDMF file."""
     interpolation.interpolate(field)
     interpolation.name = name
     file.write_function(interpolation)
-
 
 def write_tensor_components(file, interpolation, tensor_expr, tensor_name):
     """Interpolate and write specified components of a tensor expression."""
@@ -443,3 +461,51 @@ def write_tensor_components(file, interpolation, tensor_expr, tensor_name):
         interpolation.name = f"{tensor_name}{comp_name}"
         # Write to file
         file.write_function(interpolation)
+
+AIRY = 0
+TRANSVERSE = 1
+
+def homogeneous_dirichlet_bc_H20(mesh, Q):
+    """
+    Apply homogeneous Dirichlet boundary conditions (H^2_0 Sobolev space)
+    to both AIRY and TRANSVERSE fields.
+
+    Args:
+    - mesh: The mesh of the domain.
+    - Q: The function space.
+
+    Returns:
+    - A list of boundary conditions (bcs) for the problem.
+    """
+    # Create connectivity between topological dimensions
+    mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
+
+    # Identify the boundary facets
+    bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
+
+    # Locate DOFs for AIRY field
+    dofs_v = locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
+
+    # Locate DOFs for TRANSVERSE field
+    dofs_w = locate_dofs_topological(
+        V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets
+    )
+
+    # Create homogeneous Dirichlet BC (value = 0) for both fields
+    bcs_v = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_v, Q.sub(AIRY))
+    bcs_w = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_w, Q.sub(TRANSVERSE))
+
+    # Return the boundary conditions as a list
+    return [bcs_v, bcs_w]
+
+def save_params_to_yaml(params, filename):
+    """
+    Save the updated params dictionary to a YAML file.
+
+    Args:
+    - params (dict): Dictionary containing all parameters.
+    - filename (str): Path to the YAML file to save.
+    """
+    with open(filename, "w") as file:
+        yaml.dump(params, file, default_flow_style=False)
+

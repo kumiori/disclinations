@@ -27,6 +27,23 @@ The numerical experiments are conducted to:
 - Study the influence of the thickness on the stress distribution in the plates.
 - Validate the numerical results against analytical solutions where possible.
 
+
+    - fixed mesh
+    - for each thickness value
+    - prepare data structures
+    - save parameters
+    - scaling factors (w, v, f, f0, beta)
+    - generate the mesh
+    - variational formulation
+    - compute disclination loads
+    - compute exact displacements
+    - boundary conditions
+    - material model (parameters)
+    - energy and penalisation
+    - solver
+    - solve
+    - output (save)
+
 ## Repository Structure
 
 - **output/**: Directory for storing visualisations and analysis results.

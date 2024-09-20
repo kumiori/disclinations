@@ -4,6 +4,8 @@ import basix
 import dolfinx
 import yaml
 import os
+import numpy as np
+from mpi4py import MPI
 
 AIRY = 0
 TRANSVERSE = 1
@@ -89,6 +91,10 @@ class NonlinearPlateFVK(ToyPlateFVK):
         self.D = self.E * self.t**3 / (12*(1-self.nu**2))
         
         self.mesh = mesh
+        
+        X = basix.ufl.element("P", str(mesh.ufl_cell()), model_parameters["order"]) 
+        self.Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
+
     
     def energy(self, state):
         v = state["v"]
@@ -139,7 +145,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
         
         dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
         dg2 = lambda u: + 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
-        dgc = lambda f, g: avg(inner(W(f), outer(n, n)))*jump(grad(g), n)*dS
+        dgc = lambda w, g: avg(inner(W(w), outer(n, n)))*jump(grad(g), n)*dS
 
         # bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
         bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
@@ -168,16 +174,35 @@ class NonlinearPlateFVK(ToyPlateFVK):
         return Kappa
     
 class NonlinearPlateFVK_brenner(NonlinearPlateFVK):
-    def coupling_term(self, state):
+
+    def energy(self, state):
         v = state["v"]
         w = state["w"]
-        # w_function_space = w.ufl_operands[0].ufl_function_space()
-        # v_function_space = v.ufl_operands[0].ufl_function_space()
-        _function_space = v.ufl_operands[0].ufl_function_space()
+        dx = ufl.Measure("dx")
+
+        D = self.D
+        nu = self.nu
+        Eh = self.E*self.t
+        k_g = -D*(1-nu)
+
+
+        membrane = (1/(2*Eh) * inner(hessian(v), hessian(v)) + nu/(2*Eh) * self.bracket(v, v)) * dx
+        bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx
+        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
+        energy = bending - membrane
+
+        return energy, bending, membrane, coupling
+
+    def coupling_term(self, state, v_test, w_test):
+        v = state["v"]
+        w = state["w"]
+
+        _function_space = self.Q
         _test = ufl.TestFunction(_function_space)
 
         # Split the test function into subspaces for _w_test and _v_test
-        _w_test, _v_test = ufl.split(_test)
+        # _w_test, _v_test = ufl.split(_test)
+        # w_test, v_test = ufl.split(_test)
         
         dx = ufl.Measure("dx")
         dS = ufl.Measure("dS")
@@ -188,27 +213,26 @@ class NonlinearPlateFVK_brenner(NonlinearPlateFVK):
         coupling_in_edge = lambda f1, f2, test: ( dot(dot(avg(self.σ(f1)),grad(f2('+'))), n('+')) + dot(dot(avg(self.σ(f1)),grad(f2('-'))), n('-')) )* avg(test) * dS
         coupling_bnd_edge = lambda f1, f2, test: dot(dot(self.σ(f1),grad(f2)), n) * test * ds
 
-        cw_bulk = - self.bracket(w,v) * _w_test * dx
-        cw_in_edges = 0.5*coupling_in_edge(v, w, _w_test) + 0.5*coupling_in_edge(w, v, _w_test)
-        cw_bnd_edges = 0.5*coupling_bnd_edge(v, w, _w_test) + 0.5*coupling_bnd_edge(w, v, _w_test)
+        cw_bulk = - self.bracket(w,v) * w_test * dx
+        cw_in_edges = 0.5*coupling_in_edge(v, w, w_test) + 0.5*coupling_in_edge(w, v, w_test)
+        cw_bnd_edges = 0.5*coupling_bnd_edge(v, w, w_test) + 0.5*coupling_bnd_edge(w, v, w_test)
 
-        cv_bulk = - 0.5*self.bracket(w,w) * _v_test * dx
-        cv_in_edges = 0.5*coupling_in_edge(w, w, _v_test)
-        cv_bnd_edges = 0.5*coupling_bnd_edge(w, w, _v_test)
+        cv_bulk = - 0.5*self.bracket(w,w) * v_test * dx
+        cv_in_edges = 0.5*coupling_in_edge(w, w, v_test)
+        cv_bnd_edges = 0.5*coupling_bnd_edge(w, w, v_test)
         
         return cw_bulk + cv_bulk + cw_bnd_edges + cv_bnd_edges + cv_in_edges + cw_in_edges
     
-class NonlinearPlateFVK_carstensen(NonlinearPlateFVK):
-    def coupling_term(self, state):
+class NonlinearPlateFVK_carstensen(NonlinearPlateFVK_brenner):
+    def coupling_term(self, state, v_test, w_test):
         v = state["v"]
         w = state["w"]
-        # w_function_space = w.ufl_operands[0].ufl_function_space()
-        # v_function_space = v.ufl_operands[0].ufl_function_space()
+
         _function_space = v.ufl_operands[0].ufl_function_space()
         _test = ufl.TestFunction(_function_space)
 
         # Split the test function into subspaces for _w_test and _v_test
-        _w_test, _v_test = ufl.split(_test)
+        # _w_test, _v_test = ufl.split(_test)
         
         dx = ufl.Measure("dx")
         dS = ufl.Measure("dS")
@@ -216,13 +240,93 @@ class NonlinearPlateFVK_carstensen(NonlinearPlateFVK):
         
         n = ufl.FacetNormal(self.mesh)
 
-        coupling_bnd_edge = lambda f1, f2, test: dot(dot(self.σ(f1),grad(f2)), n) * test * ds
-
-        cw_bulk = - self.bracket(w,v) * _w_test * dx
-        cw_bnd_edges = 0.5*coupling_bnd_edge(v, w, _w_test) + 0.5*coupling_bnd_edge(w, v, _w_test)
-
-        cv_bulk = - 0.5*self.bracket(w,w) * _v_test * dx
-        cv_bnd_edges = 0.5*coupling_bnd_edge(w, w, _v_test)
+        cw_bulk = - self.bracket(w,v) * w_test * dx
+        cv_bulk = - 0.5*self.bracket(w,w) * v_test * dx
         
-        return cw_bulk + cv_bulk + cw_bnd_edges + cv_bnd_edges
-    
+        return cw_bulk + cv_bulk
+
+
+def create_disclinations(mesh, params, points=[0.0, 0.0, 0.0], signs=[1.0]):
+    """
+    Create disclinations based on the list of points and signs or the params dictionary.
+
+    Args:
+    - mesh: The mesh object, used to determine the data type for points.
+    - points: A list of 3D coordinates (x, y, z) representing the disclination points.
+    - signs: A list of signs (+1., -1.) associated with each point.
+    - params: A dictionary containing model parameters, possibly including loading points and signs.
+
+    Returns:
+    - disclinations: A list of disclination points (coordinates).
+    - signs: The same list of signs associated with each point.
+    - params: Updated params dictionary with disclinations if not already present.
+    """
+
+    # Check if "loading" exists in the parameters and contains "points" and "signs"
+    if (
+        "loading" in params
+        and params["loading"] is not None
+        and "points" in params["loading"]
+        and "signs" in params["loading"]
+    ):
+        # Use points and signs from the params dictionary
+        points = params["loading"]["points"]
+        signs = params["loading"]["signs"]
+        print("Using points and signs from params dictionary.")
+    else:
+        # Otherwise, add the provided points and signs to the params dictionary
+        print("Using provided points and signs, adding them to the params dictionary.")
+        params["loading"] = {"points": points, "signs": signs}
+
+    # Handle the case where rank is not 0 (for distributed computing)
+    if mesh.comm.rank == 0:
+        # Convert the points into a numpy array with the correct dtype from the mesh geometry
+        disclinations = [
+            np.array([point], dtype=mesh.geometry.x.dtype) for point in points
+        ]
+    else:
+        # If not rank 0, return empty arrays for parallel processing
+        disclinations = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype) for _ in points]
+
+    return disclinations, params
+
+
+def compute_energy_terms(energy_components, comm):
+    """Assemble and sum energy terms over all processes."""
+    computed_energy_terms = {
+        label: comm.allreduce(
+            dolfinx.fem.assemble_scalar(dolfinx.fem.form(energy_term)),
+            op=MPI.SUM,
+        )
+        for label, energy_term in energy_components.items()
+    }
+    return computed_energy_terms
+
+
+def calculate_rescaling_factors(params):
+    """
+    Calculate rescaling factors and store them in the params dictionary.
+
+    Args:
+    - params (dict): Dictionary containing geometry, material, and model parameters.
+
+    Returns:
+    - params (dict): Updated dictionary with rescaling factors.
+    """
+    # Extract necessary parameters
+    _E = params["model"]["E"]
+    _D = params["model"]["D"]
+    thickness = params["model"]["h"]
+
+    # Calculate rescaling factors
+    w_scale = np.sqrt(2 * _D / (_E * thickness))
+    v_scale = _D
+    f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
+
+    # Store rescaling factors in the params dictionary
+    params["model"]["w_scale"] = float(w_scale)
+    params["model"]["v_scale"] = float(v_scale)
+    params["model"]["f_scale"] = float(f_scale)
+
+    return params
+

@@ -251,6 +251,49 @@ computed_energy_terms = {label: comm.allreduce(
 for label, energy_term in computed_energy_terms.items():
     print(f"{label}: {energy_term}")
 
+
+
+
+
+
+E = _E
+D = _D
+
+from dolfinx.fem import assemble_scalar, form
+
+from ufl import div, grad
+
+def exact_bending_energy(v, w):
+    laplacian = lambda f : ufl.div(grad(f))
+    hessian = lambda f : ufl.grad(ufl.grad(f))
+
+    #assemble_scalar(form( ufl.dot(ufl.grad(v_exact), ufl.grad(v_exact)) * ufl.dx ))
+    return assemble_scalar( form( (D*nu/2 * ufl.inner(laplacian(w), laplacian(w)) + D*(1-nu)/2 * (ufl.inner(hessian(w), hessian(w))) )* ufl.dx) )
+
+def exact_membrane_energy(v, w):
+    laplacian = lambda f : div(grad(f))
+    hessian = lambda f : grad(grad(f))
+    return assemble_scalar( form( ( ((1+nu)/(2*E*h)) * ufl.inner(hessian(v), hessian(v)) - nu/(2*E*h) * ufl.inner(laplacian(v), laplacian(v)) ) * ufl.dx ) )
+
+
+def exact_coupling_energy(v, w):
+    laplacian = lambda f : div(grad(f))
+    hessian = lambda f : grad(grad(f))
+    cof = lambda v : ufl.Identity(2)*laplacian(v) - hessian(v)
+    return assemble_scalar( form( 0.5* ufl.inner(cof(v), ufl.outer(grad(w),grad(w)) ) * ufl.dx ) )
+
+for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
+    print(f"Exact {energy_type} energy: {energy_function(v_exact, w_exact)}")
+    
+
+for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
+    print(f"Exact energy of approx solution {energy_type} energy: {energy_function(v, w)}")
+    
+
+
+
+
+
 import matplotlib.pyplot as plt
 
 plt.figure()
@@ -261,9 +304,9 @@ fig.savefig(f"{prefix}/mesh.png")
 # ------------------------------
 
 import pyvista
-from pyvista.plotting.utilities import xvfb
+# from pyvista.plotting.utilities import xvfb
 
-xvfb.start_xvfb(wait=0.05)
+# xvfb.start_xvfb(wait=0.05)
 pyvista.OFF_SCREEN = True
 
 plotter = pyvista.Plotter(

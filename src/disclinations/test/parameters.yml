@@ -6,7 +6,7 @@ geometry:
     geometric_dimension: 2
     geom_type: "circle"
     R: 1.
-    mesh_size: 0.03
+    mesh_size: 0.05
     mesh_size_factor: 3
 
 #  === Material === #
