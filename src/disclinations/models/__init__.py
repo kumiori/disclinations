@@ -107,7 +107,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
         k_g = -D*(1-nu)
 
 
-        membrane = (1/(2*Eh) * inner(hessian(v), hessian(v)) + nu/(2*Eh) * self.bracket(v, v)) * dx
+        membrane = (1/(2*Eh) * inner(hessian(v), hessian(v)) - nu/(2*Eh) * self.bracket(v, v)) * dx
         bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx
         coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
         energy = bending - membrane + coupling
@@ -186,7 +186,9 @@ class NonlinearPlateFVK_brenner(NonlinearPlateFVK):
         k_g = -D*(1-nu)
 
 
-        membrane = (1/(2*Eh) * inner(hessian(v), hessian(v)) + nu/(2*Eh) * self.bracket(v, v)) * dx
+        membrane = (1/(2*Eh) * 
+                    inner(hessian(v), hessian(v)) 
+                    - nu/(2*Eh) * self.bracket(v, v)) * dx
         bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx
         coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
         energy = bending - membrane

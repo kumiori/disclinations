@@ -221,13 +221,6 @@ solver = SNESSolver(
 )
 solver.solve()
 
-
-for label, form in zip(labels, [F, F_v, F_w, Ec_w, Em_v]):
-    _F = create_vector(dolfinx.fem.form(form))
-    assemble_vector(_F, dolfinx.fem.form(form))
-    print(f"Norm of {label}: {_F.norm()}")
-    
-
 v, w = q.split()
 v.name = "Airy"
 w.name = "deflection"
@@ -273,7 +266,12 @@ def exact_bending_energy(v, w):
 def exact_membrane_energy(v, w):
     laplacian = lambda f : div(grad(f))
     hessian = lambda f : grad(grad(f))
-    return assemble_scalar( form( ( ((1+nu)/(2*E*h)) * ufl.inner(hessian(v), hessian(v)) - nu/(2*E*h) * ufl.inner(laplacian(v), laplacian(v)) ) * ufl.dx ) )
+    return assemble_scalar( form( ( 
+        ((1+nu)/(2*E*thickness)) * 
+            ufl.inner(hessian(v), hessian(v)) 
+        - nu/(2*E*thickness) * 
+            ufl.inner(laplacian(v), laplacian(v)) ) * ufl.dx 
+            ) )
 
 
 def exact_coupling_energy(v, w):
