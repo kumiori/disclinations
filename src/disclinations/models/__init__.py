@@ -317,8 +317,11 @@ def calculate_rescaling_factors(params):
     """
     # Extract necessary parameters
     _E = params["model"]["E"]
-    _D = params["model"]["D"]
-    thickness = params["model"]["h"]
+    nu = params["model"]["nu"]
+    thickness = params["model"]["thickness"]
+    
+    # _D = params["model"]["D"]
+    _D = _E * thickness**3 / (12 * (1 - nu**2))
 
     # Calculate rescaling factors
     w_scale = np.sqrt(2 * _D / (_E * thickness))

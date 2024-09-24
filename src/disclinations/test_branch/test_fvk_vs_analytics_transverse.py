@@ -285,7 +285,7 @@ for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [ex
     
 
 for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
-    print(f"Exact energy of approx solution {energy_type} energy: {energy_function(v, w)}")
+    print(f"Energy of approx solution {energy_type} energy: {energy_function(v, w)}")
     
 
 

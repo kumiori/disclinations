@@ -16,6 +16,7 @@ from dolfinx.io import XDMFFile
 import dolfinx
 import ufl
 from dolfinx.fem import dirichletbc, locate_dofs_topological
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 
 comm = MPI.COMM_WORLD
 
@@ -364,7 +365,7 @@ def indicator_function(v):
     
     return w
 
-def update_parameters(d, key, value):
+def update_parameters(parameters, key, value):
     """
     Recursively traverses the dictionary d to find and update the key's value.
     
@@ -376,11 +377,11 @@ def update_parameters(d, key, value):
     Returns:
     bool: True if the key was found and updated, False otherwise.
     """
-    if key in d:
-        d[key] = value
+    if key in parameters:
+        parameters[key] = value
         return True
 
-    for k, v in d.items():
+    for k, v in parameters.items():
         if isinstance(v, dict):
             if update_parameters(v, key, value):
                 return True
@@ -509,3 +510,99 @@ def save_params_to_yaml(params, filename):
     with open(filename, "w") as file:
         yaml.dump(params, file, default_flow_style=False)
 
+import hashlib
+import yaml
+
+def parameters_vs_thickness(parameters=None, thickness=1.):
+    """
+    Update the model parameters for a given value of 'ell'.
+
+    This function modifies the 'thickness' parameter. 
+    If no parameters are provided, it loads them from the default file.
+
+    Args:
+        parameters (dict, optional): Dictionary of parameters. 
+                                      If None, load from "../test/parameters.yml".
+        thickness (float, optional): The new 'thickness' value to set in the parameters. 
+                               Default is 1.
+
+    Returns:
+        tuple: A tuple containing the updated parameters dictionary and 
+               a unique hash (signature) based on the updated parameters.
+    """
+    if parameters is None:    
+        # with open("../test/parameters.yml") as f:
+            # parameters = yaml.load(f, Loader=yaml.FullLoader)
+        with pkg_resources.path('disclinations.test', 'parameters.yml') as f:
+            with open(f, 'r') as yaml_file:
+                parameters = yaml.load(yaml_file, Loader=yaml.FullLoader)
+                
+    parameters["model"]["thickness"] = thickness
+
+    # Generate a unique signature using MD5 hash based on the updated parametersx
+    signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
+
+    return parameters, signature
+
+from disclinations.meshes.primitives import mesh_circle_gmshapi
+from dolfinx.io import XDMFFile, gmshio
+from pathlib import Path
+import os
+
+def create_or_load_circle_mesh(parameters, prefix):
+    """
+    Create a new mesh if it doesn't exist, otherwise load the existing one.
+
+    Args:
+    - parameters (dict): A dictionary containing the geometry and mesh parameters.
+    - comm (MPI.Comm): MPI communicator.
+    - outdir (str): Directory to store the mesh file.
+
+    Returns:
+    - mesh: The generated or loaded mesh.
+    - mts: Mesh topology data structure.
+    - fts: Facet topology data structure.
+    """
+    # Extract geometry and mesh size parameters
+    mesh_size = parameters["geometry"]["mesh_size"]
+    parameters["geometry"]["radius"] = 1  # Assuming the radius is 1
+    parameters["geometry"]["geom_type"] = "circle"
+    geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
+    sha_hash = hashlib.sha256(geometry_json.encode()).hexdigest()
+
+    # Set up file prefix for mesh storage
+    mesh_file_path = f"{prefix}/mesh-{sha_hash}.xdmf"
+    with dolfinx.common.Timer("~Mesh Generation") as timer:
+        # Check if the mesh file already exists
+        if os.path.exists(mesh_file_path):
+            print("Loading existing mesh...")
+            with XDMFFile(comm, mesh_file_path, "r") as file:
+                mesh = file.read_mesh()
+                mts = None  # Assuming facet tags are needed
+                # mts = file.read_meshtags(mesh, "facet")  # Assuming facet tags are needed
+                fts = None  # Modify as needed if facet topology structure is available
+            return mesh, mts, fts
+
+        else:
+            # If no mesh file exists, create a new mesh
+            print("Creating new mesh...")
+            model_rank = 0
+            tdim = 2
+
+            gmsh_model, tdim = mesh_circle_gmshapi(
+                parameters["geometry"]["geom_type"], 1, mesh_size, tdim
+            )
+
+            mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
+
+            # Save the mesh for future use
+            # os.makedirs(prefix, exist_ok=True)
+            if comm.rank == 0:
+                Path(prefix).mkdir(parents=True, exist_ok=True)
+                    
+            with XDMFFile(
+                comm, mesh_file_path, "w", encoding=XDMFFile.Encoding.HDF5
+            ) as file:
+                file.write_mesh(mesh)
+
+        return mesh, mts, fts

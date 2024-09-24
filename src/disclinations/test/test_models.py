@@ -100,6 +100,7 @@ def test_model_computation(variant):
 
     state = {"v": v, "w": w}
     _W_ext = f * w * dx
+    test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
     
     
     # Define the variational problem
@@ -124,9 +125,8 @@ def test_model_computation(variant):
         model.W_ext = _W_ext
         penalisation = model.penalisation(state)
 
-        L = energy - model.W_ext + penalisation
-        # F = ufl.derivative(L, q, ufl.TestFunction(Q))
-        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state)
+        # L = energy - model.W_ext + penalisation
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     elif variant == "carstensen":
         model = NonlinearPlateFVK_carstensen(mesh, params["model"])
@@ -136,8 +136,8 @@ def test_model_computation(variant):
         model.W_ext = _W_ext
         penalisation = model.penalisation(state)
 
-        L = energy - model.W_ext + penalisation
-        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state)
+        # L = energy - model.W_ext + penalisation
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     # 7. Set up the solver
     solver = SNESSolver(
@@ -271,7 +271,6 @@ def _transverse_load(x, params):
     f_scale = params["model"]["f_scale"]
     _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
     return f_scale * _p
-
 
 def print_energy_analysis(energy_terms, exact_energy_transverse):
     """Print computed energy vs exact energy analysis."""
