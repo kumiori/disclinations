@@ -56,14 +56,6 @@ def run_experiment(mesh, parameters, series):
     
     parameters = calculate_rescaling_factors(parameters)
     
-    pdb.set_trace()    
-    
-    
-    
-    
-    
-    
-    
     return np.random.rand(1)
 
 if __name__ == "__main__":
