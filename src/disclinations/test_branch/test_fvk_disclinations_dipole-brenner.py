@@ -15,7 +15,7 @@ import numpy as np
 import petsc4py
 import ufl
 import yaml
-from disclinations.models import NonlinearPlateFVK
+from disclinations.models import NonlinearPlateFVK_brenner
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.la import compute_cell_contributions, compute_disclination_loads
@@ -179,7 +179,7 @@ w_exact.interpolate(_w_exact)
 
 
 # Define the variational problem
-model = NonlinearPlateFVK(mesh, parameters["model"])
+model = NonlinearPlateFVK_brenner(mesh, parameters["model"])
 energy = model.energy(state)[0]
 
 # Dead load (transverse)
@@ -193,7 +193,8 @@ Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 
 b = compute_disclination_loads(disclinations, signs, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)    
 
-F = ufl.derivative(L, q, ufl.TestFunction(Q))
+test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
+F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
 solver = SNESSolver(
     F_form=F,
@@ -264,10 +265,6 @@ op=MPI.SUM,
 exact_energy_dipole = parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
     * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
         (np.log(4+distance**2) - np.log(4 * distance))
-
-ex_membrane_energy = exact_energy_dipole
-ex_bending_energy = 0
-ex_coupl_energy = 0
 
 print(yaml.dump(parameters["model"], default_flow_style=False))
 

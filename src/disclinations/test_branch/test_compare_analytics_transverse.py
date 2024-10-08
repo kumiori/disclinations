@@ -6,14 +6,15 @@ import pdb
 import os
 import pandas as pd
 
-#SCRIPT_VAR = "test_fvk_vs_analytics_transverse.py"
-#SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner.py"
-#SCRIPT_CAR = "test_fvk_vs_analytics_transverse-carstensen.py"
-SCRIPT_VAR = "test_fvk_vs_analytics_transverse.py"
-SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner.py"
-SCRIPT_CAR = "test_fvk_vs_analytics_transverse-carstensen.py"
+#SCRIPT_VAR = "test_fvk_vs_analytics_transverse"
+#SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner"
+#SCRIPT_CAR = "test_fvk_vs_analytics_transverse-carstensen"
+SCRIPT_VAR = "test_fvk_disclinations_dipole"
+SCRIPT_BRN = "test_fvk_disclinations_dipole-brenner"
+SCRIPT_CAR = "test_fvk_disclinations_dipole-carstensen"
 
-OUTDIR = os.path.join("output", "test_compare_analytic_transverse")
+OUTDIR = os.path.join("output", SCRIPT_VAR)
+if not os.path.exists(OUTDIR): os.makedirs(OUTDIR)
 
 # Define a function to run a script and return a variable
 def run_script(filename):
@@ -24,9 +25,9 @@ def run_script(filename):
 
 #pdb.set_trace()
 
-script_var = run_script(SCRIPT_VAR)
-script_brn = run_script(SCRIPT_BRN)
-script_car = run_script(SCRIPT_CAR)
+script_var = run_script(SCRIPT_VAR+".py")
+script_brn = run_script(SCRIPT_BRN+".py")
+script_car = run_script(SCRIPT_CAR+".py")
 
 V_v = script_var["V_v"]
 V_w = script_var["V_w"]
@@ -70,21 +71,46 @@ e_data["Bending Energy (Exact)"] = script_var["ex_bending_energy"]
 e_data["Membrane Energy (Exact)"] = script_var["ex_membrane_energy"]
 e_data["Coupling Energy (Exact)"] = script_var["ex_coupl_energy"]
 
+errorBending_var = "N.A."
+errorBending_brn = "N.A."
+errorBending_car = "N.A."
+errorMembrane_var = "N.A."
+errorMembrane_brn = "N.A."
+errorMembrane_car = "N.A."
+errorCoupling_var = "N.A."
+errorCoupling_brn = "N.A."
+errorCoupling_car = "N.A."
+
+if e_data["Bending Energy (Exact)"] != 0.0:
+    errorBending_var = 100*( e_data["Bending Energy (Var)"]- e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
+    errorBending_brn = 100*( e_data["Bending Energy (Brn)"]- e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
+    errorBending_car = 100*( e_data["Bending Energy (Car)"]- e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
+
+if e_data["Membrane Energy (Exact)"] != 0.0:
+    errorMembrane_var = 100*( e_data["Membrane Energy (Var)"] - e_data["Membrane Energy (Exact)"] ) / e_data["Membrane Energy (Exact)"]
+    errorMembrane_brn = 100*( e_data["Membrane Energy (Brn)"] - e_data["Membrane Energy (Exact)"] ) / e_data["Membrane Energy (Exact)"]
+    errorMembrane_car = 100*( e_data["Membrane Energy (Car)"] - e_data["Membrane Energy (Exact)"] ) / e_data["Membrane Energy (Exact)"]
+
+if e_data["Coupling Energy (Exact)"] != 0.0:
+    errorCoupling_var = 100*( e_data["Coupling Energy (Var)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
+    errorCoupling_brn = 100*( e_data["Coupling Energy (Brn)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
+    errorCoupling_car = 100*( e_data["Coupling Energy (Car)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
+
 #pdb.set_trace()
 exp_dict = {"Bending Energy (Var)": [script_var["computed_energy_terms"]["bending"]], "Bending Energy (Brn)":  [script_brn["energy_terms"]["bending"]], "Bending Energy (Car)": [script_car["energy_terms"]["bending"]],
          "Membrane Energy (Var)": [script_var["computed_energy_terms"]["membrane"]], "Membrane Energy (Brn)": [script_brn["energy_terms"]["membrane"]], "Membrane Energy (Car)": [script_car["energy_terms"]["membrane"]],
          "Coupling Energy (Var)": [script_var["computed_energy_terms"]["coupling"]], "Coupling Energy (Brn)": [script_brn["energy_terms"]["coupling"]], "Coupling Energy (Car)": [script_car["energy_terms"]["coupling"]],
          "Bending Energy (Exact)": [script_var["computed_energy_terms"]["bending"]], "Membrane Energy (Exact)": [script_var["computed_energy_terms"]["membrane"]], "Coupling Energy (Exact)": [script_var["computed_energy_terms"]["coupling"]],
          "Mesh size": [script_var["mesh_size"]], "Interior Penalty (IP)": [script_var["parameters"]["model"]["alpha_penalty"]], "Thickness": [script_var["thickness"]], "Young modulus": [script_var["_E"]], "Poisson ratio": [script_var["nu"]],
-         "Error % Bending Energy (Var)": [100*( e_data["Bending Energy (Var)"]- e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]],
-         "Error % Bending Energy (Brn)": [100*( e_data["Bending Energy (Brn)"]- e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]],
-         "Error % Bending Energy (Car)": [100*( e_data["Bending Energy (Car)"]- e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]],
-         "Error % Membrane Energy (Var)": [100*( e_data["Membrane Energy (Var)"] - e_data["Membrane Energy (Exact)"] ) / e_data["Membrane Energy (Exact)"]],
-         "Error % Membrane Energy (Brn)": [100*( e_data["Membrane Energy (Brn)"] - e_data["Membrane Energy (Exact)"] )/ e_data["Membrane Energy (Exact)"]],
-         "Error % Membrane Energy (Car)": [100*( e_data["Membrane Energy (Car)"] - e_data["Membrane Energy (Exact)"] )/ e_data["Membrane Energy (Exact)"]],
-         "Error % Coupling Energy (Var)": [100*( e_data["Coupling Energy (Var)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]],
-         "Error % Coupling Energy (Brn)": [100*( e_data["Coupling Energy (Brn)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]],
-         "Error % Coupling Energy (Car)": [100*( e_data["Coupling Energy (Car)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]]
+         "Error % Bending Energy (Var)": [errorBending_var],
+         "Error % Bending Energy (Brn)": [errorBending_brn],
+         "Error % Bending Energy (Car)": [errorBending_car],
+         "Error % Membrane Energy (Var)": [errorMembrane_var],
+         "Error % Membrane Energy (Brn)": [errorMembrane_brn],
+         "Error % Membrane Energy (Car)": [errorMembrane_car],
+         "Error % Coupling Energy (Var)": [errorCoupling_var],
+         "Error % Coupling Energy (Brn)": [errorCoupling_brn],
+         "Error % Coupling Energy (Car)": [errorCoupling_car]
          }
 
 #experimental_data = experimental_data.append(exp_dict, ignore_index=True)
@@ -128,7 +154,7 @@ _plt.yticks(fontsize=30)
 _plt.title(f"Comparison between FE models. Transverse displacement. Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}", size = 30)
 _plt.grid(True)
 _plt.legend(fontsize=30)
-_plt.savefig(f"{OUTDIR}/test_fvk-w-profiles.png")
+_plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
 
 fig, axes = plt.subplots(1, 1, figsize=(24, 18))
 
@@ -144,4 +170,4 @@ _plt.yticks(fontsize=30)
 _plt.title(f"Comparison between FE models. Airy's function. Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}", size = 30)
 _plt.grid(True)
 _plt.legend(fontsize=30)
-_plt.savefig(f"{OUTDIR}/test_fvk-v-profiles.png")
+_plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-v-profiles.png")
