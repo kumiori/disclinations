@@ -280,6 +280,10 @@ def exact_coupling_energy(v, w):
     cof = lambda v : ufl.Identity(2)*laplacian(v) - hessian(v)
     return assemble_scalar( form( 0.5* ufl.inner(cof(v), ufl.outer(grad(w),grad(w)) ) * ufl.dx ) )
 
+ex_bending_energy = exact_bending_energy(v_exact, w_exact)
+ex_membrane_energy = exact_membrane_energy(v_exact, w_exact)
+ex_coupl_energy = exact_coupling_energy(v_exact, w_exact)
+
 for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
     print(f"Exact {energy_type} energy: {energy_function(v_exact, w_exact)}")
     

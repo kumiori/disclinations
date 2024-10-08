@@ -6,12 +6,12 @@ geometry:
     geometric_dimension: 2
     geom_type: "circle"
     radius: 1.
-    mesh_size: 0.1
+    mesh_size: 0.05
 
 #  === Material === #
 model:
     E: 1.
-    thickness: 1.
+    thickness: 1
     sigma_D0: 1.
     nu: 0.
     model_dimension: 2
