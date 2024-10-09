@@ -13,7 +13,7 @@ model:
     E: 1.
     thickness: 1
     sigma_D0: 1.
-    nu: 0.
+    nu: 0.15
     model_dimension: 2
     model_type: "2D"
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"

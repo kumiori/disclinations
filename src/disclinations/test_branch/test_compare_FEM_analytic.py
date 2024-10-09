@@ -55,21 +55,28 @@ columns = ["Error % Bending Energy (Var)", "Error % Bending Energy (Brn)", "Erro
 
 #experimental_data = pd.DataFrame(columns=columns)
 e_data = {}
-e_data["Bending Energy (Var)"] = script_var["computed_energy_terms"]["bending"]
+#pdb.set_trace()
+e_data["Bending Energy (Var)"] = script_var["energy_terms"]["bending"]
 e_data["Bending Energy (Brn)"] = script_brn["energy_terms"]["bending"]
 e_data["Bending Energy (Car)"] = script_car["energy_terms"]["bending"]
 
-e_data["Membrane Energy (Var)"] = script_var["computed_energy_terms"]["membrane"]
+e_data["Membrane Energy (Var)"] = script_var["energy_terms"]["membrane"]
 e_data["Membrane Energy (Brn)"] = script_brn["energy_terms"]["membrane"]
 e_data["Membrane Energy (Car)"] = script_car["energy_terms"]["membrane"]
 
-e_data["Coupling Energy (Var)"] = script_var["computed_energy_terms"]["coupling"]
+e_data["Coupling Energy (Var)"] = script_var["energy_terms"]["coupling"]
 e_data["Coupling Energy (Brn)"] = script_brn["energy_terms"]["coupling"]
 e_data["Coupling Energy (Car)"] = script_car["energy_terms"]["coupling"]
 
 e_data["Bending Energy (Exact)"] = script_var["ex_bending_energy"]
 e_data["Membrane Energy (Exact)"] = script_var["ex_membrane_energy"]
 e_data["Coupling Energy (Exact)"] = script_var["ex_coupl_energy"]
+
+print("2) ----- ex_membrane_energy: ", e_data["Membrane Energy (Exact)"] )
+print("3) ----- ex_membrane_energy: ", script_var["ex_membrane_energy"])
+print("4) ",  e_data["Membrane Energy (Var)"] )
+print("5) ",  e_data["Membrane Energy (Brn)"] )
+print("6) ",  e_data["Membrane Energy (Car)"] )
 
 errorBending_var = "N.A."
 errorBending_brn = "N.A."
@@ -82,9 +89,9 @@ errorCoupling_brn = "N.A."
 errorCoupling_car = "N.A."
 
 if e_data["Bending Energy (Exact)"] != 0.0:
-    errorBending_var = 100*( e_data["Bending Energy (Var)"]- e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
-    errorBending_brn = 100*( e_data["Bending Energy (Brn)"]- e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
-    errorBending_car = 100*( e_data["Bending Energy (Car)"]- e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
+    errorBending_var = 100*( e_data["Bending Energy (Var)"] - e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
+    errorBending_brn = 100*( e_data["Bending Energy (Brn)"] - e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
+    errorBending_car = 100*( e_data["Bending Energy (Car)"] - e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
 
 if e_data["Membrane Energy (Exact)"] != 0.0:
     errorMembrane_var = 100*( e_data["Membrane Energy (Var)"] - e_data["Membrane Energy (Exact)"] ) / e_data["Membrane Energy (Exact)"]
@@ -96,22 +103,38 @@ if e_data["Coupling Energy (Exact)"] != 0.0:
     errorCoupling_brn = 100*( e_data["Coupling Energy (Brn)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
     errorCoupling_car = 100*( e_data["Coupling Energy (Car)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
 
+print("errorMembrane_var: ", errorMembrane_var)
+print("errorMembrane_brn: ", errorMembrane_brn)
+print("errorMembrane_car: ", errorMembrane_car)
+
 #pdb.set_trace()
-exp_dict = {"Bending Energy (Var)": [script_var["computed_energy_terms"]["bending"]], "Bending Energy (Brn)":  [script_brn["energy_terms"]["bending"]], "Bending Energy (Car)": [script_car["energy_terms"]["bending"]],
-         "Membrane Energy (Var)": [script_var["computed_energy_terms"]["membrane"]], "Membrane Energy (Brn)": [script_brn["energy_terms"]["membrane"]], "Membrane Energy (Car)": [script_car["energy_terms"]["membrane"]],
-         "Coupling Energy (Var)": [script_var["computed_energy_terms"]["coupling"]], "Coupling Energy (Brn)": [script_brn["energy_terms"]["coupling"]], "Coupling Energy (Car)": [script_car["energy_terms"]["coupling"]],
-         "Bending Energy (Exact)": [script_var["computed_energy_terms"]["bending"]], "Membrane Energy (Exact)": [script_var["computed_energy_terms"]["membrane"]], "Coupling Energy (Exact)": [script_var["computed_energy_terms"]["coupling"]],
-         "Mesh size": [script_var["mesh_size"]], "Interior Penalty (IP)": [script_var["parameters"]["model"]["alpha_penalty"]], "Thickness": [script_var["thickness"]], "Young modulus": [script_var["_E"]], "Poisson ratio": [script_var["nu"]],
-         "Error % Bending Energy (Var)": [errorBending_var],
-         "Error % Bending Energy (Brn)": [errorBending_brn],
-         "Error % Bending Energy (Car)": [errorBending_car],
-         "Error % Membrane Energy (Var)": [errorMembrane_var],
-         "Error % Membrane Energy (Brn)": [errorMembrane_brn],
-         "Error % Membrane Energy (Car)": [errorMembrane_car],
-         "Error % Coupling Energy (Var)": [errorCoupling_var],
-         "Error % Coupling Energy (Brn)": [errorCoupling_brn],
-         "Error % Coupling Energy (Car)": [errorCoupling_car]
-         }
+exp_dict = {
+    "Bending Energy (Var)": [e_data["Bending Energy (Var)"]],
+    "Bending Energy (Brn)":  [e_data["Bending Energy (Brn)"]],
+    "Bending Energy (Car)": [e_data["Bending Energy (Car)"]],
+    "Membrane Energy (Var)": [e_data["Membrane Energy (Var)"]],
+    "Membrane Energy (Brn)": [e_data["Membrane Energy (Brn)"]],
+    "Membrane Energy (Car)": [e_data["Membrane Energy (Car)"]],
+    "Coupling Energy (Var)": [e_data["Coupling Energy (Var)"]],
+    "Coupling Energy (Brn)": [e_data["Coupling Energy (Brn)"]],
+    "Coupling Energy (Car)": [e_data["Coupling Energy (Car)"]],
+    "Bending Energy (Exact)": [e_data["Bending Energy (Exact)"]],
+    "Membrane Energy (Exact)": [e_data["Membrane Energy (Exact)"]],
+    "Coupling Energy (Exact)": [e_data["Coupling Energy (Exact)"]],
+    "Mesh size": [script_var["mesh_size"]],
+    "Interior Penalty (IP)": [script_var["parameters"]["model"]["alpha_penalty"]],
+    "Thickness": [script_var["thickness"]], "Young modulus": [script_var["_E"]],
+    "Poisson ratio": [script_var["nu"]],
+    "Error % Bending Energy (Var)": [errorBending_var],
+    "Error % Bending Energy (Brn)": [errorBending_brn],
+    "Error % Bending Energy (Car)": [errorBending_car],
+    "Error % Membrane Energy (Var)": [errorMembrane_var],
+    "Error % Membrane Energy (Brn)": [errorMembrane_brn],
+    "Error % Membrane Energy (Car)": [errorMembrane_car],
+    "Error % Coupling Energy (Var)": [errorCoupling_var],
+    "Error % Coupling Energy (Brn)": [errorCoupling_brn],
+    "Error % Coupling Energy (Car)": [errorCoupling_car]
+    }
 
 #experimental_data = experimental_data.append(exp_dict, ignore_index=True)
 experimental_data = pd.DataFrame(exp_dict)
