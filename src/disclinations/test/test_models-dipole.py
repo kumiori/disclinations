@@ -36,6 +36,7 @@ from dolfinx.fem import Constant, dirichletbc, locate_dofs_topological
 from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
 from petsc4py import PETSc
+from disclinations.utils import create_or_load_circle_mesh
 
 comm = MPI.COMM_WORLD
 from ufl import CellDiameter, FacetNormal, dx
@@ -57,14 +58,14 @@ def test_model_computation(variant):
     # 1. Load parameters from YML file
     params, signature = load_parameters(f"parameters.yml")
     params = calculate_rescaling_factors(params)
-
+    pdb.set_trace()
     # params = load_parameters(f"{model}_params.yml")
     # 2. Construct or load mesh
     prefix = os.path.join(outdir, "plate_fvk_disclinations_dipole")
     if comm.rank == 0:
         Path(prefix).mkdir(parents=True, exist_ok=True)
 
-    mesh, mts, fts = create_or_load_mesh(params, prefix=prefix)
+    mesh, mts, fts = create_or_load_circle_mesh(params, prefix=prefix)
 
     # 3. Construct FEM approximation
     h = CellDiameter(mesh)
@@ -205,62 +206,6 @@ def load_parameters(file_path):
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
 
     return parameters, signature
-
-
-def create_or_load_mesh(parameters, prefix):
-    """
-    Create a new mesh if it doesn't exist, otherwise load the existing one.
-
-    Args:
-    - parameters (dict): A dictionary containing the geometry and mesh parameters.
-    - comm (MPI.Comm): MPI communicator.
-    - outdir (str): Directory to store the mesh file.
-
-    Returns:
-    - mesh: The generated or loaded mesh.
-    - mts: Mesh topology data structure.
-    - fts: Facet topology data structure.
-    """
-    # Extract geometry and mesh size parameters
-    mesh_size = parameters["geometry"]["mesh_size"]
-    parameters["geometry"]["radius"] = 1  # Assuming the radius is 1
-    parameters["geometry"]["geom_type"] = "circle"
-    geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
-    md5_hash = hashlib.md5(geometry_json.encode()).hexdigest()
-    print(f"SHA Hash: {md5_hash}")
-    # Set up file prefix for mesh storage
-    mesh_file_path = f"{prefix}/mesh-{md5_hash}.xdmf"
-    with dolfinx.common.Timer("~Mesh Generation") as timer:
-        # Check if the mesh file already exists
-        if os.path.exists(mesh_file_path):
-            print("Loading existing mesh...")
-            with XDMFFile(comm, mesh_file_path, "r") as file:
-                mesh = file.read_mesh()
-                mts = None  # Assuming facet tags are needed
-                # mts = file.read_meshtags(mesh, "facet")  # Assuming facet tags are needed
-                fts = None  # Modify as needed if facet topology structure is available
-            return mesh, mts, fts
-
-        else:
-            # If no mesh file exists, create a new mesh
-            print("Creating new mesh...")
-            model_rank = 0
-            tdim = 2
-
-            gmsh_model, tdim = mesh_circle_gmshapi(
-                parameters["geometry"]["geom_type"], 1, mesh_size, tdim
-            )
-
-            mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-
-            # Save the mesh for future use
-            os.makedirs(prefix, exist_ok=True)
-            with XDMFFile(
-                comm, mesh_file_path, "w", encoding=XDMFFile.Encoding.HDF5
-            ) as file:
-                file.write_mesh(mesh)
-
-        return mesh, mts, fts
 
 
 def homogeneous_dirichlet_bc_H20(mesh, Q):
