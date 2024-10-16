@@ -15,7 +15,7 @@ import numpy as np
 import petsc4py
 import ufl
 import yaml
-from disclinations.models import NonlinearPlateFVK
+from disclinations.models import NonlinearPlateFVK_carstensen
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.la import compute_cell_contributions, compute_disclination_loads
@@ -150,14 +150,11 @@ state = {"v": v, "w": w}
 
 
 # Point sources
-disclination_points_list = [[-0.2, 0.0, 0], [0.2, 0.0, 0]]
-
 if mesh.comm.rank == 0:
     # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
-    disclinations = [np.array([disclination_points_list[0]], dtype=mesh.geometry.x.dtype),
-              np.array([disclination_points_list[1]], dtype=mesh.geometry.x.dtype)]
-    disclination_power_list = [-1, 1]
-    #signs = [-1, 1]
+    disclinations = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+              np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
+    signs = [-1, 1]
 else:
     # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
     disclinations = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
@@ -182,7 +179,7 @@ w_exact.interpolate(_w_exact)
 
 
 # Define the variational problem
-model = NonlinearPlateFVK(mesh, parameters["model"])
+model = NonlinearPlateFVK_carstensen(mesh, parameters["model"])
 energy = model.energy(state)[0]
 
 # Dead load (transverse)
@@ -194,9 +191,10 @@ L = energy - W_ext + penalisation
 
 Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 
-b = compute_disclination_loads(disclinations, disclination_power_list, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)
+b = compute_disclination_loads(disclinations, signs, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)    
 
-F = ufl.derivative(L, q, ufl.TestFunction(Q))
+test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
+F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
 solver = SNESSolver(
     F_form=F,
@@ -264,24 +262,9 @@ op=MPI.SUM,
 ) for label, energy_term in lagrangian_components.items()}
 
 
-def compute_exact_energy_dipole(v_exact):
-    energy = 0.0
-    eps = 1E-6
-    for index, disc_coord in enumerate(disclination_points_list):
-        disc_coord_apprx = [disc_coord[0]+eps, disc_coord[1]+eps]
-        energy += _E*thickness*0.5*disclination_power_list[index]*v_exact(disc_coord_apprx)
-    return energy
-
-# exact_energy_dipole = parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
-#     * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
-#         (np.log(4+distance**2) - np.log(4 * distance))
-
-exact_energy_dipole = compute_exact_energy_dipole(_v_exact)
-
-ex_membrane_energy = exact_energy_dipole
-print("1) ----- ex_membrane_energy: ", ex_membrane_energy)
-ex_bending_energy = 0.0
-ex_coupl_energy = 0.0
+exact_energy_dipole = parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
+    * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
+        (np.log(4+distance**2) - np.log(4 * distance))
 
 print(yaml.dump(parameters["model"], default_flow_style=False))
 
@@ -318,7 +301,7 @@ V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
 
 _pv_points = np.array([p[0] for p in disclinations])
-_pv_colours = np.array(-np.array(disclination_power_list))
+_pv_colours = np.array(-np.array(signs))
 
 scalar_plot = plot_scalar(w, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w,
                             lineproperties={'clim': [min(w.vector[:]), max(w.vector[:])]})

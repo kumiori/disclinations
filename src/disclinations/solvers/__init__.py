@@ -14,6 +14,53 @@ from dolfinx.fem import form
 from dolfinx.fem.petsc import (
     assemble_matrix, apply_lifting, create_vector, create_matrix, set_bc, assemble_vector)
 
+# CFe starting
+import pdb
+from petsc4py import PETSc
+from slepc4py import SLEPc
+
+def calculate_condition_number_1(A):
+    """
+    Purpose: computing the conditioning number of the matrix A using eigenvalues
+    """
+
+    eps = SLEPc.EPS().create() # Create eigenvalue solver
+
+    # Set up the eigenvalue problem
+    eps.setOperators(A)
+    eps.setProblemType(SLEPc.EPS.ProblemType.NHEP)
+    eps.setDimensions(A.size[0])  # Request two eigenvalues
+
+    # Set some solver options for better convergence
+    eps.setTolerances(tol=1e-6, max_it=1000)
+    eps.setKrylovSchurRestart(0.7)  # Restart with 70% of the vectors
+
+    # Solve for largest and smallest eigenvalues in one go
+    eps.setWhichEigenpairs(SLEPc.EPS.Which.LARGEST_MAGNITUDE)
+    eps.solve()
+
+    # Check convergence
+    nconv = eps.getConverged()
+    if nconv < 2:
+        print(f"Warning: Only {nconv} eigenvalues converged. Condition number estimate may be inaccurate.")
+        return None
+
+    # Get the largest and smallest eigenvalues
+    largest = abs(eps.getEigenpair(0))
+    smallest = abs(eps.getEigenpair(nconv-1))
+
+    return largest / smallest # Calculate and return the condition number
+
+def calculate_condition_number_2(A):
+    """
+    Purpose: computing the conditioning number of the matrix A using numpy and dense array
+    """
+    import numpy as np
+    dense_A = A.convert("dense")
+    dense_array = dense_A.getDenseArray()
+    return np.linalg.cond(dense_array) # compute the condition number
+
+# CFe end
 
 # import pdb;
 # pdb.set_trace()
@@ -237,6 +284,14 @@ class SNESSolver:
         A.zeroEntries()
         assemble_matrix(A, self.J_form, self.bcs)
         A.assemble()
+
+        # # CFe: check conditioning
+        #pdb.set_trace()
+        #cond_number = calculate_condition_number_2(A)
+        #print("Condition number:", cond_number)
+        #if cond_number > 1e10: print("***********************************************************************************")
+        # # CFe: end check
+
 
     def solve(self):
         """

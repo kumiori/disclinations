@@ -285,7 +285,7 @@ energy_components = {
 }
 energy_terms = compute_energy_terms(energy_components, mesh.comm)
 print(energy_terms)
-pdb.set_trace()
+#pdb.set_trace()
 
 # __import__('pdb').set_trace()
 

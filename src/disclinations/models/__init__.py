@@ -118,8 +118,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
         return grad(grad(f)) + self.nu*self.σ(f)
     
     def P(self, f):
-        c_nu = 1. #12*(1-self.nu**2)
-        return (1.0/c_nu)*grad(grad(f)) - self.nu*self.σ(f)
+        return grad(grad(f)) - self.nu*self.σ(f)
 
     def W(self, f):
         J = ufl.as_matrix([[0, -1], [1, 0]])
@@ -138,8 +137,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
         c_nu = 12*(1-nu**2)
         
         # M = lambda f : grad(grad(f)) + nu*self.σ(f)       
-        M = lambda f : self.M(f)       
-        # P = lambda f : (1.0/c_nu)*grad(grad(f)) - nu*self.σ(f)
+        M = lambda f : self.M(f)
         P = lambda f : self.P(f)
         W = lambda f : self.W(f)
         
@@ -159,8 +157,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
         return   (c1*dg1(w) + c1*dg2(w)) \
                 - c2*dg1(v) - c2*dg2(v) \
                 + c2*bc1(w) - c2*bc2(v) \
-                + c1*bc3(w) - c1*bc3(v) 
-                # + dgc(w, v)
+                + c1*bc3(w) - c1*bc3(v) + dgc(w, v)
 
     def gaussian_curvature(self, w, order = 1):
         mesh = self.mesh
@@ -224,6 +221,43 @@ class NonlinearPlateFVK_brenner(NonlinearPlateFVK):
         cv_bnd_edges = 0.5*coupling_bnd_edge(w, w, v_test)
         
         return cw_bulk + cv_bulk + cw_bnd_edges + cv_bnd_edges + cv_in_edges + cw_in_edges
+
+    def penalisation(self, state):
+        v = state["v"]
+        w = state["w"]
+        α = self.alpha_penalty
+        h = ufl.CellDiameter(self.mesh)
+        n = ufl.FacetNormal(self.mesh)
+        nu = self.nu
+
+        dS = ufl.Measure("dS")
+        ds = ufl.Measure("ds")
+        c_nu = 12*(1-nu**2)
+
+        # M = lambda f : grad(grad(f)) + nu*self.σ(f)
+        M = lambda f : self.M(f)
+        P = lambda f : self.P(f)
+        W = lambda f : self.W(f)
+
+        #dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS # CFe: 6-10-24 commented out
+        #dg2 = lambda u: + 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS # CFe: 6-10-24 commented out
+        dg1 = lambda u: - 1/2 * jump(grad(u),n)*avg(dot(grad(grad(u)) * n, n)) * dS # CFe: 6-10-24 added
+        dg2 = lambda u: + 1/2 * α/avg(h) * jump(grad(u),n) * jump(grad(u),n) * dS # CFe: 6-10-24 added
+        #dgc = lambda w, g: avg(inner(W(w), outer(n, n)))*jump(grad(g), n)*dS
+
+        # bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
+        # bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
+        bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
+        bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
+        #bc3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
+        bc3 = lambda u: 1/2 * α/h * dot(grad(u),n) * dot(grad(u),n) * ds
+        c1 = self.D
+        c2 = (1/(self.E*self.t))
+
+        return   (c1*dg1(w) + c1*dg2(w)) \
+                - c2*dg1(v) - c2*dg2(v) \
+                + c2*bc1(w) - c2*bc2(v) \
+                + c1*bc3(w) - c1*bc3(v)
     
 class NonlinearPlateFVK_carstensen(NonlinearPlateFVK_brenner):
     def coupling_term(self, state, v_test, w_test):
