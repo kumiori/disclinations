@@ -616,10 +616,9 @@ def create_or_load_circle_mesh(parameters, prefix):
     parameters["geometry"]["radius"] = 1  # Assuming the radius is 1
     parameters["geometry"]["geom_type"] = "circle"
     geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
-    sha_hash = hashlib.sha256(geometry_json.encode()).hexdigest()
-
+    hash = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
     # Set up file prefix for mesh storage
-    mesh_file_path = f"{prefix}/mesh-{sha_hash}.xdmf"
+    mesh_file_path = f"{prefix}/mesh-{hash}.xdmf"
     with dolfinx.common.Timer("~Mesh Generation") as timer:
         # Check if the mesh file already exists
         if os.path.exists(mesh_file_path):
@@ -737,3 +736,13 @@ def initialise_exact_solution_transverse(Q, params):
     w_exact.interpolate(_w_exact)
 
     return v_exact, w_exact
+
+def exact_energy_dipole(parameters):
+    # it should depend on the signs as well
+    distance = np.linalg.norm(parameters['loading']['points'][0] - parameters['loading']['points'][1])
+    
+    return parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
+        * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
+            (np.log(4+distance**2) - np.log(4 * distance))
+
+    
