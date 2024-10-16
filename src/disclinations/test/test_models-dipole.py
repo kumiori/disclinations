@@ -226,10 +226,10 @@ def create_or_load_mesh(parameters, prefix):
     parameters["geometry"]["radius"] = 1  # Assuming the radius is 1
     parameters["geometry"]["geom_type"] = "circle"
     geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
-    sha_hash = hashlib.sha256(geometry_json.encode()).hexdigest()
-
+    md5_hash = hashlib.md5(geometry_json.encode()).hexdigest()
+    print(f"SHA Hash: {md5_hash}")
     # Set up file prefix for mesh storage
-    mesh_file_path = f"{prefix}/mesh-{sha_hash}.xdmf"
+    mesh_file_path = f"{prefix}/mesh-{md5_hash}.xdmf"
     with dolfinx.common.Timer("~Mesh Generation") as timer:
         # Check if the mesh file already exists
         if os.path.exists(mesh_file_path):

@@ -189,7 +189,8 @@ def create_or_load_mesh(parameters, prefix):
     parameters["geometry"]["geom_type"] = "circle"
     geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
     sha_hash = hashlib.sha256(geometry_json.encode()).hexdigest()
-
+    print(f"SHA Hash: {sha_hash}")
+    pdb.set_trace()
     # Set up file prefix for mesh storage
     mesh_file_path = f"{prefix}/mesh-{sha_hash}.xdmf"
     with dolfinx.common.Timer("~Mesh Generation") as timer:
