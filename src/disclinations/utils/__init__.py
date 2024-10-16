@@ -673,7 +673,9 @@ def initialise_exact_solution_dipole(Q, params):
 
     q_exact = dolfinx.fem.Function(Q)
     v_exact, w_exact = q_exact.split()
-    distance = np.linalg.norm(params['loading']['points'][0] - params['loading']['points'][1])
+    distance = np.linalg.norm(
+        np.array(params['loading']['points'][0]) - np.array(params['loading']['points'][1])
+        )
 
     # compute distance between disclinations
 
@@ -739,10 +741,16 @@ def initialise_exact_solution_transverse(Q, params):
 
 def exact_energy_dipole(parameters):
     # it should depend on the signs as well
-    distance = np.linalg.norm(parameters['loading']['points'][0] - parameters['loading']['points'][1])
+    distance = np.linalg.norm(
+        np.array(parameters['loading']['points'][0]) - np.array(parameters['loading']['points'][1]))
     
     return parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
         * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
             (np.log(4+distance**2) - np.log(4 * distance))
 
-    
+
+def _transverse_load_polynomial_analytic(x, params):
+    f_scale = params["model"]["f_scale"]
+    _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+    return f_scale * _p
+

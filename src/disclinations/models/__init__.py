@@ -312,7 +312,8 @@ def create_disclinations(mesh, params, points=[0.0, 0.0, 0.0], signs=[1.0]):
     else:
         # Otherwise, add the provided points and signs to the params dictionary
         print("Using provided points and signs, adding them to the params dictionary.")
-        params["loading"] = {"points": points, "signs": signs}
+        points_list = [point.tolist()[0] for point in points]
+        params["loading"].update({"points": points_list, "signs": signs})
 
     # Handle the case where rank is not 0 (for distributed computing)
     if mesh.comm.rank == 0:

@@ -25,7 +25,8 @@ from disclinations.utils import (Visualisation, memory_usage, monitor,
                                  table_timing_data, write_to_output, 
                                  homogeneous_dirichlet_bc_H20,
                                  initialise_exact_solution_dipole,
-                                 exact_energy_dipole)
+                                 exact_energy_dipole,
+                                 _transverse_load_polynomial_analytic)
 from disclinations.utils.la import compute_disclination_loads
 from dolfinx import fem
 from dolfinx.common import list_timings
@@ -75,17 +76,7 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         }
 
         energy_terms = compute_energy_terms(energy_components, mesh.comm)
-        distance = np.linalg.norm(np.array(params['loading']['points'][0]) - np.array(params['loading']['points'][1]))
-        
-        exact_energy_dipole = params["model"]["E"] * params["model"]["thickness"]**3 \
-            * params["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
-                (np.log(4+distance**2) - np.log(4 * distance))
-
         print(yaml.dump(params["model"], default_flow_style=False))
-        
-        abs_error, rel_error = compute_energy_errors(
-            energy_terms, exact_energy_dipole
-        )
 
         if exact_solution is not None:
             _v_exact, _w_exact = exact_solution
@@ -111,9 +102,8 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
                 "components": "tensor",
             },
         ]
-        pdb.set_trace()
         # write_to_output(prefix, q, extra_fields)
-        return abs_error, rel_error
+        return energy_terms
 
 def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
     print("Running experiment of the series", series, " with thickness:", parameters["model"]["thickness"])
@@ -125,7 +115,6 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
     if comm.rank == 0:
         Path(prefix).mkdir(parents=True, exist_ok=True)
         
-    save_params_to_yaml(parameters, os.path.join(prefix, "parameters.yml"))
 
     # Function spaces
     X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"])
@@ -159,10 +148,18 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
     )
     q = dolfinx.fem.Function(Q)
     v, w = ufl.split(q)
+    f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
+    
+    def transverse_load(x):
+        return _transverse_load_polynomial_analytic(x, parameters)
+    f.interpolate(transverse_load)
+    p0 = parameters["loading"]["p0"]
+
     state = {"v": v, "w": w}
     _W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w * dx
-    # Define the variational problem
+    _W_ext = p0 * f * w * dx
 
+    # Define the variational problem
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
     b = compute_disclination_loads(
         disclinations,
@@ -208,6 +205,8 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
         L = energy - model.W_ext + penalisation
         F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
+    save_params_to_yaml(parameters, os.path.join(prefix, "parameters.yml"))
+
     # 7. Set up the solver
     solver = SNESSolver(
         F_form=F,
@@ -220,19 +219,20 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
     )
 
     solver.solve()
-    exact_solution = initialise_exact_solution_dipole(Q, parameters)
 
-    abs_error, rel_error = postprocess(
-        state, model, mesh, params=parameters, exact_solution=exact_solution, prefix=prefix
+    energy_terms = postprocess(
+        state, model, mesh, params=parameters,
+        exact_solution=None, 
+        prefix=prefix
     )
 
-    return abs_error, rel_error
+    return energy_terms
 
 if __name__ == "__main__":
     from disclinations.utils import table_timing_data, Visualisation
     _experimental_data = []
     outdir = "output"
-    prefix = os.path.join(outdir, "parametric_dipole_vs_thickness")
+    prefix = os.path.join(outdir, "parametric_dipole_relative_work")
     
     with pkg_resources.path('disclinations.test', 'parameters.yml') as f:
         # parameters = yaml.load(f, Loader=yaml.FullLoader)
@@ -260,20 +260,25 @@ if __name__ == "__main__":
     
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
 
-        for i, thickness in enumerate(np.linspace(.001, 1, num_runs)):
+        for i, a in enumerate(np.linspace(10, 100, num_runs)):
+            thickness = 1/a
+            # a**4 * b = 1
+            # b = p0/E, E=1
+            p0 = 1/a**4
+        # for i, thickness in enumerate(np.linspace(.001, 1, num_runs)):
             if changed := update_parameters(parameters, "thickness", float(thickness)):
+                parameters["loading"] = {'p0': float(p0)}
+                # parameters["model"] = {'p0': p0}
                 signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-                abs_error, rel_error = run_experiment(mesh, parameters, experiment_dir)
+                energy_terms = run_experiment(mesh, parameters, experiment_dir)
             else: 
                 abs_error, rel_error = None, None
                 raise ValueError("Failed to update parameters")
             
             _data = {
                 "thickness": thickness,
+                "p0": p0,
                 "signature": signature,
-                "relative_error": rel_error,
-                "absolute_error": abs_error,
-                "exact_energy": exact_energy_dipole(parameters)
             }
 
             _experimental_data.append(_data)

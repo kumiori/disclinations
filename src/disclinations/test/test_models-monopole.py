@@ -25,6 +25,7 @@ from disclinations.solvers import SNESSolver
 from disclinations.utils import (
     Visualisation,
     memory_usage,
+    homogeneous_dirichlet_bc_H20,
     monitor,
     table_timing_data,
     write_to_output,
@@ -177,40 +178,6 @@ def test_model_computation(variant):
     # assert (
     #     rel_error < rel_tol
     # ), f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
-
-
-def homogeneous_dirichlet_bc_H20(mesh, Q):
-    """
-    Apply homogeneous Dirichlet boundary conditions (H^2_0 Sobolev space)
-    to both AIRY and TRANSVERSE fields.
-
-    Args:
-    - mesh: The mesh of the domain.
-    - Q: The function space.
-
-    Returns:
-    - A list of boundary conditions (bcs) for the problem.
-    """
-    # Create connectivity between topological dimensions
-    mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
-
-    # Identify the boundary facets
-    bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-
-    # Locate DOFs for AIRY field
-    dofs_v = locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
-
-    # Locate DOFs for TRANSVERSE field
-    dofs_w = locate_dofs_topological(
-        V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets
-    )
-
-    # Create homogeneous Dirichlet BC (value = 0) for both fields
-    bcs_v = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_v, Q.sub(AIRY))
-    bcs_w = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_w, Q.sub(TRANSVERSE))
-
-    # Return the boundary conditions as a list
-    return [bcs_v, bcs_w]
 
 
 def initialise_exact_solution(Q, params):
