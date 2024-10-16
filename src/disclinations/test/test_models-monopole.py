@@ -108,6 +108,7 @@ def test_model_computation(variant):
         V_sub_to_V_dofs=Q_v_to_Q_dofs,
         V_sub=Q_v,
     )
+    test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
 
     # 6. Define variational form (depends on the model)
     if variant == "variational":
@@ -131,7 +132,7 @@ def test_model_computation(variant):
 
         L = energy - model.W_ext + penalisation
         # F = ufl.derivative(L, q, ufl.TestFunction(Q))
-        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state)
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     elif variant == "carstensen":
         model = NonlinearPlateFVK_carstensen(mesh, params["model"])
@@ -142,7 +143,7 @@ def test_model_computation(variant):
         penalisation = model.penalisation(state)
 
         L = energy - model.W_ext + penalisation
-        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state)
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     # 7. Set up the solver
     solver = SNESSolver(
@@ -302,7 +303,6 @@ def initialise_exact_solution(Q, params):
     radius = params["geometry"]["radius"]
     v_scale = params["model"]["v_scale"]
     _E = params["model"]["E"]
-    thickness = params["model"]["h"]
     signs = params["loading"]["signs"]
 
     q_exact = dolfinx.fem.Function(Q)
@@ -346,9 +346,11 @@ def calculate_rescaling_factors(params):
     """
     # Extract necessary parameters
     _E = params["model"]["E"]
-    _D = params["model"]["D"]
-    thickness = params["model"]["h"]
-
+    nu = params["model"]["nu"]
+    # _D = params["model"]["D"]
+    thickness = params["model"]["thickness"]
+    _D = _E * thickness**3 / (12 * (1 - nu**2))
+    
     # Calculate rescaling factors
     w_scale = np.sqrt(2 * _D / (_E * thickness))
     v_scale = _D

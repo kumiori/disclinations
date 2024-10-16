@@ -16,13 +16,19 @@ import pytest
 import ufl
 import yaml
 from disclinations.meshes.primitives import mesh_circle_gmshapi
-from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner,
-                                  NonlinearPlateFVK_carstensen,
-                                  calculate_rescaling_factors,
-                                  compute_energy_terms)
+from disclinations.models import (
+    NonlinearPlateFVK,
+    NonlinearPlateFVK_brenner,
+    NonlinearPlateFVK_carstensen,
+)
 from disclinations.solvers import SNESSolver
-from disclinations.utils import (Visualisation, memory_usage, monitor,
-                                 table_timing_data, write_to_output)
+from disclinations.utils import (
+    Visualisation,
+    memory_usage,
+    monitor,
+    table_timing_data,
+    write_to_output,
+)
 from disclinations.utils.la import compute_disclination_loads
 from dolfinx import fem
 from dolfinx.common import list_timings
@@ -40,10 +46,6 @@ outdir = "output"
 AIRY = 0
 TRANSVERSE = 1
 
-from disclinations.models import create_disclinations
-from disclinations.utils import (homogeneous_dirichlet_bc_H20, load_parameters,
-                                 save_params_to_yaml)
-
 
 @pytest.mark.parametrize("variant", models)
 def test_model_computation(variant):
@@ -58,7 +60,7 @@ def test_model_computation(variant):
 
     # params = load_parameters(f"{model}_params.yml")
     # 2. Construct or load mesh
-    prefix = os.path.join(outdir, "plate_fvk_transverse")
+    prefix = os.path.join(outdir, "plate_fvk_disclinations_dipole")
     if comm.rank == 0:
         Path(prefix).mkdir(parents=True, exist_ok=True)
 
@@ -85,25 +87,39 @@ def test_model_computation(variant):
 
     # 4. Construct boundary conditions
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
+    
+    # Point sources
+    if mesh.comm.rank == 0:
+        # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
+        points = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+                np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
+        signs = [-1, 1]
+    else:
+        # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
+        points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+                np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
 
     disclinations, params = create_disclinations(
-        mesh, params, points=[-0.0, 0.0, 0], signs=[1.0]
+        mesh, params, points=points, signs=signs
     )
     # 5. Initialize exact solutions (for comparison later)
-    exact_solution = initialise_exact_solution(Q, params)
+    # exact_solution = initialise_exact_solution(Q, params)
 
     q = dolfinx.fem.Function(Q)
     v, w = ufl.split(q)
-    f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
-    transverse_load = lambda x: _transverse_load(x, params)
-    f.interpolate(transverse_load)
-
     state = {"v": v, "w": w}
-    _W_ext = f * w * dx
-    test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
-    
-    
+    _W_ext = W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w * dx
     # Define the variational problem
+
+    Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
+    b = compute_disclination_loads(
+        disclinations,
+        params["loading"]["signs"],
+        Q,
+        V_sub_to_V_dofs=Q_v_to_Q_dofs,
+        V_sub=Q_v,
+    )
+    test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
 
     # 6. Define variational form (depends on the model)
     if variant == "variational":
@@ -125,7 +141,8 @@ def test_model_computation(variant):
         model.W_ext = _W_ext
         penalisation = model.penalisation(state)
 
-        # L = energy - model.W_ext + penalisation
+        L = energy - model.W_ext + penalisation
+        # F = ufl.derivative(L, q, ufl.TestFunction(Q))
         F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     elif variant == "carstensen":
@@ -136,7 +153,7 @@ def test_model_computation(variant):
         model.W_ext = _W_ext
         penalisation = model.penalisation(state)
 
-        # L = energy - model.W_ext + penalisation
+        L = energy - model.W_ext + penalisation
         F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     # 7. Set up the solver
@@ -145,7 +162,8 @@ def test_model_computation(variant):
         u=q,
         bcs=boundary_conditions,
         petsc_options=params["solvers"]["elasticity"]["snes"],
-        prefix="plate_fvk_transverse",
+        prefix="plate_fvk_disclinations",
+        b0=b.vector,
         monitor=monitor,
     )
 
@@ -154,7 +172,7 @@ def test_model_computation(variant):
 
     # 9. Postprocess (if any)
     abs_error, rel_error = postprocess(
-        state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
+        state, model, mesh, params=params, exact_solution=None, prefix=prefix
     )
 
     # 10. Compute absolute and relative error with respect to the exact solution
@@ -168,6 +186,26 @@ def test_model_computation(variant):
     # assert (
     #     rel_error < rel_tol
     # ), f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
+
+
+def load_parameters(file_path):
+    """
+    Load parameters from a YAML file.
+
+    Args:
+        file_path (str): Path to the YAML parameter file.
+
+    Returns:
+        dict: Loaded parameters.
+    """
+    import hashlib
+
+    with open(file_path) as f:
+        parameters = yaml.load(f, Loader=yaml.FullLoader)
+    signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
+
+    return parameters, signature
+
 
 def create_or_load_mesh(parameters, prefix):
     """
@@ -224,10 +262,46 @@ def create_or_load_mesh(parameters, prefix):
 
         return mesh, mts, fts
 
+
+def homogeneous_dirichlet_bc_H20(mesh, Q):
+    """
+    Apply homogeneous Dirichlet boundary conditions (H^2_0 Sobolev space)
+    to both AIRY and TRANSVERSE fields.
+
+    Args:
+    - mesh: The mesh of the domain.
+    - Q: The function space.
+
+    Returns:
+    - A list of boundary conditions (bcs) for the problem.
+    """
+    # Create connectivity between topological dimensions
+    mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
+
+    # Identify the boundary facets
+    bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
+
+    # Locate DOFs for AIRY field
+    dofs_v = locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
+
+    # Locate DOFs for TRANSVERSE field
+    dofs_w = locate_dofs_topological(
+        V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets
+    )
+
+    # Create homogeneous Dirichlet BC (value = 0) for both fields
+    bcs_v = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_v, Q.sub(AIRY))
+    bcs_w = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_w, Q.sub(TRANSVERSE))
+
+    # Return the boundary conditions as a list
+    return [bcs_v, bcs_w]
+
+
 def initialise_exact_solution(Q, params):
     """
     Initialize the exact solutions for v and w using the provided parameters.
-
+    TODO: Do we have an exact solution for the dipole case?
+    
     Args:
     - Q: The function space.
     - params: A dictionary of parameters containing geometric properties (e.g., radius).
@@ -237,52 +311,121 @@ def initialise_exact_solution(Q, params):
     - w_exact: Exact solution for w.
     """
 
-    # Extract the necessary parameters
-    v_scale = params["model"]["v_scale"]
+    return None, None
+    # return v_exact, w_exact
 
-    q_exact = dolfinx.fem.Function(Q)
-    v_exact, w_exact = q_exact.split()
 
-    # Define the exact solution for v
-    def _v_exact(x):
-        rq = x[0] ** 2 + x[1] ** 2
-        
-        a1=-1/12
-        a2=-1/18
-        a3=-1/24
+def calculate_rescaling_factors(params):
+    """
+    Calculate rescaling factors and store them in the params dictionary.
 
-        _v = a1 * rq ** 2 + a2 * rq ** 3 + a3 * rq ** 4
-        
-        return _v * v_scale  # Apply scaling
+    Args:
+    - params (dict): Dictionary containing geometry, material, and model parameters.
 
-    # Define the exact solution for w
-    def _w_exact(x):
-        w_scale = params["model"]["w_scale"]
-        
-        return w_scale * (1 - x[0]**2 - x[1]**2)**2  # Zero function as per your code
+    Returns:
+    - params (dict): Updated dictionary with rescaling factors.
+    """
+    # Extract necessary parameters
+    _E = params["model"]["E"]
+    nu = params["model"]["nu"]
+    # _D = params["model"]["D"]
+    thickness = params["model"]["thickness"]
+    _D = _E * thickness**3 / (12 * (1 - nu**2))
+    
+    # Calculate rescaling factors
+    w_scale = np.sqrt(2 * _D / (_E * thickness))
+    v_scale = _D
+    f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
 
-    # Interpolate the exact solutions over the mesh
-    v_exact.interpolate(_v_exact)
-    w_exact.interpolate(_w_exact)
+    # Store rescaling factors in the params dictionary
+    params["model"]["w_scale"] = float(w_scale)
+    params["model"]["v_scale"] = float(v_scale)
+    params["model"]["f_scale"] = float(f_scale)
 
-    return v_exact, w_exact
+    return params
 
-def _transverse_load(x, params):
-    f_scale = params["model"]["f_scale"]
-    _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-    return f_scale * _p
 
-def print_energy_analysis(energy_terms, exact_energy_transverse):
+def save_params_to_yaml(params, filename):
+    """
+    Save the updated params dictionary to a YAML file.
+
+    Args:
+    - params (dict): Dictionary containing all parameters.
+    - filename (str): Path to the YAML file to save.
+    """
+    with open(filename, "w") as file:
+        yaml.dump(params, file, default_flow_style=False)
+
+
+def create_disclinations(mesh, params, points=[0.0, 0.0, 0.0], signs=[1.0]):
+    """
+    Create disclinations based on the list of points and signs or the params dictionary.
+
+    Args:
+    - mesh: The mesh object, used to determine the data type for points.
+    - points: A list of 3D coordinates (x, y, z) representing the disclination points.
+    - signs: A list of signs (+1., -1.) associated with each point.
+    - params: A dictionary containing model parameters, possibly including loading points and signs.
+
+    Returns:
+    - disclinations: A list of disclination points (coordinates).
+    - signs: The same list of signs associated with each point.
+    - params: Updated params dictionary with disclinations if not already present.
+    """
+
+    # Check if "loading" exists in the parameters and contains "points" and "signs"
+    if (
+        "loading" in params
+        and params["loading"] is not None
+        and "points" in params["loading"]
+        and "signs" in params["loading"]
+    ):
+        # Use points and signs from the params dictionary
+        points = params["loading"]["points"]
+        signs = params["loading"]["signs"]
+        print("Using points and signs from params dictionary.")
+    else:
+        # Otherwise, add the provided points and signs to the params dictionary
+        print("Using provided points and signs, adding them to the params dictionary.")
+        params["loading"] = {"points": points, "signs": signs}
+
+    # Handle the case where rank is not 0 (for distributed computing)
+    if mesh.comm.rank == 0:
+        # Convert the points into a numpy array with the correct dtype from the mesh geometry
+        disclinations = [
+            np.array([point], dtype=mesh.geometry.x.dtype) for point in points
+        ]
+    else:
+        # If not rank 0, return empty arrays for parallel processing
+        disclinations = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype) for _ in points]
+
+    return disclinations, params
+
+
+def compute_energy_terms(energy_components, comm):
+    """Assemble and sum energy terms over all processes."""
+    computed_energy_terms = {
+        label: comm.allreduce(
+            dolfinx.fem.assemble_scalar(dolfinx.fem.form(energy_term)),
+            op=MPI.SUM,
+        )
+        for label, energy_term in energy_components.items()
+    }
+    return computed_energy_terms
+
+
+def print_energy_analysis(energy_terms, exact_energy_dipole):
     """Print computed energy vs exact energy analysis."""
     computed_membrane_energy = energy_terms["membrane"]
-    error = np.abs(exact_energy_transverse - computed_membrane_energy)
+    error = np.abs(exact_energy_dipole - computed_membrane_energy)
 
-    print(f"Exact energy: {exact_energy_transverse}")
+    print(f"Exact energy: {exact_energy_dipole}")
     print(f"Computed energy: {computed_membrane_energy}")
     print(f"Abs error: {error:.3%}")
-    print(f"Rel error: {error/exact_energy_transverse:.3%}")
+    print(f"Rel error: {error/exact_energy_dipole:.3%}")
 
-    return error, error / exact_energy_transverse
+    return error, error / exact_energy_dipole
+
 
 def postprocess(state, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
@@ -294,18 +437,23 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         }
 
         energy_terms = compute_energy_terms(energy_components, mesh.comm)
-        _exact_state = {"v": exact_solution[0], "w": exact_solution[1]}
-        exact_energy_transverse = comm.allreduce(
-            dolfinx.fem.assemble_scalar(
-                dolfinx.fem.form(model.energy(_exact_state)[0])),
-            op=MPI.SUM)
+        distance = np.linalg.norm(params['loading']['points'][0] - params['loading']['points'][1])
         
-        print(yaml.dump(params["model"], sort_keys=True, default_flow_style=False))
+        exact_energy_dipole = params["model"]["E"] * params["model"]["thickness"]**3 \
+            * params["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
+                (np.log(4+distance**2) - np.log(4 * distance))
+
+        print(yaml.dump(params["model"], default_flow_style=False))
+        
         abs_error, rel_error = print_energy_analysis(
-            energy_terms, exact_energy_transverse
+            energy_terms, exact_energy_dipole
         )
 
-        _v_exact, _w_exact = exact_solution
+        if exact_solution is not None:
+            _v_exact, _w_exact = exact_solution
+        else:
+            _v_exact, _w_exact = None, None
+            
         extra_fields = [
             {"field": _v_exact, "name": "v_exact"},
             {"field": _w_exact, "name": "w_exact"},
@@ -343,4 +491,3 @@ if __name__ == "__main__":
     gc.collect()
     timings = table_timing_data()
     list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])
-    

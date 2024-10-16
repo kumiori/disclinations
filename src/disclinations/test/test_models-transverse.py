@@ -100,6 +100,7 @@ def test_model_computation(variant):
 
     state = {"v": v, "w": w}
     _W_ext = f * w * dx
+    test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
     
     
     # Define the variational problem
@@ -125,8 +126,7 @@ def test_model_computation(variant):
         penalisation = model.penalisation(state)
 
         L = energy - model.W_ext + penalisation
-        # F = ufl.derivative(L, q, ufl.TestFunction(Q))
-        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state)
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     elif variant == "carstensen":
         model = NonlinearPlateFVK_carstensen(mesh, params["model"])
@@ -137,7 +137,7 @@ def test_model_computation(variant):
         penalisation = model.penalisation(state)
 
         L = energy - model.W_ext + penalisation
-        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state)
+        F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     # 7. Set up the solver
     solver = SNESSolver(
