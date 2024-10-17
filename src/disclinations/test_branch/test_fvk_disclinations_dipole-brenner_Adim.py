@@ -30,7 +30,7 @@ from ufl import (
     dx,
 )
 
-from disclinations.models import NonlinearPlateFVK
+from disclinations.models.adimensional import A_NonlinearPlateFVK_brenner
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.la import compute_cell_contributions, compute_disclination_loads
@@ -49,20 +49,18 @@ from dolfinx import plot
 
 logging.basicConfig(level=logging.INFO)
 
-
-required_version = "0.8.0"
-
-if dolfinx.__version__ != required_version:
-    warnings.warn(f"We need dolfinx version {required_version}, but found version {dolfinx.__version__}. Exiting.")
+# Chek dolfinx version
+REQUIRED_VERSION = "0.8.0"
+if dolfinx.__version__ != REQUIRED_VERSION:
+    warnings.warn(f"We need dolfinx version {REQUIRED_VERSION}, but found version {dolfinx.__version__}. Exiting.")
     sys.exit(1)
-
 
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
 
 AIRY = 0
 TRANSVERSE = 1
-PREFIX = os.path.join("output", "disclinations_dipole_var")
+PREFIX = os.path.join("output", "disclinations_dipole_brenner_adim")
 COMM = MPI.COMM_WORLD
 
 # DISCLINATION DISTRIBUTION
@@ -89,9 +87,14 @@ thickness = parameters["model"]["thickness"]
 _E = parameters["model"]["E"]
 _D = _E * thickness**3 / (12 * (1 - nu**2))
 
+# Compute dimensional scales
+v_scale = _E * thickness**3
+w_scale = thickness
+energy_scale = (_E*thickness**5)/(parameters["geometry"]["radius"]**2)
+
 # LOAD MESH
 mesh_size = parameters["geometry"]["mesh_size"]
-parameters["geometry"]["radius"] = 1
+#parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
 model_rank = 0
 tdim = 2
@@ -130,7 +133,6 @@ q_exact = dolfinx.fem.Function(Q)
 v, w = ufl.split(q)
 v_exact, w_exact = q_exact.split()
 state = {"v": v, "w": w}
-
 
 # DISCLINATION DISTRIBUTION
 if mesh.comm.rank == 0:
@@ -171,7 +173,7 @@ ex_bending_energy = 0.0
 ex_coupl_energy = 0.0
 
 # DEFINE THE FEM PROBLEM
-model = NonlinearPlateFVK(mesh, parameters["model"])
+model = A_NonlinearPlateFVK_brenner(mesh, parameters["model"])
 energy = model.energy(state)[0]
 
 # External work
@@ -186,7 +188,8 @@ L = energy - W_ext + penalisation
 Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 b = compute_disclination_loads(disclinations, DISCLINATION_POWER_LIST, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)
 
-F = ufl.derivative(L, q, ufl.TestFunction(Q))
+test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
+F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
 # Solver instance
 solver = SNESSolver(
@@ -201,28 +204,13 @@ solver = SNESSolver(
 
 solver.solve()
 
-# energy_components = {"bending": model.energy(state)[1], "membrane": -model.energy(state)[2], "coupling": model.energy(state)[3], "external_work": -W_ext}
-# # penalty_components = {"dg1_w": dg1_w(w), "dg2": dg2(w), "dg1_v": dg1_v(v), "dgc": dgc(v, w)}
-# # boundary_components = {"bc1_w": bc1_w(w), "bc2": bc2(w), "bc1_v": bc1_v(v)}
-#
-#
-# computed_energy_terms = {label: COMM.allreduce(
-#     dolfinx.fem.assemble_scalar(
-#         dolfinx.fem.form(energy_term)),
-#     op=MPI.SUM,
-# ) for label, energy_term in energy_components.items()}
-#
-# print("computed_energy_terms: ", computed_energy_terms)
-# # print(computed_penalty_terms)
-# # print(computed_boundary_terms)
-
 
 # COMPUTE ENERGY ERROR
 lagrangian_components = {
-    "total": model.energy(state)[0],
-    "bending": model.energy(state)[1],
-    "membrane": model.energy(state)[2],
-    "coupling": model.energy(state)[3],
+    "total": energy_scale*model.energy(state)[0],
+    "bending": energy_scale*model.energy(state)[1],
+    "membrane": energy_scale*model.energy(state)[2],
+    "coupling": energy_scale*model.energy(state)[3],
     "penalisation": model.penalisation(state),
 }
 
@@ -240,8 +228,8 @@ print(yaml.dump(parameters["model"], default_flow_style=False))
 error = np.abs(exact_energy_dipole - energy_terms['membrane'])
 
 # PRINT RESULTS
-print(f"Exact membrane energy: {exact_energy_dipole}")
-print(f"Computed membrane energy: {energy_terms['membrane']}")
+print(f"Exact dimensional membrane energy: {exact_energy_dipole}")
+print(f"Computed dimensional membrane energy: {energy_terms['membrane']}")
 print(f"Abs error: {error}")
 print(f"Rel error: {error/exact_energy_dipole:.3%}")
 print(f"Error: {error/exact_energy_dipole:.1%}")
@@ -263,7 +251,10 @@ plotter = pyvista.Plotter(
         shape=(1, 3),
     )
 
+# Define dimensional solutions to be used in post processing (pp)
 vpp, wpp = q.split()
+vpp = v_scale*vpp # Scale by dimnesion parameter
+wpp = w_scale*wpp # Scale by dimnesion parameter
 vpp.name = "Airy"
 wpp.name = "deflection"
 

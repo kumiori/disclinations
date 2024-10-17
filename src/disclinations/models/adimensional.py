@@ -15,6 +15,7 @@ with open(f"{dir_path}/default_parameters.yml") as f:
     default_parameters = yaml.load(f, Loader=yaml.FullLoader)
 
 default_model_parameters = default_parameters["model"]
+#default_geo_parameters = default_parameters["geometry"]
 
 laplacian = lambda f : div(grad(f))
 hessian = lambda f : grad(grad(f))
@@ -80,15 +81,20 @@ class ToyPlateFVK:
                 - bc1(w) - bc2(w) \
                 - bc1(v) + bc2(v)
 
-class NonlinearPlateFVK(ToyPlateFVK):
+class A_NonlinearPlateFVK(ToyPlateFVK):
     def __init__(self, mesh, model_parameters = {}) -> None:
-        self.alpha_penalty = model_parameters.get(
-            "alpha_penalty",
-            default_model_parameters["alpha_penalty"])
+        self.alpha_penalty = model_parameters.get("alpha_penalty", default_model_parameters["alpha_penalty"])
         self.nu = model_parameters.get("nu", default_model_parameters["nu"])
         self.E = model_parameters.get("E", default_model_parameters["E"])
         self.t = model_parameters.get("thickness", default_model_parameters["thickness"])
-        self.D = self.E * self.t**3 / (12*(1-self.nu**2))
+        #self.R = model_parameters.get("radius", default_geo_parameters["radius"])
+        #self.D = self.E * self.t**3 / (12*(1-self.nu**2))
+        self.c_nu = 1/(12*(1-self.nu**2))
+
+        # Scaling parameters to get dimensional physical values starting from dimensionless values
+        self.v_scale = self.E * (self.t**3)
+        self.w_scale = self.t
+        #self.energy_scale =  self.E * (self.t**3) * ( self.t / self.R )**2
         
         self.mesh = mesh
         
@@ -101,15 +107,14 @@ class NonlinearPlateFVK(ToyPlateFVK):
         w = state["w"]
         dx = ufl.Measure("dx")
 
-        D = self.D
-        nu = self.nu
-        Eh = self.E*self.t
-        k_g = -D*(1-nu)
+        k_g = - self.c_nu*(1-self.nu)
 
-
-        membrane = (1/(2*Eh) * inner(hessian(v), hessian(v)) - nu/(2*Eh) * self.bracket(v, v)) * dx
-        bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx
-        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
+        #membrane = ( 1/2 * inner(hessian(v), hessian(v)) - self.nu/2 * self.bracket(v, v) ) * dx
+        membrane = 1/2 * laplacian(v) * laplacian(v) * dx
+        #bending = ( self.c_nu/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w) ) * dx
+        bending = self.c_nu/2 * laplacian(w) * laplacian(w) * dx
+        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx
+        #coupling = -1/2 * self.bracket(w,w) * v * dx
         energy = bending - membrane + coupling
 
         return energy, bending, membrane, coupling
@@ -134,9 +139,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
 
         dS = ufl.Measure("dS")
         ds = ufl.Measure("ds")
-        c_nu = 12*(1-nu**2)
-        
-        # M = lambda f : grad(grad(f)) + nu*self.σ(f)       
+
         M = lambda f : self.M(f)
         P = lambda f : self.P(f)
         W = lambda f : self.W(f)
@@ -145,24 +148,11 @@ class NonlinearPlateFVK(ToyPlateFVK):
         dg2 = lambda u: + 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
         dgc = lambda w, g: avg(inner(W(w), outer(n, n)))*jump(grad(g), n)*dS
 
-        # bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
         bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
-        # bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
         bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
         bc3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
         
-        c1 = self.D
-        c2 = (1/(self.E*self.t))
-        
-        return   (c1*dg1(w) + c1*dg2(w)) \
-                - c2*dg1(v) - c2*dg2(v) \
-                + c2*bc1(w) - c2*bc2(v) \
-                + c1*bc3(w) - c1*bc3(v) + dgc(w, v)
-        # return   (c1*dg1(w) + dg2(w)) \
-        #     - c2*dg1(v) - dg2(v) \
-        #     + c2*bc1(w) - c2*bc2(v) \
-        #     + bc3(w) - bc3(v) + dgc(w, v)
-
+        return   self.c_nu*dg1(w) + dg2(w) - dg1(v) - dg2(v) + self.c_nu*bc1(w) - bc2(v) + bc3(w) - bc3(v) + dgc(w, v)
 
     def gaussian_curvature(self, w, order = 1):
         mesh = self.mesh
@@ -175,24 +165,19 @@ class NonlinearPlateFVK(ToyPlateFVK):
 
         return Kappa
     
-class NonlinearPlateFVK_brenner(NonlinearPlateFVK):
+class A_NonlinearPlateFVK_brenner(A_NonlinearPlateFVK):
 
     def energy(self, state):
         v = state["v"]
         w = state["w"]
         dx = ufl.Measure("dx")
+        k_g = - self.c_nu*(1-self.nu)
 
-        D = self.D
-        nu = self.nu
-        Eh = self.E*self.t
-        k_g = -D*(1-nu)
-
-
-        membrane = (1/(2*Eh) * 
-                    inner(hessian(v), hessian(v)) 
-                    - nu/(2*Eh) * self.bracket(v, v)) * dx
-        bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx
-        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx # compatibility coupling term
+        #membrane = ( 1/2 * inner(hessian(v), hessian(v)) - self.nu/2 * self.bracket(v, v) ) * dx
+        membrane = 1/2 * laplacian(v) * laplacian(v) * dx
+        #bending = ( self.c_nu/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w) ) * dx
+        bending = self.c_nu/2 * laplacian(w) * laplacian(w) * dx
+        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx
         energy = bending - membrane
 
         return energy, bending, membrane, coupling
@@ -204,14 +189,10 @@ class NonlinearPlateFVK_brenner(NonlinearPlateFVK):
         _function_space = self.Q
         _test = ufl.TestFunction(_function_space)
 
-        # Split the test function into subspaces for _w_test and _v_test
-        # _w_test, _v_test = ufl.split(_test)
-        # w_test, v_test = ufl.split(_test)
-        
         dx = ufl.Measure("dx")
         dS = ufl.Measure("dS")
         ds = ufl.Measure("ds")
-        
+
         n = ufl.FacetNormal(self.mesh)
 
         coupling_in_edge = lambda f1, f2, test: ( dot(dot(avg(self.σ(f1)),grad(f2('+'))), n('+')) + dot(dot(avg(self.σ(f1)),grad(f2('-'))), n('-')) )* avg(test) * dS
@@ -224,7 +205,6 @@ class NonlinearPlateFVK_brenner(NonlinearPlateFVK):
         cv_bulk = - 0.5*self.bracket(w,w) * v_test * dx
         cv_in_edges = 0.5*coupling_in_edge(w, w, v_test)
         cv_bnd_edges = 0.5*coupling_bnd_edge(w, w, v_test)
-        
         return cw_bulk + cv_bulk + cw_bnd_edges + cv_bnd_edges + cv_in_edges + cw_in_edges
 
     def penalisation(self, state):
@@ -237,47 +217,27 @@ class NonlinearPlateFVK_brenner(NonlinearPlateFVK):
 
         dS = ufl.Measure("dS")
         ds = ufl.Measure("ds")
-        c_nu = 12*(1-nu**2)
 
-        # M = lambda f : grad(grad(f)) + nu*self.σ(f)
         M = lambda f : self.M(f)
         P = lambda f : self.P(f)
         W = lambda f : self.W(f)
 
-        #dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS # CFe: 6-10-24 commented out
-        #dg2 = lambda u: + 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS # CFe: 6-10-24 commented out
-        dg1 = lambda u: - 1/2 * jump(grad(u),n)*avg(dot(grad(grad(u)) * n, n)) * dS # CFe: 6-10-24 added
-        dg2 = lambda u: + 1/2 * α/avg(h) * jump(grad(u),n) * jump(grad(u),n) * dS # CFe: 6-10-24 added
-        #dgc = lambda w, g: avg(inner(W(w), outer(n, n)))*jump(grad(g), n)*dS
+        dg1 = lambda u: - 1/2 * jump(grad(u),n)*avg(dot(grad(grad(u)) * n, n)) * dS
+        dg2 = lambda u: + 1/2 * α/avg(h) * jump(grad(u),n) * jump(grad(u),n) * dS
 
-        # bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
-        # bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
         bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
         bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
-        #bc3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
         bc3 = lambda u: 1/2 * α/h * dot(grad(u),n) * dot(grad(u),n) * ds
-        c1 = self.D
-        c2 = (1/(self.E*self.t))
 
-        return   (c1*dg1(w) + c1*dg2(w)) \
-                - c2*dg1(v) - c2*dg2(v) \
-                + c2*bc1(w) - c2*bc2(v) \
-                + c1*bc3(w) - c1*bc3(v)
-        # return   (c1*dg1(w) + dg2(w)) \
-        #         - c2*dg1(v) - dg2(v) \
-        #         + c2*bc1(w) - c2*bc2(v) \
-        #         + bc3(w) - bc3(v)
+        return  self.c_nu*dg1(w) + dg2(w) - dg1(v) - dg2(v) + self.c_nu*bc1(w) - bc2(v) + bc3(w) - bc3(v)
     
-class NonlinearPlateFVK_carstensen(NonlinearPlateFVK_brenner):
+class A_NonlinearPlateFVK_carstensen(A_NonlinearPlateFVK_brenner):
     def coupling_term(self, state, v_test, w_test):
         v = state["v"]
         w = state["w"]
 
         _function_space = v.ufl_operands[0].ufl_function_space()
         _test = ufl.TestFunction(_function_space)
-
-        # Split the test function into subspaces for _w_test and _v_test
-        # _w_test, _v_test = ufl.split(_test)
         
         dx = ufl.Measure("dx")
         dS = ufl.Measure("dS")
@@ -346,35 +306,4 @@ def compute_energy_terms(energy_components, comm):
         for label, energy_term in energy_components.items()
     }
     return computed_energy_terms
-
-
-def calculate_rescaling_factors(params):
-    """
-    Calculate rescaling factors and store them in the params dictionary.
-
-    Args:
-    - params (dict): Dictionary containing geometry, material, and model parameters.
-
-    Returns:
-    - params (dict): Updated dictionary with rescaling factors.
-    """
-    # Extract necessary parameters
-    _E = params["model"]["E"]
-    nu = params["model"]["nu"]
-    thickness = params["model"]["thickness"]
-    
-    # _D = params["model"]["D"]
-    _D = _E * thickness**3 / (12 * (1 - nu**2))
-
-    # Calculate rescaling factors
-    w_scale = np.sqrt(2 * _D / (_E * thickness))
-    v_scale = _D
-    f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
-
-    # Store rescaling factors in the params dictionary
-    params["model"]["w_scale"] = float(w_scale)
-    params["model"]["v_scale"] = float(v_scale)
-    params["model"]["f_scale"] = float(f_scale)
-
-    return params
 

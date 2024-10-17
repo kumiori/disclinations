@@ -17,7 +17,7 @@ from petsc4py import PETSc
 import matplotlib.pyplot as plt
 import matplotlib.tri as tri
 
-from disclinations.models import NonlinearPlateFVK_brenner
+from disclinations.models.adimensional import A_NonlinearPlateFVK_brenner
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
@@ -54,7 +54,7 @@ COMM = MPI.COMM_WORLD
 AIRY = 0
 TRANSVERSE = 1
 
-OUTDIR = os.path.join("output", "analytic_transverse_brenner")
+OUTDIR = os.path.join("output", "analytic_transverse-brenner_Adim")
 
 # Create output folder if does not exists
 if COMM.rank == 0:
@@ -87,6 +87,7 @@ with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoad
 
 # GEOMETRIC PARAMETERS
 thickness = parameters["model"]["thickness"]
+a = parameters["geometry"]["radius"]/thickness
 
 # ELASTIC PARAMETERS
 nu = parameters["model"]["nu"]
@@ -112,9 +113,12 @@ q = dolfinx.fem.Function(Q)
 v, w = ufl.split(q)
 q_exact = dolfinx.fem.Function(Q)
 v_exact, w_exact = q_exact.split()
+v_dim = E*thickness**3*v
+w_dim = thickness*w
 f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 state = {"v": v, "w": w}
 state_exact = {"v": v_exact, "w": w_exact}
+state_dimensional = {"v": v_dim, "w": w_dim}
 
 # SET BOUDNARY CONDITIONS
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
@@ -127,7 +131,7 @@ _bcs = {AIRY: bcs_v, TRANSVERSE: bcs_w}
 bcs = list(_bcs.values())
 
 # DEFINE THE VARIATIONAL PROBLEM
-model = NonlinearPlateFVK_brenner(mesh, parameters["model"])
+model = A_NonlinearPlateFVK_brenner(mesh, parameters["model"])
 energy = model.energy(state)[0]
 
 # DEFINE EXACT SOLUTIONS
@@ -151,7 +155,7 @@ ex_coupl_energy = exact_coupling_energy(v_exact, w_exact)
 def transverse_load(x):
     f_scale = np.sqrt(2 * D**3 / (E * thickness))
     p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-    return f_scale * p
+    return (a**4) * (f_scale/E) * p
 
 f.interpolate(transverse_load)
 
@@ -190,9 +194,9 @@ solver = SNESSolver(
 solver.solve()
 
 # COMPUTE DIMENSIONAL ENERGY
-energy_components = {"bending": model.energy(state)[1],
-                    "membrane": model.energy(state)[2],
-                    "coupling": model.energy(state)[3]}
+energy_components = {"bending": (1/a**2)*model.energy(state_dimensional)[1],
+                    "membrane": (1/a**2)*model.energy(state_dimensional)[2],
+                    "coupling": (1/a**2)*model.energy(state_dimensional)[3]}
 
 energy_terms = {label: COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(energy_term)), op=MPI.SUM)
                          for label, energy_term in energy_components.items()}
@@ -216,6 +220,8 @@ print("Exact coupling energy: ", ex_coupl_energy)
     For the post-processing we need vpp, wpp
 """
 vpp, wpp = q.split()
+vpp = E*(thickness**3)*vpp
+wpp = thickness*wpp
 vpp.name = "Airy"
 wpp.name = "deflection"
 

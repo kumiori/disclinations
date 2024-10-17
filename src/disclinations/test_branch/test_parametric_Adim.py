@@ -1,7 +1,7 @@
 """
 PURPOSE OF THE SCRIPT
 Compare the three FE formulations (Variational, Brenner, Carstensen) with a known solution while varying the plate's thickness.
-The script uses the dimensional FE formulations implemented in "models/__init__.py"
+The script uses the NON-dimensional FE formulations implemented in "models/adimensional.py"
 
 ARTICLE RELATED SECTION
 "Test 3: parametric study with different values of h"
@@ -32,10 +32,8 @@ from ufl import CellDiameter, FacetNormal, dx, sqrt
 
 import disclinations
 from disclinations.meshes.primitives import mesh_circle_gmshapi
-from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner,
-                                  NonlinearPlateFVK_carstensen,
-                                  calculate_rescaling_factors,
-                                  compute_energy_terms)
+from disclinations.models import (calculate_rescaling_factors, compute_energy_terms)
+from disclinations.models.adimensional import A_NonlinearPlateFVK, A_NonlinearPlateFVK_brenner, A_NonlinearPlateFVK_carstensen
 from disclinations.models import create_disclinations
 from disclinations.solvers import SNESSolver
 from disclinations.utils import (Visualisation, memory_usage, monitor,
@@ -58,7 +56,7 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 
 
-prefix = os.path.join("output", "test_parametric")
+prefix = os.path.join("output", "test_parametric_adim")
 #series = base_signature[0::6]
 PARAMETER_NAME = "thickness"
 PARAMETER_CATEGORY = "model"
@@ -107,11 +105,11 @@ def solveModel(FEMmodel, costantData, parameters, f):
     state = {"v": v, "w": w}
 
     if FEMmodel == CARSTENSEN:
-        model = NonlinearPlateFVK_carstensen(mesh, parameters["model"])
+        model = A_NonlinearPlateFVK_carstensen(mesh, parameters["model"])
     elif FEMmodel == BRENNER:
-        model = NonlinearPlateFVK_brenner(mesh, parameters["model"])
+        model = A_NonlinearPlateFVK_brenner(mesh, parameters["model"])
     elif FEMmodel == VARIATIONAL:
-        model = NonlinearPlateFVK(mesh, parameters["model"])
+        model = A_NonlinearPlateFVK(mesh, parameters["model"])
     else:
         print(f"FEMmodel = {FEMmodel} is not acceptable. Script exiting")
         exit(0)
@@ -157,8 +155,13 @@ def run_experiment(FEMmodel, costantData, parameters, series):
 
     parameters = calculate_rescaling_factors(parameters) # CFe: update exact solution scale factors
 
+    v_scale = parameters["model"]["E"] * (parameters["model"]["thickness"]**3)
+    w_scale = parameters["model"]["thickness"]
+
     # CFe: update external load
-    def nondim_transverse_load(x): return parameters["model"]["f_scale"]*( (40 / 3) * (1 - x[0] ** 2 - x[1] ** 2) ** 4 + (16 / 3) * (11 + x[0] ** 2 + x[1] ** 2) )
+    a = parameters["geometry"]["radius"] / parameters["model"]["thickness"]
+    b = parameters["model"]["f_scale"]/parameters["model"]["E"] # CFe: f_scale := sqrt(2 * D**3 / (E * thickness)) = E * (thickness**4) * sqrt( 2 ) / 12( 1 - nu**2 )=
+    def nondim_transverse_load(x): return (a**4)*(b)*( (40 / 3) * (1 - x[0] ** 2 - x[1] ** 2) ** 4 + (16 / 3) * (11 + x[0] ** 2 + x[1] ** 2) )
 
     Q = costantData.funcSpace
     f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
@@ -171,7 +174,7 @@ def run_experiment(FEMmodel, costantData, parameters, series):
     v_hessianNrm = hessianL2norm(v)
     w_hessianNrm = hessianL2norm(w)
 
-    return v_hessianNrm, w_hessianNrm, v_Nrm, w_Nrm, convergence_id
+    return v_scale*v_hessianNrm, w_scale*w_hessianNrm, v_scale*v_Nrm, w_scale*w_Nrm, convergence_id
 
 
 def exactL2Nrm(costantData, parameters):
@@ -364,7 +367,7 @@ if __name__ == "__main__":
     plt.plot(experimental_data[PARAMETER_NAME], experimental_data["Percent error - L2nrm v, Variational"], marker='o', linestyle='solid', color='b', label='L2norm v (Variational)', linewidth=5, markersize=20)
     plt.plot(experimental_data[PARAMETER_NAME], experimental_data["Percent error - L2nrm v, Brenner"], marker='v', linestyle='dotted', color='r', label='L2norm v (Brenner)', linewidth=5, markersize=20)
     plt.plot(experimental_data[PARAMETER_NAME], experimental_data["Percent error - L2nrm v, Carstensen"], marker='^', linestyle='dashed', color='g', label='L2norm v (Carstensen)', linewidth=5, markersize=20)
-    plt.axhline(y=0, color='black', linestyle='--', linewidth=5, label='0% error')
+    plt.axhline(y=0, color='black', linestyle='--', linewidth=5, label='0% error line')
 
     max_v = max([max(experimental_data["Percent error - L2nrm v, Variational"]), max(experimental_data["Percent error - L2nrm v, Brenner"]), max(experimental_data["Percent error - L2nrm v, Carstensen"]), 0])
     min_v = min([min(experimental_data["Percent error - L2nrm v, Variational"]), min(experimental_data["Percent error - L2nrm v, Brenner"]), min(experimental_data["Percent error - L2nrm v, Carstensen"]), 0])
@@ -389,7 +392,7 @@ if __name__ == "__main__":
     plt.plot(experimental_data[PARAMETER_NAME], experimental_data["Percent error - L2nrm w, Variational"], marker='o', linestyle='solid', color='b', label='L2norm w (Variational)', linewidth=5, markersize=20)
     plt.plot(experimental_data[PARAMETER_NAME], experimental_data["Percent error - L2nrm w, Brenner"], marker='v', linestyle='dotted', color='r', label='L2norm w (Brenner)', linewidth=5, markersize=20)
     plt.plot(experimental_data[PARAMETER_NAME], experimental_data["Percent error - L2nrm w, Carstensen"], marker='^', linestyle='dashed', color='g', label='L2norm w (Carstensen)', linewidth=5, markersize=20)
-    plt.axhline(y=0, color='black', linestyle='--', linewidth=5, label='0% error')
+    plt.axhline(y=0, color='black', linestyle='--', linewidth=5, label='0% error line')
 
     max_w = max([max(experimental_data["Percent error - L2nrm w, Variational"]), max(experimental_data["Percent error - L2nrm w, Brenner"]), max(experimental_data["Percent error - L2nrm w, Carstensen"]), 0])
     min_w = min([min(experimental_data["Percent error - L2nrm w, Variational"]), min(experimental_data["Percent error - L2nrm w, Brenner"]), min(experimental_data["Percent error - L2nrm w, Carstensen"]), 0])

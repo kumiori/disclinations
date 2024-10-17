@@ -6,40 +6,48 @@ import os
 import pdb
 import sys
 from pathlib import Path
-
 import basix
-import disclinations
-import dolfinx
 import numpy as np
 import petsc4py
 import pytest
-import ufl
 import yaml
-from disclinations.meshes.primitives import mesh_circle_gmshapi
-from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner,
-                                  NonlinearPlateFVK_carstensen,
-                                  calculate_rescaling_factors,
-                                  compute_energy_terms)
-from disclinations.solvers import SNESSolver
-from disclinations.utils import (Visualisation, memory_usage, monitor,
-                                 table_timing_data, write_to_output)
-from disclinations.utils.la import compute_disclination_loads
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
+import copy
+from mpi4py import MPI
+from petsc4py import PETSc
+import pandas as pd
+from collections import namedtuple
+import matplotlib.pyplot as plt
+
+import ufl
+from ufl import CellDiameter, FacetNormal, dx, sqrt
+
+import dolfinx
 from dolfinx import fem
 from dolfinx.common import list_timings
 from dolfinx.fem import Constant, dirichletbc, locate_dofs_topological
 from dolfinx.io import XDMFFile, gmshio
-from mpi4py import MPI
-from petsc4py import PETSc
-import pandas as pd
+
+import disclinations
+from disclinations.meshes.primitives import mesh_circle_gmshapi
+from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner, NonlinearPlateFVK_carstensen, calculate_rescaling_factors, compute_energy_terms)
+from disclinations.models import create_disclinations
+from disclinations.solvers import SNESSolver
+from disclinations.utils import (Visualisation, memory_usage, monitor, table_timing_data, write_to_output)
 from disclinations.utils import _logger
+from disclinations.utils import (homogeneous_dirichlet_bc_H20, load_parameters, save_params_to_yaml)
+from disclinations.utils import update_parameters, save_parameters
+from disclinations.utils import create_or_load_circle_mesh
+from disclinations.utils.la import compute_disclination_loads
+from disclinations.utils import table_timing_data, Visualisation
 
-import matplotlib.pyplot as plt
-
-comm = MPI.COMM_WORLD
-from ufl import CellDiameter, FacetNormal, dx, sqrt
-
-# models = ["variational", "brenner", "carstensen"]
-outdir = "output"
+PARAMETER_NAME = "Load p0"
+PARAMETER_CATEGORY = "model"
+NUM_RUNS = 10
+P_RANGE = np.linspace(1, 100, NUM_RUNS) # load p0
+OUTDIR = os.path.join("output", "test_parametric_b") # CFe: output directory
+PATH_TO_PARAMETERS_YML_FILE = 'disclinations.test'
+LOG_SCALE = False # CFe: boolean, set it to true to plot with a logscale on the xaxis, False to plot with a linear scale on the xaxis
 
 AIRY                = 0
 TRANSVERSE = 1
@@ -49,19 +57,11 @@ VARIATIONAL  = 0
 BRENNER         = 1
 CARSTENSEN   = 2
 
-from disclinations.models import create_disclinations
-from disclinations.utils import (homogeneous_dirichlet_bc_H20, load_parameters,
-                                 save_params_to_yaml)
-from disclinations.utils import update_parameters, save_parameters
+DISCLINATION_COORD_LIST = [[0.0, 0.0, 0]]
+DISCLINATION_POWER_LIST = [0]
 
-from disclinations.utils import create_or_load_circle_mesh
-import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
-import copy
-
-# CFe added
-from collections import namedtuple
+COMM = MPI.COMM_WORLD
 CostantData = namedtuple("CostantData", ["funcSpace", "bcs"])
-# CFe end
 
 petsc4py.init(["-petsc_type", "double"]) # CFe: ensuring double precision numbers
 
@@ -72,17 +72,12 @@ def hessianL2norm(u):
 
 def solveModel(FEMmodel, costantData, parameters, f):
 
-    # CFe: geometric and elastic data
-    _E = parameters["model"]["E"]
-    nu = parameters["model"]["nu"]
-    thickness = parameters["model"]["thickness"]
-    _D = _E * thickness**3 / (12 * (1 - nu**2))
-
-    # CFe: function space data
+    # FUNCTION SPACE
     q = dolfinx.fem.Function(costantData.funcSpace)
     v, w = ufl.split(q)
     state = {"v": v, "w": w}
 
+    # SELECT MODEL
     if FEMmodel == CARSTENSEN:
         model = NonlinearPlateFVK_carstensen(mesh, parameters["model"])
     elif FEMmodel == BRENNER:
@@ -93,20 +88,27 @@ def solveModel(FEMmodel, costantData, parameters, f):
         print(f"FEMmodel = {FEMmodel} is not acceptable. Script exiting")
         exit(0)
 
+    # INSERT DISCLINATIONS
+    disclinations = []
+    if mesh.comm.rank == 0:
+        for dc in DISCLINATION_COORD_LIST: disclinations.append( np.array([dc], dtype=mesh.geometry.x.dtype))
+    else:
+        for dc in DISCLINATION_COORD_LIST: disclinations.append( np.zeros((0, 3), dtype=mesh.geometry.x.dtype) )
+    Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
+    b = compute_disclination_loads(disclinations, DISCLINATION_POWER_LIST, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)
 
+    # WEAK FEM FORMULATION
     W_ext = f * w * dx
     model.W_ext = W_ext
     energy = model.energy(state)[0]
-
     penalisation = model.penalisation(state)
-
     L = energy - W_ext + penalisation
-
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
     F = ufl.derivative(L, q, ufl.TestFunction(Q))
     if FEMmodel is not VARIATIONAL:
         F = F + model.coupling_term(state, test_v, test_w)
 
+    # SOLVER INSTANCE
     solver_parameters = {
         "snes_type": "newtonls",  # Solver type: NGMRES (Nonlinear GMRES)
         "snes_max_it": 100,  # Maximum number of iterations
@@ -122,9 +124,9 @@ def solveModel(FEMmodel, costantData, parameters, f):
         u=q,
         bcs=costantData.bcs,
         bounds=None,
-        # petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
         petsc_options=solver_parameters,
         prefix="plate_fvk",
+        b0=b.vector,
     )
     n_iterations, convergence_id = solver.solve()
     return q, convergence_id
@@ -151,24 +153,15 @@ def run_experiment(FEMmodel, costantData, parameters, param):
 
 if __name__ == "__main__":
 
-    # CFe: choose the parameter
-    # set PARAMETER_NAME equal to "thickness", "E" or "alpha_penalty"
-    # set then PARAMETER_CATEGORY accordingly: "model" in all the three cases above.
-    PARAMETER_NAME = "Load p0"
-    PARAMETER_CATEGORY = "model"
-    NUM_RUNS = 10
+     # OUTPUT DIRECTORY
+    experiment_dir = os.path.join(OUTDIR, PARAMETER_NAME, "3")
+    if COMM.rank == 0: Path(OUTDIR).mkdir(parents=True, exist_ok=True)
+    if COMM.rank == 0: Path(experiment_dir).mkdir(parents=True, exist_ok=True)
 
-    p_range = np.linspace(1, 10, NUM_RUNS) # load p0
-
-    # CFe: boolean, set it to true to plot with a logscale on the xaxis, False to plot with a linear scale on the xaxis
-    LOG_SCALE = False
-
-    from disclinations.utils import table_timing_data, Visualisation
     _experimental_data = []
-    outdir = "output"
-    prefix = os.path.join(outdir, "test_parametric_load")
     
-    with pkg_resources.path('disclinations.test', 'parameters.yml') as f:
+    # LOAD PARAMETERS FILE
+    with pkg_resources.path(PATH_TO_PARAMETERS_YML_FILE, 'parameters.yml') as f:
         parameters, _ = load_parameters(f)
         base_parameters = copy.deepcopy(parameters)
         # Remove thickness from the parameters, to compute the parametric series signature
@@ -176,42 +169,33 @@ if __name__ == "__main__":
             del base_parameters[PARAMETER_CATEGORY][PARAMETER_NAME]
         
         base_signature = hashlib.md5(str(base_parameters).encode('utf-8')).hexdigest()
-
-    #series = base_signature[0::6]
-    series = PARAMETER_NAME
-    experiment_dir = os.path.join(prefix, series)
-    
-    if comm.rank == 0:
-        Path(experiment_dir).mkdir(parents=True, exist_ok=True)
             
-    logging.info(
-        f"===================- {experiment_dir} -=================")
-    
-    mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
+    logging.info(f"===================- {experiment_dir} -=================")
 
-    if comm.rank == 0:
-        Path(prefix).mkdir(parents=True, exist_ok=True)
+    # LOAD THE MESH
+    mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=OUTDIR)
     h = CellDiameter(mesh)
     n = FacetNormal(mesh)
 
+    # DEFINE THE FUNCTION SPACE
     X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"])
     Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
+    # DEFINE THE DIRICHLET BOUNDARY CONDITIONS
     mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
     bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
     dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
     dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
-
     bcs_w = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_w, Q.sub(TRANSVERSE))
     bcs_v = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_v, Q.sub(AIRY))
-
     _bcs = {AIRY: bcs_v, TRANSVERSE: bcs_w}
     bcs = list(_bcs.values())
 
+    # Values constant across the experiments
     costantData = CostantData(Q, bcs)
 
-    # CFe running experiments by varying a
-    for i, param in enumerate(p_range):
+    # PERFORM EXPERIMENTS
+    for i, param in enumerate(P_RANGE):
         data_var = run_experiment(VARIATIONAL, costantData, parameters, param)
         data_brn = run_experiment(BRENNER, costantData, parameters, param)
         data_car = run_experiment(CARSTENSEN, costantData, parameters, param)
@@ -234,19 +218,21 @@ if __name__ == "__main__":
                "Convergence ID (Variational)", "Convergence ID (Brenner)", "Convergence ID (Carstensen)",
                "Mesh size", "Interior Penalty (IP)", "Thickness", "Young modulus", "Poisson ratio"]
 
-    experimental_data = pd.DataFrame(_experimental_data, columns=columns)
-    
+
     _logger.info(f"Saving experimental data to {experiment_dir}")
     #pdb.set_trace()
 
+    # EXPORT RESULTS TO EXCEL FILE
+    experimental_data = pd.DataFrame(_experimental_data, columns=columns)
     experimental_data.to_excel(f'{experiment_dir}/varying_b_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]}.xlsx', index=False)
 
+    # PRINT OUT RESULTS
     print(10*"*")
     print("Results")
     print(experimental_data)
     print(10*"*")
 
-    # Plots
+    # PLOTS
     plt.figure(figsize=(30, 20))
     plt.plot(experimental_data[PARAMETER_NAME], experimental_data["v (Variational)"], marker='o', linestyle='solid', color='b', label='v (Variational)', linewidth=5, markersize=20)
     plt.plot(experimental_data[PARAMETER_NAME], experimental_data["v (Brenner)"], marker='v', linestyle='dotted', color='r', label='v (Brenner)', linewidth=5, markersize=20)
@@ -257,7 +243,7 @@ if __name__ == "__main__":
     steps_v = (max_v - min_v)/10
 
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(p_range)
+    plt.xticks(P_RANGE)
     plt.yticks(np.arange(min_v, max_v, steps_v))
     plt.xlabel("b", fontsize=35)
     plt.ylabel(r'$| \nabla^2 v |_{L^2(\Omega)}$', fontsize=35)
@@ -276,9 +262,10 @@ if __name__ == "__main__":
     max_w = max([max(experimental_data["w (Variational)"]), max(experimental_data["w (Brenner)"]), max(experimental_data["w (Carstensen)"])])
     min_w = min([min(experimental_data["w (Variational)"]), min(experimental_data["w (Brenner)"]), min(experimental_data["w (Carstensen)"])])
     steps_w = (max_w - min_w)/10
+    if steps_w == 0: steps_w = NUM_RUNS # CFe: if the deflection is not activated
 
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(p_range)
+    plt.xticks(P_RANGE)
     plt.yticks(np.arange(min_w, max_w, steps_w))
     plt.xlabel("b", fontsize=35)
     plt.ylabel(r'$| \nabla^2 w |_{L^2(\Omega)}$', fontsize=35)

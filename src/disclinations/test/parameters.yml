@@ -10,15 +10,15 @@ geometry:
 
 #  === Material === #
 model:
-    E: 1
-    thickness: 1
+    E: 10000000000 #20000
+    thickness: 0.05
     sigma_D0: 1.
     nu: 0.15
     model_dimension: 2
     model_type: "2D"
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"
     order: 3
-    alpha_penalty: 100000
+    alpha_penalty: 2000
 # === Solver === #
 solvers:
     elasticity:

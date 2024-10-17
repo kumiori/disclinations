@@ -1,3 +1,13 @@
+"""
+PURPOSE OF THE SCRIPT
+Compare the three FE formulations (Variational, Brenner, Carstensen) with a known solution.
+The script can use both the dimensional or the NON-dimensional FE formulations (see respectivelly "models/__init__.py" and "models/adimensional.py")
+
+ARTICLE RELATED SECTION
+"Tests 1: kinematically compatible plate under volume forces"
+"Tests 2: kinematically incompatible plate"
+"""
+
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 import yaml
 import numpy as np
@@ -5,15 +15,29 @@ import matplotlib.pyplot as plt
 import pdb
 import os
 import pandas as pd
+import argparse
+
+# parser = argparse.ArgumentParser(description="Which comparison would you like to run?")
+# parser.add_argument("test type", help="Either disclination or transverse")
+# parser.add_argument("dimensional / adimensional model", help="Either disclination or transverse")
+
+SCRIPT_VAR = "test_fvk_vs_analytics_transverse_Adim"
+SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner_Adim"
+SCRIPT_CAR = "test_fvk_vs_analytics_transverse-carstensen_Adim"
+
+#SCRIPT_VAR = "test_fvk_disclinations_dipole_Adim"
+#SCRIPT_BRN = "test_fvk_disclinations_dipole-brenner_Adim"
+#SCRIPT_CAR = "test_fvk_disclinations_dipole-carstensen_Adim"
 
 #SCRIPT_VAR = "test_fvk_vs_analytics_transverse"
 #SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner"
 #SCRIPT_CAR = "test_fvk_vs_analytics_transverse-carstensen"
-SCRIPT_VAR = "test_fvk_disclinations_dipole"
-SCRIPT_BRN = "test_fvk_disclinations_dipole-brenner"
-SCRIPT_CAR = "test_fvk_disclinations_dipole-carstensen"
 
-OUTDIR = os.path.join("output", SCRIPT_VAR)
+#SCRIPT_VAR = "test_fvk_disclinations_dipole"
+#SCRIPT_BRN = "test_fvk_disclinations_dipole-brenner"
+#SCRIPT_CAR = "test_fvk_disclinations_dipole-carstensen"
+
+OUTDIR = os.path.join("output", "compare", SCRIPT_VAR)
 if not os.path.exists(OUTDIR): os.makedirs(OUTDIR)
 
 # Define a function to run a script and return a variable
@@ -35,14 +59,14 @@ dofs_v = script_var["dofs_v"]
 dofs_w = script_var["dofs_w"]
 
 v_exact = script_var["v_exact"]
-v_var = script_var["v"]
-v_brn = script_brn["v"]
-v_car = script_car["v"]
+v_var = script_var["vpp"]
+v_brn = script_brn["vpp"]
+v_car = script_car["vpp"]
 
 w_exact = script_var["w_exact"]
-w_var = script_var["w"]
-w_brn = script_brn["w"]
-w_car = script_car["w"]
+w_var = script_var["wpp"]
+w_brn = script_brn["wpp"]
+w_car = script_car["wpp"]
 
 # Compare energies
 columns = ["Error % Bending Energy (Var)", "Error % Bending Energy (Brn)", "Error % Bending Energy (Car)",
@@ -72,12 +96,6 @@ e_data["Bending Energy (Exact)"] = script_var["ex_bending_energy"]
 e_data["Membrane Energy (Exact)"] = script_var["ex_membrane_energy"]
 e_data["Coupling Energy (Exact)"] = script_var["ex_coupl_energy"]
 
-print("2) ----- ex_membrane_energy: ", e_data["Membrane Energy (Exact)"] )
-print("3) ----- ex_membrane_energy: ", script_var["ex_membrane_energy"])
-print("4) ",  e_data["Membrane Energy (Var)"] )
-print("5) ",  e_data["Membrane Energy (Brn)"] )
-print("6) ",  e_data["Membrane Energy (Car)"] )
-
 errorBending_var = "N.A."
 errorBending_brn = "N.A."
 errorBending_car = "N.A."
@@ -103,9 +121,20 @@ if e_data["Coupling Energy (Exact)"] != 0.0:
     errorCoupling_brn = 100*( e_data["Coupling Energy (Brn)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
     errorCoupling_car = 100*( e_data["Coupling Energy (Car)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
 
-print("errorMembrane_var: ", errorMembrane_var)
-print("errorMembrane_brn: ", errorMembrane_brn)
-print("errorMembrane_car: ", errorMembrane_car)
+print("RESULTS")
+print("----------------------------------------------")
+print("Percent errorBending_var: ", errorBending_var)
+print("Percent errorBending_brn: ", errorBending_brn)
+print("Percent errorBending_car: ", errorBending_car)
+print("----------------------------------------------")
+print("Percent errorMembrane_var: ", errorMembrane_var)
+print("Percent errorMembrane_brn: ", errorMembrane_brn)
+print("Percent errorMembrane_car: ", errorMembrane_car)
+print("----------------------------------------------")
+print("Percent errorCoupling_var: ", errorCoupling_var)
+print("Percent errorCoupling_brn: ", errorCoupling_brn)
+print("Percent errorCoupling_car: ", errorCoupling_car)
+print("----------------------------------------------")
 
 #pdb.set_trace()
 exp_dict = {
@@ -136,11 +165,10 @@ exp_dict = {
     "Error % Coupling Energy (Car)": [errorCoupling_car]
     }
 
-#experimental_data = experimental_data.append(exp_dict, ignore_index=True)
 experimental_data = pd.DataFrame(exp_dict)
 experimental_data.to_excel(f'{OUTDIR}/Models_comparison.xlsx', index=False)
-# Plot profiles:
 
+# Plot profiles:
 import pyvista
 
 pyvista.OFF_SCREEN = True
@@ -148,14 +176,6 @@ pyvista.OFF_SCREEN = True
 plotter = pyvista.Plotter(title="Displacement", window_size=[1200, 600], shape=(2, 2))
 
 
-#scalar_plot = plot_scalar(v, plotter, subplot=(0, 0), V_sub=V_v, dofs=dofs_v)
-#scalar_plot = plot_scalar(w, plotter, subplot=(0, 1), V_sub=V_w, dofs=dofs_w)
-#
-#scalar_plot = plot_scalar(v_exact, plotter, subplot=(1, 0), V_sub=V_v, dofs=dofs_v)
-#scalar_plot = plot_scalar(w_exact, plotter, subplot=(1, 1), V_sub=V_w, dofs=dofs_w)
-#
-#scalar_plot.screenshot(f"{prefix}/test_fvk.png")
-#print("plotted scalar")
 with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
 tol = 1e-3
 xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, 101)

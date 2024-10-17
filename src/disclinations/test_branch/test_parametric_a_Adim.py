@@ -1,3 +1,13 @@
+"""
+PURPOSE OF THE SCRIPT
+Run experiments by varying "a^4 * b" while keeping constant a^2.
+The three FE formulation(Variational, Brenner, Carstensen) in their NON-dimensional form (see "models/adimensional.py") are used.
+a := R/h
+b := p0/E
+
+ARTICLE RELATED SECTION
+Section 6.2: "Parametric study by varying a and b"
+"""
 import gc
 import hashlib
 import json
@@ -30,8 +40,8 @@ from ufl import CellDiameter, FacetNormal, dx, sqrt
 
 import disclinations
 from disclinations.meshes.primitives import mesh_circle_gmshapi
-from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner, NonlinearPlateFVK_carstensen, calculate_rescaling_factors, compute_energy_terms)
-#from disclinations.models.adimensional import A_NonlinearPlateFVK, A_NonlinearPlateFVK_brenner, A_NonlinearPlateFVK_carstensen
+from disclinations.models import (calculate_rescaling_factors, compute_energy_terms)
+from disclinations.models.adimensional import A_NonlinearPlateFVK, A_NonlinearPlateFVK_brenner, A_NonlinearPlateFVK_carstensen
 from disclinations.solvers import SNESSolver
 from disclinations.utils import (Visualisation, memory_usage, monitor, table_timing_data, write_to_output)
 from disclinations.utils.la import compute_disclination_loads
@@ -42,7 +52,7 @@ from disclinations.utils import update_parameters, save_parameters
 from disclinations.utils import create_or_load_circle_mesh
 from disclinations.utils import table_timing_data, Visualisation
 
-OUTDIR = os.path.join("output", "test_parametric_a") # CFe: output directory
+OUTDIR = os.path.join("output", "test_parametric_a_Adim") # CFe: output directory
 PATH_TO_PARAMETERS_YML_FILE = 'disclinations.test'
 
 # OUTPUT DIRECTORY
@@ -54,19 +64,23 @@ DISCLINATION_POWER_LIST = [1]
 
 AIRY               = 0
 TRANSVERSE = 1
-CONV_ID        = 2
 
 VARIATIONAL  = 0
 BRENNER         = 1
 CARSTENSEN   = 2
 
+HESSIAN_V  = 0
+HESSIAN_W = 1
+AIRY_V         = 2
+TRANSV_W  = 3
+CONV_ID      = 4
 
 CostantData = namedtuple("CostantData", ["funcSpace", "bcs"])
 
 petsc4py.init(["-petsc_type", "double"]) # CFe: ensuring double precision numbers
 
 def L2norm(u):
-    return np.sqrt( fem.assemble_scalar( fem.form( u**2 ) * ufl.dx ) )
+    return np.sqrt( fem.assemble_scalar( fem.form( ufl.inner(u, u) * ufl.dx ) ) )
 
 def hessianL2norm(u):
     hessian = lambda f : ufl.grad(ufl.grad(u))
@@ -75,6 +89,9 @@ def hessianL2norm(u):
 
 def solveModel(FEMmodel, costantData, parameters, f):
 
+    # Update parameter a
+    a = parameters["geometry"]["radius"]/parameters["model"]["thickness"]
+
     # FUNCTION SPACE
     q = dolfinx.fem.Function(costantData.funcSpace)
     v, w = ufl.split(q)
@@ -82,11 +99,11 @@ def solveModel(FEMmodel, costantData, parameters, f):
 
     # SELECT MODEL
     if FEMmodel == CARSTENSEN:
-        model = NonlinearPlateFVK_carstensen(mesh, parameters["model"])
+        model = A_NonlinearPlateFVK_carstensen(mesh, parameters["model"])
     elif FEMmodel == BRENNER:
-        model = NonlinearPlateFVK_brenner(mesh, parameters["model"])
+        model = A_NonlinearPlateFVK_brenner(mesh, parameters["model"])
     elif FEMmodel == VARIATIONAL:
-        model = NonlinearPlateFVK(mesh, parameters["model"])
+        model = A_NonlinearPlateFVK(mesh, parameters["model"])
     else:
         print(f"FEMmodel = {FEMmodel} is not acceptable. Script exiting")
         exit(0)
@@ -95,8 +112,7 @@ def solveModel(FEMmodel, costantData, parameters, f):
     disclinations = []
     if mesh.comm.rank == 0:
         for dc in DISCLINATION_COORD_LIST: disclinations.append( np.array([dc], dtype=mesh.geometry.x.dtype))
-        #dp_list = [dp*(parameters["geometry"]["radius"]/parameters["model"]["thickness"])**2 for dp in DISCLINATION_POWER_LIST]
-        dp_list = [dp for dp in DISCLINATION_POWER_LIST]
+        dp_list = [dp*(a)**2 for dp in DISCLINATION_POWER_LIST]
     else:
         for dc in DISCLINATION_COORD_LIST: disclinations.append( np.zeros((0, 3), dtype=mesh.geometry.x.dtype) )
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
@@ -108,15 +124,15 @@ def solveModel(FEMmodel, costantData, parameters, f):
     energy = model.energy(state)[0]
     penalisation = model.penalisation(state)
     L = energy - W_ext + penalisation
-    test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
     F = ufl.derivative(L, q, ufl.TestFunction(Q))
     if FEMmodel is not VARIATIONAL:
+        test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
         F = F + model.coupling_term(state, test_v, test_w)
 
     # SOLVER INSTANCE
     solver_parameters = {
         "snes_type": "newtonls",  # Solver type: NGMRES (Nonlinear GMRES)
-        "snes_max_it": 100,  # Maximum number of iterations
+        "snes_max_it": 50,  # Maximum number of iterations
         "snes_rtol": 1e-12,  # Relative tolerance for convergence
         "snes_atol": 1e-12,  # Absolute tolerance for convergence
         "snes_stol": 1e-12,  # Tolerance for the change in solution norm
@@ -140,20 +156,21 @@ def solveModel(FEMmodel, costantData, parameters, f):
     return q, convergence_id
 
 
-def run_experiment(FEMmodel, costantData, parameters, param):
+def run_experiment(FEMmodel, costantData, parameters):
     """
     Purpose: parametric study of the solution by varying a := R/h
     """
+    thickness = parameters["model"]["thickness"]
+    E = parameters["model"]["E"]
+    v_scale = E*(thickness**3)
+    w_scale = thickness
     print("Running experiment with thickness:", parameters["model"]["thickness"])
 
     parameters = calculate_rescaling_factors(parameters) # CFe: update exact solution scale factors
 
     # CFe: update external load
-    C = 0.01
-    p0 = ( C*parameters["model"]["E"]/(parameters["geometry"]["radius"]**4.0) ) * ( parameters["model"]["thickness"] )**4.0
-    #def nondim_transverse_load(x): return 100 * (1.0 + 0.0*x[0] + 0.0*x[1])
-    def nondim_transverse_load(x): return p0 * (1.0 + 0.0*x[0] + 0.0*x[1])
-    print("(R/h)^4 * p0/E: ", ( (1/parameters["model"]["thickness"])**4 )*p0/parameters["model"]["E"])
+    a4b = 1 # Parameter a^4 b is kept constant
+    def nondim_transverse_load(x): return a4b * (1.0 + 0.0*x[0] + 0.0*x[1])
 
     Q = costantData.funcSpace
     f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
@@ -161,10 +178,12 @@ def run_experiment(FEMmodel, costantData, parameters, param):
 
     q, convergence_id = solveModel(FEMmodel, costantData, parameters, f)
     v, w = q.split()
+    v_Nrm = L2norm(v)
+    w_Nrm = L2norm(w)
     v_hessianNrm = hessianL2norm(v)
     w_hessianNrm = hessianL2norm(w)
 
-    return v_hessianNrm, w_hessianNrm, convergence_id, v, w
+    return v_scale*v_hessianNrm, w_scale*w_hessianNrm, v_scale*v_Nrm, w_scale*w_Nrm, convergence_id
 
 if __name__ == "__main__":
 
@@ -172,10 +191,10 @@ if __name__ == "__main__":
     PARAMETER_CATEGORY = "model"
     NUM_RUNS = 10
 
-    EXPERIMENT_DIR = os.path.join(OUTDIR, PARAMETER_NAME, "4")
+    EXPERIMENT_DIR = os.path.join(OUTDIR, PARAMETER_NAME)
     if COMM.rank == 0: Path(EXPERIMENT_DIR).mkdir(parents=True, exist_ok=True)
 
-    a_list = list(np.linspace(10, 1000, NUM_RUNS))
+    a_list = list(np.linspace(10, 100, NUM_RUNS))
     #a_list = [100, 200, 300, 400, 500, 600]
     a_range = []
 
@@ -221,19 +240,22 @@ if __name__ == "__main__":
 
     # Values constant across the experiments
     costantData = CostantData(Q, bcs)
+    non_converged_list = []
 
     # PERFORM EXPERIMENTS
     for i, param in enumerate(p_range):
         if changed := update_parameters(parameters, PARAMETER_NAME, param):
-            data_var = run_experiment(VARIATIONAL, costantData, parameters, param)
-            data_brn = run_experiment(BRENNER, costantData, parameters, param)
-            data_car = run_experiment(CARSTENSEN, costantData, parameters, param)
+            data_var = run_experiment(VARIATIONAL, costantData, parameters)
+            data_brn = run_experiment(BRENNER, costantData, parameters)
+            data_car = run_experiment(CARSTENSEN, costantData, parameters)
 
         if (data_var[CONV_ID] > 0) and (data_brn[CONV_ID]  > 0) and (data_car[CONV_ID] > 0):
             a_range.append(1/param)
-            _experimental_data.append([param, data_var[AIRY], data_brn[AIRY], data_car[AIRY],
-                                    data_var[TRANSVERSE], data_brn[TRANSVERSE], data_car[TRANSVERSE],
+            _experimental_data.append([param, data_var[HESSIAN_V], data_brn[HESSIAN_V], data_car[HESSIAN_V],
+                                    data_var[HESSIAN_W], data_brn[HESSIAN_W], data_car[HESSIAN_W],
                                     data_var[CONV_ID], data_brn[CONV_ID], data_car[CONV_ID],
+                                    data_var[AIRY_V], data_brn[AIRY_V], data_car[AIRY_V],
+                                    data_var[TRANSV_W], data_brn[TRANSV_W], data_car[TRANSV_W],
                                     parameters["geometry"]["mesh_size"], parameters["model"]["alpha_penalty"],
                                     parameters["model"]["thickness"], parameters["model"]["E"], parameters["model"]["nu"]])
         else:
@@ -241,10 +263,13 @@ if __name__ == "__main__":
             print("Convergence Variational model: ", data_var[CONV_ID])
             print("Convergence Brenner model: ", data_brn[CONV_ID])
             print("Convergence Carstensen model: ", data_car[CONV_ID])
+            non_converged_list.append({f"{PARAMETER_NAME}": param, "Var_Con_ID": data_var[CONV_ID], "Brn_Con_ID": data_brn[CONV_ID], "Car_Con_ID": data_car[CONV_ID]})
     
-    columns = [PARAMETER_NAME, "v (Variational)", "v (Brenner)", "v (Carstensen)",
-               "w (Variational)", "w (Brenner)", "w (Carstensen)",
+    columns = [PARAMETER_NAME, "Hessian L2norm v (Variational)", "Hessian L2norm v (Brenner)", "Hessian L2norm v (Carstensen)",
+               "Hessian L2norm w (Variational)", "Hessian L2norm w (Brenner)", "Hessian L2norm w (Carstensen)",
                "Convergence ID (Variational)", "Convergence ID (Brenner)", "Convergence ID (Carstensen)",
+               "L2norm v (Variational)", "L2norm v (Brenner)", "L2norm v (Carstensen)",
+               "L2norm w (Variational)", "L2norm w (Brenner)", "L2norm w (Carstensen)",
                "Mesh size", "Interior Penalty (IP)", "Thickness", "Young modulus", "Poisson ratio"]
 
 
@@ -260,36 +285,40 @@ if __name__ == "__main__":
     print("Results")
     print(experimental_data)
     print(10*"*")
+    print("Details on non-converged experiments")
+    for el in non_converged_list: print(el)
+    print(10*"*")
 
-    # PLOTS
+    # PLOTS L2 NORM
     plt.figure(figsize=(30, 20))
-    plt.plot(a_range, experimental_data["v (Variational)"], marker='o', linestyle='solid', color='b', label='v (Variational)', linewidth=5, markersize=20)
-    plt.plot(a_range, experimental_data["v (Brenner)"], marker='v', linestyle='dotted', color='r', label='v (Brenner)', linewidth=5, markersize=20)
-    plt.plot(a_range, experimental_data["v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='v (Carstensen)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='L2norm v (Variational)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='L2norm v (Brenner)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='L2norm v (Carstensen)', linewidth=5, markersize=20)
 
-    max_v = max([max(experimental_data["v (Variational)"]), max(experimental_data["v (Brenner)"]), max(experimental_data["v (Carstensen)"])])
-    min_v = min([min(experimental_data["v (Variational)"]), min(experimental_data["v (Brenner)"]), min(experimental_data["v (Carstensen)"])])
+    max_v = max([max(experimental_data["L2norm v (Variational)"]), max(experimental_data["L2norm v (Brenner)"]), max(experimental_data["L2norm v (Carstensen)"])])
+    min_v = min([min(experimental_data["L2norm v (Variational)"]), min(experimental_data["L2norm v (Brenner)"]), min(experimental_data["L2norm v (Carstensen)"])])
     steps_v = (max_v - min_v)/NUM_RUNS
 
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
     plt.xticks(a_range)
     plt.yticks(np.arange(min_v, max_v, steps_v))
-    plt.xlabel("a", fontsize=35)
-    plt.ylabel(r'$| \nabla^2 v |_{L^2(\Omega)}$', fontsize=35)
-    plt.title(f'Airy function. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. E = {parameters["model"]["E"]}', fontsize=40)
+    plt.xlabel("a := R/h", fontsize=35)
+    plt.ylabel(r'$| v |_{L^2(\Omega)} [Nm^2]$', fontsize=35)
+    plt.title(f'Airy function. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. E = {parameters["model"]["E"]:.2e}', fontsize=40)
     plt.tick_params(axis='both', which='major', labelsize=35)
     plt.legend(fontsize=35)
     plt.grid(True)
+    plt.gca().yaxis.get_offset_text().set_fontsize(35)
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_V_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]}.png', dpi=300)
     plt.show()
 
     plt.figure(figsize=(30, 20))
-    plt.plot(a_range, experimental_data["w (Variational)"], marker='o', linestyle='solid', color='b', label='w (Variational)', linewidth=5, markersize=20)
-    plt.plot(a_range, experimental_data["w (Brenner)"], marker='v', linestyle='dotted', color='r', label='w (Brenner)', linewidth=5, markersize=20)
-    plt.plot(a_range, experimental_data["w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='w (Carstensen)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='L2norm w (Variational)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='L2norm w (Brenner)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='L2norm w (Carstensen)', linewidth=5, markersize=20)
 
-    max_w = max([max(experimental_data["w (Variational)"]), max(experimental_data["w (Brenner)"]), max(experimental_data["w (Carstensen)"])])
-    min_w = min([min(experimental_data["w (Variational)"]), min(experimental_data["w (Brenner)"]), min(experimental_data["w (Carstensen)"])])
+    max_w = max([max(experimental_data["L2norm w (Variational)"]), max(experimental_data["L2norm w (Brenner)"]), max(experimental_data["L2norm w (Carstensen)"])])
+    min_w = min([min(experimental_data["L2norm w (Variational)"]), min(experimental_data["L2norm w (Brenner)"]), min(experimental_data["L2norm w (Carstensen)"])])
     steps_w = (max_w - min_w)/NUM_RUNS
     if steps_w == 0: steps_w = NUM_RUNS # CFe: if the deflection is not activated
 
@@ -297,11 +326,59 @@ if __name__ == "__main__":
     plt.xticks(a_range)
 
     plt.yticks(np.arange(min_w, max_w, steps_w))
-    plt.xlabel("a", fontsize=35)
-    plt.ylabel(r'$| \nabla^2 w |_{L^2(\Omega)}$', fontsize=35)
-    plt.title(f'Transverse displacement. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. E = {parameters["model"]["E"]}', fontsize=40)
+    plt.xlabel("a := R/h", fontsize=35)
+    plt.ylabel(r'$| w |_{L^2(\Omega)} [m^2]$', fontsize=35)
+    plt.title(f'Transverse displacement. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. E = {parameters["model"]["E"]:.2e}', fontsize=40)
     plt.tick_params(axis='both', which='major', labelsize=35)
     plt.legend(fontsize=35)
+    plt.gca().yaxis.get_offset_text().set_fontsize(35)
     plt.grid(True)
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_W_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]}.png', dpi=300)
+    plt.show()
+
+    # PLOTS HESSIAN L2 NORM
+    plt.figure(figsize=(30, 20))
+    plt.plot(a_range, experimental_data["Hessian L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='Hessian L2norm v (Variational)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["Hessian L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='Hessian L2norm v (Brenner)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["Hessian L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='Hessian L2norm v (Carstensen)', linewidth=5, markersize=20)
+
+    max_v = max([max(experimental_data["Hessian L2norm v (Variational)"]), max(experimental_data["Hessian L2norm v (Brenner)"]), max(experimental_data["Hessian L2norm v (Carstensen)"])])
+    min_v = min([min(experimental_data["Hessian L2norm v (Variational)"]), min(experimental_data["Hessian L2norm v (Brenner)"]), min(experimental_data["Hessian L2norm v (Carstensen)"])])
+    steps_v = (max_v - min_v)/NUM_RUNS
+
+    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+    plt.xticks(a_range)
+    plt.yticks(np.arange(min_v, max_v, steps_v))
+    plt.xlabel("a := R/h", fontsize=35)
+    plt.ylabel(r'$| \nabla^2 v |_{L^2(\Omega)} [N]$', fontsize=35)
+    plt.title(f'Airy function. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. E = {parameters["model"]["E"]:.2e}', fontsize=40)
+    plt.tick_params(axis='both', which='major', labelsize=35)
+    plt.legend(fontsize=35)
+    plt.gca().yaxis.get_offset_text().set_fontsize(35)
+    plt.grid(True)
+    plt.savefig(EXPERIMENT_DIR+f'/varying_a_HessV_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]}.png', dpi=300)
+    plt.show()
+
+    plt.figure(figsize=(30, 20))
+    plt.plot(a_range, experimental_data["Hessian L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='Hessian L2norm w (Variational)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["Hessian L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='Hessian L2norm w (Brenner)', linewidth=5, markersize=20)
+    plt.plot(a_range, experimental_data["Hessian L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='Hessian L2norm w (Carstensen)', linewidth=5, markersize=20)
+
+    max_w = max([max(experimental_data["Hessian L2norm w (Variational)"]), max(experimental_data["Hessian L2norm w (Brenner)"]), max(experimental_data["Hessian L2norm w (Carstensen)"])])
+    min_w = min([min(experimental_data["Hessian L2norm w (Variational)"]), min(experimental_data["Hessian L2norm w (Brenner)"]), min(experimental_data["Hessian L2norm w (Carstensen)"])])
+    steps_w = (max_w - min_w)/NUM_RUNS
+    if steps_w == 0: steps_w = NUM_RUNS # CFe: if the deflection is not activated
+
+    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+    plt.xticks(a_range)
+
+    plt.yticks(np.arange(min_w, max_w, steps_w))
+    plt.xlabel("a := R/h", fontsize=35)
+    plt.ylabel(r'$| \nabla^2 w |_{L^2(\Omega)} $', fontsize=35)
+    plt.title(f'Transverse displacement. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. E = {parameters["model"]["E"]:.2e}', fontsize=40)
+    plt.tick_params(axis='both', which='major', labelsize=35)
+    plt.legend(fontsize=35)
+    plt.gca().yaxis.get_offset_text().set_fontsize(35)
+    plt.grid(True)
+    plt.savefig(EXPERIMENT_DIR+f'/varying_a_HessW_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]}.png', dpi=300)
     plt.show()
