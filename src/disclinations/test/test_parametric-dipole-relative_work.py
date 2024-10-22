@@ -168,6 +168,7 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
         V_sub_to_V_dofs=Q_v_to_Q_dofs,
         V_sub=Q_v,
     )
+    pdb.set_trace()
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
 
     # 6. Define variational form (depends on the model)
