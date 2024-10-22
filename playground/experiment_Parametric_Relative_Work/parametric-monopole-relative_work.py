@@ -105,7 +105,7 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         # write_to_output(prefix, q, extra_fields)
         return energy_terms
 
-def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
+def run_experiment(mesh, parameters, experiment_dir, variant = "variational", initial_guess=None):
     print("Running experiment of the series", series, " with thickness:", parameters["model"]["thickness"])
     
     parameters = calculate_rescaling_factors(parameters)
@@ -140,10 +140,11 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
     else:
         # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
         points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
-    
+
     disclinations, parameters = create_disclinations(
         mesh, parameters, points=points, signs=signs
     )
+    
     q = dolfinx.fem.Function(Q)
     v, w = ufl.split(q)
     f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
@@ -151,11 +152,11 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
     def transverse_load(x):
         return _transverse_load_polynomial_analytic(x, parameters)
     f.interpolate(transverse_load)
-    p0 = parameters["loading"]["p0"]
 
     state = {"v": v, "w": w}
     _W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w * dx
-    _W_ext = p0 * f * w * dx
+    assert parameters["model"]["c_adim"] == 1
+    _W_ext = parameters["model"]["c_adim"] * f * w * dx
 
     # Define the variational problem
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
@@ -166,12 +167,17 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
         V_sub_to_V_dofs=Q_v_to_Q_dofs,
         V_sub=Q_v,
     )
+    
+    # Scale the disclination loads by adimensional factor
+    b.vector.scale(parameters["model"]["a_adim"])
+    
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
 
     # 6. Define variational form (depends on the model)
     if variant == "variational":
-        model = NonlinearPlateFVK(mesh, parameters["model"])
+        model = NonlinearPlateFVK(mesh, parameters["model"], adimensional=True)
         energy = model.energy(state)[0]
+        
         # Dead load (transverse)
         model.W_ext = _W_ext
         penalisation = model.penalisation(state)
@@ -185,6 +191,7 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
     save_params_to_yaml(parameters, os.path.join(prefix, "parameters.yml"))
 
     # 7. Set up the solver
+
     solver = SNESSolver(
         F_form=F,
         u=q,
@@ -203,7 +210,7 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational"):
         prefix=prefix
     )
 
-    return energy_terms
+    return energy_terms, q
 
 if __name__ == "__main__":
     from disclinations.utils import table_timing_data, Visualisation
@@ -236,25 +243,24 @@ if __name__ == "__main__":
 
     
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
-
+        
+        initial_guess = None
+        
         for i, a in enumerate(np.linspace(10, 100, num_runs)):
-            thickness = 1/a
-            # a**4 * b = 1
-            # b = p0/E, E=1
-            p0 = 1/a**4
-        # for i, thickness in enumerate(np.linspace(.001, 1, num_runs)):
-            if changed := update_parameters(parameters, "thickness", float(thickness)):
-                parameters["loading"] = {'p0': float(p0)}
-                # parameters["model"] = {'p0': p0}
+
+            parameters['model']['a_adim'] = 0
+            parameters['model']['c_adim'] = 1
+
+            if changed := update_parameters(parameters, "a_adim", float(a)):
                 signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-                energy_terms = run_experiment(mesh, parameters, experiment_dir)
+                energy_terms, initial_guess = run_experiment(mesh, parameters, experiment_dir, initial_guess=initial_guess)
+                pdb.set_trace()
             else: 
                 abs_error, rel_error = None, None
                 raise ValueError("Failed to update parameters")
             
             _data = {
-                "thickness": thickness,
-                "p0": p0,
+                "a_adim": a,
                 "signature": signature,
             }
 
