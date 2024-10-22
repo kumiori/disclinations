@@ -3,7 +3,7 @@ model:
     E: 1.
     thickness: 1.
     D: 1.
-    sigma_D0: 1.
+    D0: 1.
     nu: 0.15
     model_dimension: 2
     model_type: "2D"
