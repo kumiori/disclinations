@@ -91,8 +91,18 @@ def test_model_computation(variant):
     # 4. Construct boundary conditions
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
 
+    # Point sources
+    if mesh.comm.rank == 0:
+        # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
+        points = [np.array([[-0.0, 0.0, 0]], dtype=mesh.geometry.x.dtype)]
+        signs = [1]
+    else:
+        # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
+        points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+                np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
+
     disclinations, params = create_disclinations(
-        mesh, params, points=[-0.0, 0.0, 0], signs=[1.0]
+        mesh, params, points=points, signs=signs
     )
     # 5. Initialize exact solutions (for comparison later)
     exact_solution = initialise_exact_solution(Q, params)
@@ -100,10 +110,11 @@ def test_model_computation(variant):
     q = dolfinx.fem.Function(Q)
     v, w = ufl.split(q)
     state = {"v": v, "w": w}
-    _W_ext = W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w * dx
+    _W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w * dx
     # Define the variational problem
 
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
+
     b = compute_disclination_loads(
         disclinations,
         params["loading"]["signs"],
