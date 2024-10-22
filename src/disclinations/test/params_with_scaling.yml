@@ -1,27 +1,53 @@
 geometry:
   geom_type: circle
   geometric_dimension: 2
-  mesh_size: 0.1
+  mesh_size: 0.05
   radius: 1
 loading:
   points:
-  - -0.0
-  - 0.0
-  - 0
+  - !!python/object/apply:numpy.core.multiarray._reconstruct
+    args:
+    - !!python/name:numpy.ndarray ''
+    - !!python/tuple
+      - 0
+    - !!binary |
+      Yg==
+    state: !!python/tuple
+    - 1
+    - !!python/tuple
+      - 1
+      - 3
+    - !!python/object/apply:numpy.dtype
+      args:
+      - f8
+      - false
+      - true
+      state: !!python/tuple
+      - 3
+      - <
+      - null
+      - null
+      - null
+      - -1
+      - -1
+      - 0
+    - false
+    - !!binary |
+      AAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAA
   signs:
-  - 1.0
+  - 1
 model:
-  E: 1.0
-  alpha_penalty: 2000.0
-  f_scale: 0.03402069087198858
+  E: 1
+  alpha_penalty: 2000
+  f_scale: 3.5202051961437936e-14
   model_dimension: 2
   model_type: 2D
-  nu: 0.0
+  nu: 0.15
   order: 3
-  sigma_D0: 1.0
-  thickness: 1.0
-  v_scale: 0.08333333333333333
-  w_scale: 0.408248290463863
+  D0: 1.0
+  thickness: 0.001
+  v_scale: 8.525149190110827e-11
+  w_scale: 0.000412920069507667
 solvers:
   elasticity:
     ksp:

@@ -754,3 +754,44 @@ def _transverse_load_polynomial_analytic(x, params):
     _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
     return f_scale * _p
 
+
+from disclinations.models import compute_energy_terms
+
+def basic_postprocess(state, model, mesh, params, exact_solution, prefix):
+    with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
+        energy_components = {
+            "bending": model.energy(state)[1],
+            "membrane": model.energy(state)[2],
+            "coupling": model.energy(state)[3],
+            "external_work": -model.W_ext,
+        }
+
+        energy_terms = compute_energy_terms(energy_components, mesh.comm)
+        print(yaml.dump(params["model"], default_flow_style=False))
+
+        if exact_solution is not None:
+            _v_exact, _w_exact = exact_solution
+        else:
+            _v_exact, _w_exact = None, None
+            
+        extra_fields = [
+            {"field": _v_exact, "name": "v_exact"},
+            {"field": _w_exact, "name": "w_exact"},
+            {
+                "field": model.M(state["w"]),  # Tensor expression
+                "name": "M",
+                "components": "tensor",
+            },
+            {
+                "field": model.P(state["v"]),  # Tensor expression
+                "name": "P",
+                "components": "tensor",
+            },
+            {
+                "field": model.gaussian_curvature(state["w"]),  # Tensor expression
+                "name": "Kappa",
+                "components": "tensor",
+            },
+        ]
+        # write_to_output(prefix, q, extra_fields)
+        return energy_terms

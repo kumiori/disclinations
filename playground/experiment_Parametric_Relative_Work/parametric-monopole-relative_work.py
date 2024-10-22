@@ -106,7 +106,7 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         return energy_terms
 
 def run_experiment(mesh, parameters, experiment_dir, variant = "variational", initial_guess=None):
-    print("Running experiment of the series", series, " with thickness:", parameters["model"]["thickness"])
+    _logger.info(f"Running experiment of the series {series} with parameter: {parameters['model']['a_adim']}")
     
     parameters = calculate_rescaling_factors(parameters)
     signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
@@ -161,7 +161,8 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     state = {"v": v, "w": w}
     _W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w * dx
     assert parameters["model"]["c_adim"] == 1
-    _W_ext = parameters["model"]["c_adim"] * f * w * dx
+    # _W_ext = parameters["model"]["c_adim"] * f * w * dx
+    _W_ext = parameters["model"]["a_adim"]**4 * f * w * dx
 
     # Define the variational problem
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
@@ -174,7 +175,7 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     )
     
     # Scale the disclination loads by adimensional factor
-    b.vector.scale(parameters["model"]["a_adim"])
+    b.vector.scale(parameters["model"]["a_adim"] ** 2.)
     
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
 
@@ -215,13 +216,33 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
         prefix=prefix
     )
 
-    return energy_terms, q
+    convergence_reason = solver.solver.getConvergedReason()
+    num_iterations = solver.solver.getIterationNumber()
+    residual_norm = solver.solver.getFunctionNorm()
+    num_function_evals = solver.solver.getFunctionEvaluations()
+
+    _simulation_data = {
+        "signature": signature,
+        "series": series,
+        "parameter": parameters["model"]["a_adim"],
+        "bending_energy": energy_terms['bending'],
+        "membrane_energy": energy_terms['membrane'],
+        "coupling_energy": energy_terms['coupling'],
+        "external_work": energy_terms['external_work'],
+        "convergence_reason": convergence_reason,
+        "iterations": num_iterations,
+        "residual_norm": residual_norm,
+        "function_evaluations": num_function_evals,
+    }
+
+    return energy_terms, q, _simulation_data
 
 if __name__ == "__main__":
     from disclinations.utils import table_timing_data, Visualisation
     _experimental_data = []
     outdir = "output"
     prefix = os.path.join(outdir, "parametric_monopole_relative_work")
+    _simulation_data = []
     
     with pkg_resources.path('disclinations.test', 'parameters.yml') as f:
         # parameters = yaml.load(f, Loader=yaml.FullLoader)
@@ -258,8 +279,8 @@ if __name__ == "__main__":
 
             if changed := update_parameters(parameters, "a_adim", float(a)):
                 signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-                energy_terms, initial_guess = run_experiment(mesh, parameters, experiment_dir,
-                                                             initial_guess=initial_guess)
+                energy_terms, initial_guess, simulation_data = run_experiment(mesh, parameters, experiment_dir,
+                                                             initial_guess=None)
             else: 
                 abs_error, rel_error = None, None
                 raise ValueError("Failed to update parameters")
@@ -270,8 +291,35 @@ if __name__ == "__main__":
             }
 
             _experimental_data.append(_data)
-    
-    experimental_data = pd.DataFrame(_experimental_data)
+            _simulation_data.append(simulation_data)
+            
+    # experimental_data = pd.DataFrame(_experimental_data)
+    experimental_data = pd.DataFrame(_simulation_data)
     
     _logger.info(f"Saving experimental data to {experiment_dir}")
     print(experimental_data)
+
+    import matplotlib.pyplot as plt
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(experimental_data['parameter'], experimental_data['bending_energy'], label="Bending Energy", marker='o')
+    plt.plot(experimental_data['parameter'], experimental_data['membrane_energy'], label="Membrane Energy", marker='o')
+    plt.plot(experimental_data['parameter'], experimental_data['coupling_energy'], label="Coupling Energy", marker='o')
+    plt.plot(experimental_data['parameter'], experimental_data['external_work'], label="External Work", marker='o')
+
+    # Customize the plot
+    plt.title('Energy Terms vs Parameter')
+    plt.xlabel('a')
+    plt.ylabel('Energy')
+    plt.yscale('log')  # Using log scale for better visibility
+    plt.legend()    
+    
+    plt.savefig(f"{experiment_dir}/energy_terms.png")
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(experimental_data['parameter'], experimental_data['residual_norm'], label="Residual norm", marker='o')
+    plt.savefig(f"{experiment_dir}/residuals.png")
+    
+    pdb.set_trace()
+    
+    
