@@ -81,7 +81,7 @@ class ToyPlateFVK:
                 - bc1(v) + bc2(v)
 
 class NonlinearPlateFVK(ToyPlateFVK):
-    def __init__(self, mesh, model_parameters = {}) -> None:
+    def __init__(self, mesh, model_parameters = {}, adimensional = False) -> None:
         self.alpha_penalty = model_parameters.get(
             "alpha_penalty",
             default_model_parameters["alpha_penalty"])
@@ -89,6 +89,11 @@ class NonlinearPlateFVK(ToyPlateFVK):
         self.E = model_parameters.get("E", default_model_parameters["E"])
         self.t = model_parameters.get("thickness", default_model_parameters["thickness"])
         self.D = self.E * self.t**3 / (12*(1-self.nu**2))
+        
+        if adimensional:
+            self.E = 1
+            self.t = 1
+            self.D = 1 / (12*(1-self.nu**2))
         
         self.mesh = mesh
         
