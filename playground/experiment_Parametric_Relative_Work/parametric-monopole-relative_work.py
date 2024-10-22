@@ -146,6 +146,11 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     )
     
     q = dolfinx.fem.Function(Q)
+    
+    if initial_guess is not None:
+        _logger.info("Using nontrivial initial guess")
+        q = initial_guess
+    
     v, w = ufl.split(q)
     f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
     
@@ -253,8 +258,8 @@ if __name__ == "__main__":
 
             if changed := update_parameters(parameters, "a_adim", float(a)):
                 signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-                energy_terms, initial_guess = run_experiment(mesh, parameters, experiment_dir, initial_guess=initial_guess)
-                pdb.set_trace()
+                energy_terms, initial_guess = run_experiment(mesh, parameters, experiment_dir,
+                                                             initial_guess=initial_guess)
             else: 
                 abs_error, rel_error = None, None
                 raise ValueError("Failed to update parameters")
