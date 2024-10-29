@@ -43,6 +43,7 @@ from disclinations.utils import update_parameters, memory_usage, save_parameters
 from disclinations.utils import create_or_load_circle_mesh, basic_postprocess
 import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import copy
+from disclinations.utils import _logger
 
 logging.basicConfig(level=logging.INFO)
 comm = MPI.COMM_WORLD
@@ -93,9 +94,9 @@ def postprocess_and_visualize(model, state, v, w, thickness, data, prefix, param
         scalar_plot.screenshot(f"{prefix}/gaussian_curvature.png")
         print("plotted curvature")
 
-
 def run_experiment(mesh: None, parameters: dict, series: str):
     # Setup, output and file handling
+    # _logger.info(f"Running experiment of the series {series} with parameter: {parameters['model']['a_adim']}")
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()[0:6]
     data = {
         'membrane_energy': [],
@@ -222,6 +223,9 @@ def run_experiment(mesh: None, parameters: dict, series: str):
     F = ufl.derivative(L, q, ufl.TestFunction(Q))
     
     save_params_to_yaml(parameters, os.path.join(prefix, "parameters.yml"))
+    if MPI.COMM_WORLD.rank == 0:
+        with open(f"{prefix}/signature.md5", "w") as f:
+            f.write(signature)
 
     solver = SNESSolver(
         F_form=F,
@@ -266,8 +270,6 @@ def run_experiment(mesh: None, parameters: dict, series: str):
         "function_evaluations": num_function_evals,
     }
 
-
-
     V_P1 = dolfinx.fem.functionspace(mesh, ("CG", 1))  # "CG" stands for continuous Galerkin (Lagrange)
 
     # with XDMFFile(comm, f"{prefix}/fields-vs-thickness.xdmf", "w",
@@ -308,7 +310,7 @@ def run_experiment(mesh: None, parameters: dict, series: str):
     del solver
 
     # Call the new function in the main code
-    postprocess_and_visualize(model, state, v, w, thickness, data, prefix, parameters, comm)
+    # postprocess_and_visualize(model, state, v, w, thickness, data, prefix, parameters, comm)
 
     return energy_terms, q, _simulation_data
         # return data
@@ -340,6 +342,8 @@ def load_parameters(file_path):
         "snes_linesearch_type": "basic",  # Type of line search
     }
 
+    parameters["model"]["higher_regularity"] = True
+
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
     print(yaml.dump(parameters, default_flow_style=False))
 
@@ -366,18 +370,18 @@ if __name__ == "__main__":
     series = base_signature[0::6]
 
     experiment_dir = os.path.join(outdir, series)
-    num_runs = 10
+    num_runs = 11
     
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
             
     logging.info(
         f"===================- {experiment_dir} -=================")
-    
+    _logger.info(f"Running {num_runs} experiments for series {series}")
     mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
 
 
-    with dolfinx.common.Timer(f"~Computation Experiment") as timer:
+    with dolfinx.common.Timer("~Computation Experiment") as timer:
     
         # Mesh is fixed for all runs
         model_rank = 0
@@ -386,7 +390,7 @@ if __name__ == "__main__":
                     encoding=XDMFFile.Encoding.HDF5) as file:
             file.write_mesh(mesh)
         
-        for i, thickness in enumerate(np.linspace(0.01, .1, num_runs)):
+        for i, thickness in enumerate(np.linspace(0.001, .01, num_runs)):
             # Check memory usage before computation
             mem_before = memory_usage()
             
@@ -414,9 +418,9 @@ if __name__ == "__main__":
     
     # Plot energy terms versus thickness
     plt.figure(figsize=(10, 6))
-    plt.plot(experimental_data["parameter"], experimental_data["membrane_energy"], label="Membrane Energy")
-    plt.plot(experimental_data["parameter"], experimental_data["bending_energy"], label="Bending Energy")
-    plt.plot(experimental_data["parameter"], experimental_data["coupling_energy"], label="Coupling Energy")
+    plt.plot(experimental_data["parameter"], experimental_data["membrane_energy"], label="Membrane Energy", marker='o')
+    plt.plot(experimental_data["parameter"], experimental_data["bending_energy"], label="Bending Energy", marker='o')
+    plt.plot(experimental_data["parameter"], experimental_data["coupling_energy"], label="Coupling Energy", marker='o')
     plt.xlabel("Thickness")
     plt.ylabel("Energy")
     plt.title("Energy Terms vs Thickness")
@@ -425,8 +429,8 @@ if __name__ == "__main__":
 
     # Plot L2 norm terms versus thickness
     plt.figure(figsize=(10, 6))
-    plt.plot(experimental_data["parameter"], experimental_data["w_L2"], label=r"$w_{L^2}$")
-    plt.plot(experimental_data["parameter"], experimental_data["v_L2"], label=r"$v_{L^2}$")
+    plt.plot(experimental_data["parameter"], experimental_data["w_L2"], label=r"$w_{L^2}$", marker='o')
+    plt.plot(experimental_data["parameter"], experimental_data["v_L2"], label=r"$v_{L^2}$", marker='o')
     plt.xlabel("Thickness")
     plt.ylabel("L2 Norms")
     plt.title("L2 Norm Terms vs Thickness")

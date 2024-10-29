@@ -89,11 +89,18 @@ class NonlinearPlateFVK(ToyPlateFVK):
         self.E = model_parameters.get("E", default_model_parameters["E"])
         self.t = model_parameters.get("thickness", default_model_parameters["thickness"])
         self.D = self.E * self.t**3 / (12*(1-self.nu**2))
-        
+
         if adimensional:
+            self.adimensional = True
             self.E = 1
             self.t = 1
             self.D = 1 / (12*(1-self.nu**2))
+        else:
+            self.adimensional = False
+        __import__('pdb').set_trace()
+        
+        if model_parameters["higher_regularity"]:
+            self.higher_regularity = True
         
         self.mesh = mesh
         
@@ -149,7 +156,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
         dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
         dg2 = lambda u: + 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
         dgc = lambda w, g: avg(inner(W(w), outer(n, n)))*jump(grad(g), n)*dS
-
+        dg3 = lambda w: 1/2 * α/avg(h) * inner(jump(hessian(w), n), jump(hessian(w), n)) * dS
         # bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
         bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
         # bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
@@ -158,12 +165,17 @@ class NonlinearPlateFVK(ToyPlateFVK):
         
         c1 = self.D
         c2 = (1/(self.E*self.t))
-        
-        return   (c1*dg1(w) + c1*dg2(w)) \
-                - c2*dg1(v) - c2*dg2(v) \
-                + c2*bc1(w) - c2*bc2(v) \
-                + c1*bc3(w) - c1*bc3(v) + dgc(w, v)
 
+        penalisation = (c1*dg1(w) + c1*dg2(w)) \
+                    - c2*dg1(v) - c2*dg2(v) \
+                    + c2*bc1(w) - c2*bc2(v) \
+                    + c1*bc3(w) - c1*bc3(v) + dgc(w, v)
+
+        if self.higher_regularity:
+            penalisation += c1*dg3(w)
+
+        return penalisation
+    
     def gaussian_curvature(self, w, order = 1):
         mesh = self.mesh
         DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), order)
