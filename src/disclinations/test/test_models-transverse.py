@@ -19,7 +19,9 @@ from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner,
                                   NonlinearPlateFVK_carstensen,
                                   calculate_rescaling_factors,
-                                  compute_energy_terms)
+                                  compute_energy_terms, 
+                                  _transverse_load_exact_solution,
+                                  initialise_exact_solution_compatible_transverse)
 from disclinations.solvers import SNESSolver
 from disclinations.utils import (Visualisation, memory_usage, monitor,
                                  table_timing_data, write_to_output)
@@ -59,7 +61,7 @@ def test_model_computation(variant):
 
     # params = load_parameters(f"{model}_params.yml")
     # 2. Construct or load mesh
-    prefix = os.path.join(outdir, "plate_fvk_transverse")
+    prefix = os.path.join(outdir, "validation_transverse_load")
     if comm.rank == 0:
         Path(prefix).mkdir(parents=True, exist_ok=True)
 
@@ -87,29 +89,30 @@ def test_model_computation(variant):
     # 4. Construct boundary conditions
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
 
-    disclinations, params = create_disclinations(
-        mesh, params, points=[-0.0, 0.0, 0], signs=[1.0]
-    )
     # 5. Initialize exact solutions (for comparison later)
-    exact_solution = initialise_exact_solution(Q, params)
+    exact_solution = initialise_exact_solution_compatible_transverse(Q, params)
 
     q = dolfinx.fem.Function(Q)
     v, w = ufl.split(q)
+    
     f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
-    transverse_load = lambda x: _transverse_load(x, params)
+
+    transverse_load = lambda x: _transverse_load_exact_solution(x, params, adimensional=True)
+    
     f.interpolate(transverse_load)
 
     state = {"v": v, "w": w}
     _W_ext = f * w * dx
+    # _W_ext = Constant(mesh, -1.) * w * dx
+
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
     
     
-    # Define the variational problem
-
     # 6. Define variational form (depends on the model)
     if variant == "variational":
         model = NonlinearPlateFVK(mesh, params["model"])
         energy = model.energy(state)[0]
+        
         # Dead load (transverse)
         model.W_ext = _W_ext
         penalisation = model.penalisation(state)
@@ -140,6 +143,11 @@ def test_model_computation(variant):
         L = energy - model.W_ext + penalisation
         F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
+    save_params_to_yaml(params, os.path.join(prefix, "parameters.yml"))
+    if MPI.COMM_WORLD.rank == 0:
+        with open(f"{prefix}/signature.md5", "w") as f:
+            f.write(signature)
+            
     # 7. Set up the solver
     solver = SNESSolver(
         F_form=F,
@@ -151,13 +159,12 @@ def test_model_computation(variant):
     )
 
     solver.solve()
-    save_params_to_yaml(params, "params_with_scaling.yml")
-
     # 9. Postprocess (if any)
     abs_error, rel_error = postprocess(
         state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
     )
-
+    __import__('pdb').set_trace()
+    
     # 10. Compute absolute and relative error with respect to the exact solution
     # abs_error, rel_error = compute_error(solution, exact_solution)
 
@@ -165,7 +172,9 @@ def test_model_computation(variant):
     # print(f"Model: {model}, Absolute Error: {abs_error}, Relative Error: {rel_error}")
 
     # 12. Assert that the relative error is within an acceptable range
+
     rel_tol = float(params["solvers"]["elasticity"]["snes"]["snes_rtol"])
+
     # assert (
     #     rel_error < rel_tol
     # ), f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
@@ -213,10 +222,6 @@ def initialise_exact_solution(Q, params):
 
     return v_exact, w_exact
 
-def _transverse_load(x, params):
-    f_scale = params["model"]["f_scale"]
-    _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-    return f_scale * _p
 
 def print_energy_analysis(energy_terms, exact_energy_transverse):
     """Print computed energy vs exact energy analysis."""
@@ -240,10 +245,10 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         }
 
         energy_terms = compute_energy_terms(energy_components, mesh.comm)
-        _exact_state = {"v": exact_solution[0], "w": exact_solution[1]}
+
         exact_energy_transverse = comm.allreduce(
             dolfinx.fem.assemble_scalar(
-                dolfinx.fem.form(model.energy(_exact_state)[0])),
+                dolfinx.fem.form(model.energy(exact_solution)[0])),
             op=MPI.SUM)
         
         print(yaml.dump(params["model"], sort_keys=True, default_flow_style=False))
@@ -268,7 +273,6 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         ]
         # write_to_output(prefix, q, extra_fields)
         return abs_error, rel_error
-
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
