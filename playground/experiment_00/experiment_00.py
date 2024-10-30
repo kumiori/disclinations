@@ -35,7 +35,12 @@ from mpi4py import MPI
 from petsc4py import PETSc
 
 from disclinations.meshes.primitives import mesh_circle_gmshapi
-from disclinations.models import NonlinearPlateFVK
+
+from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner,
+                                  NonlinearPlateFVK_carstensen,
+                                  calculate_rescaling_factors,
+                                  compute_energy_terms)
+
 from disclinations.solvers import SNESSolver
 from disclinations.utils.la import compute_disclination_loads
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
@@ -55,7 +60,13 @@ def postprocess_and_visualize(model, state, v, w, thickness, data, prefix, param
             "membrane": -model.energy(state)[2],
             "coupling": model.energy(state)[3]
         }
-
+        penalisation_components = {
+            "dgv": model._dgv,
+            "dgw": model._dgw,
+            "dgc": model._dgc,
+            "bcv": model._bcv,
+            "bcw": model._bcw
+        }
         computed_energy_terms = {
             label: comm.allreduce(
                 dolfinx.fem.assemble_scalar(dolfinx.fem.form(energy_term)),
@@ -63,6 +74,14 @@ def postprocess_and_visualize(model, state, v, w, thickness, data, prefix, param
             ) for label, energy_term in energy_components.items()
         }
 
+        computed_penalisation_terms = {
+            label: comm.allreduce(
+                dolfinx.fem.assemble_scalar(dolfinx.fem.form(penalisation_term)),
+                op=MPI.SUM,
+            ) for label, penalisation_term in penalisation_components.items()
+        }
+        
+        __import__('pdb').set_trace()
         data["membrane_energy"] = computed_energy_terms["membrane"]
         data["bending_energy"] = computed_energy_terms["bending"]
         data["coupling_energy"] = computed_energy_terms["coupling"]
@@ -94,9 +113,13 @@ def postprocess_and_visualize(model, state, v, w, thickness, data, prefix, param
         scalar_plot.screenshot(f"{prefix}/gaussian_curvature.png")
         print("plotted curvature")
 
-def run_experiment(mesh: None, parameters: dict, series: str):
+# def run_experiment(mesh: None, parameters: dict, series: str):
+def run_experiment(mesh, parameters, experiment_dir, variant = "variational", initial_guess=None):
+
     # Setup, output and file handling
-    # _logger.info(f"Running experiment of the series {series} with parameter: {parameters['model']['a_adim']}")
+    _logger.info(f"Running experiment of the series {series} with parameter: {parameters['model']['a_adim']}")
+    parameters = calculate_rescaling_factors(parameters)
+
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()[0:6]
     data = {
         'membrane_energy': [],
@@ -310,7 +333,7 @@ def run_experiment(mesh: None, parameters: dict, series: str):
     del solver
 
     # Call the new function in the main code
-    # postprocess_and_visualize(model, state, v, w, thickness, data, prefix, parameters, comm)
+    postprocess_and_visualize(model, state, v, w, thickness, data, prefix, parameters, comm)
 
     return energy_terms, q, _simulation_data
         # return data
@@ -385,34 +408,47 @@ if __name__ == "__main__":
     
         # Mesh is fixed for all runs
         model_rank = 0
+        initial_guess = None
         
         with XDMFFile(comm, os.path.join(outdir, series, "fields-vs-thickness.xdmf"), "w",
                     encoding=XDMFFile.Encoding.HDF5) as file:
             file.write_mesh(mesh)
         
-        for i, thickness in enumerate(np.linspace(0.001, .01, num_runs)):
+        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=30)):
+            parameters['model']['a_adim'] = None
+            parameters['model']['c_adim'] = 1
+
             # Check memory usage before computation
             mem_before = memory_usage()
             
-            update_parameters(parameters, "thickness", float(thickness))  
-            print(f"Running experiment for thickness: {thickness}")
-            # print(parameters)
+            if changed := update_parameters(parameters, "a_adim", float(a)):
+                signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
+                energy_terms, initial_guess, simulation_data = run_experiment(mesh, parameters, experiment_dir,
+                                                             initial_guess=None)
+            else: 
+                abs_error, rel_error = None, None
+                raise ValueError("Failed to update parameters")
+            
+            _data = {
+                "a_adim": a,
+                "signature": signature,
+            }
 
-            energy_terms, initial_guess, simulation_data = run_experiment(mesh, parameters, series)
-
+            _experimental_data.append(_data)
             _simulation_data.append(simulation_data)
             
             # Check memory usage after computation
             mem_after = memory_usage()
-            # max_memory = max(max_memory, mem_after)
             
             # Log memory usage
-            logging.info(f"Run {i}/{num_runs}: Memory Usage (MB) - Before: {mem_before}, After: {mem_after}")
+            _logger.info(f"Run {i}/{num_runs}: Memory Usage (MB) - Before: {mem_before}, After: {mem_after}")
             # Perform garbage collection
             gc.collect()
     
     experimental_data = pd.DataFrame(_simulation_data)
     timings = table_timing_data()
+    _logger.info(f"Saving experimental data to {experiment_dir}")
+
 
     import matplotlib.pyplot as plt
     
