@@ -32,7 +32,7 @@ from dolfinx.fem import Constant, dirichletbc, locate_dofs_topological
 from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
 from petsc4py import PETSc
-from disclinations.utils import create_or_load_circle_mesh
+from disclinations.utils import create_or_load_circle_mesh, print_energy_analysis
 
 comm = MPI.COMM_WORLD
 from ufl import CellDiameter, FacetNormal, dx
@@ -102,15 +102,15 @@ def test_model_computation(variant):
     f.interpolate(transverse_load)
 
     state = {"v": v, "w": w}
-    _W_ext = f * w * dx
-    # _W_ext = Constant(mesh, -1.) * w * dx
+    # _W_ext = f * w * dx
+    _W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
 
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
     
     
     # 6. Define variational form (depends on the model)
     if variant == "variational":
-        model = NonlinearPlateFVK(mesh, params["model"])
+        model = NonlinearPlateFVK(mesh, params["model"], adimensional=True)
         energy = model.energy(state)[0]
         
         # Dead load (transverse)
@@ -122,7 +122,7 @@ def test_model_computation(variant):
 
     elif variant == "brenner":
         # F = define_brenner_form(fem, params)
-        model = NonlinearPlateFVK_brenner(mesh, params["model"])
+        model = NonlinearPlateFVK_brenner(mesh, params["model"], adimensional=True)
         energy = model.energy(state)[0]
 
         # Dead load (transverse)
@@ -133,7 +133,7 @@ def test_model_computation(variant):
         F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     elif variant == "carstensen":
-        model = NonlinearPlateFVK_carstensen(mesh, params["model"])
+        model = NonlinearPlateFVK_carstensen(mesh, params["model"], adimensional=True)
         energy = model.energy(state)[0]
 
         # Dead load (transverse)
@@ -160,80 +160,22 @@ def test_model_computation(variant):
 
     solver.solve()
     # 9. Postprocess (if any)
+    # 10. Compute absolute and relative error with respect to the exact solution
+
     abs_error, rel_error = postprocess(
         state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
     )
-    __import__('pdb').set_trace()
     
-    # 10. Compute absolute and relative error with respect to the exact solution
-    # abs_error, rel_error = compute_error(solution, exact_solution)
-
     # # 11. Display error results
-    # print(f"Model: {model}, Absolute Error: {abs_error}, Relative Error: {rel_error}")
+    print(f"Model: {model}, Absolute Error: {abs_error:.2e}, Relative Error: {rel_error:.1%}")
 
     # 12. Assert that the relative error is within an acceptable range
-
     rel_tol = float(params["solvers"]["elasticity"]["snes"]["snes_rtol"])
 
     # assert (
     #     rel_error < rel_tol
     # ), f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
 
-def initialise_exact_solution(Q, params):
-    """
-    Initialize the exact solutions for v and w using the provided parameters.
-
-    Args:
-    - Q: The function space.
-    - params: A dictionary of parameters containing geometric properties (e.g., radius).
-
-    Returns:
-    - v_exact: Exact solution for v.
-    - w_exact: Exact solution for w.
-    """
-
-    # Extract the necessary parameters
-    v_scale = params["model"]["v_scale"]
-
-    q_exact = dolfinx.fem.Function(Q)
-    v_exact, w_exact = q_exact.split()
-
-    # Define the exact solution for v
-    def _v_exact(x):
-        rq = x[0] ** 2 + x[1] ** 2
-        
-        a1=-1/12
-        a2=-1/18
-        a3=-1/24
-
-        _v = a1 * rq ** 2 + a2 * rq ** 3 + a3 * rq ** 4
-        
-        return _v * v_scale  # Apply scaling
-
-    # Define the exact solution for w
-    def _w_exact(x):
-        w_scale = params["model"]["w_scale"]
-        
-        return w_scale * (1 - x[0]**2 - x[1]**2)**2  # Zero function as per your code
-
-    # Interpolate the exact solutions over the mesh
-    v_exact.interpolate(_v_exact)
-    w_exact.interpolate(_w_exact)
-
-    return v_exact, w_exact
-
-
-def print_energy_analysis(energy_terms, exact_energy_transverse):
-    """Print computed energy vs exact energy analysis."""
-    computed_membrane_energy = energy_terms["membrane"]
-    error = np.abs(exact_energy_transverse - computed_membrane_energy)
-
-    print(f"Exact energy: {exact_energy_transverse}")
-    print(f"Computed energy: {computed_membrane_energy}")
-    print(f"Abs error: {error:.3%}")
-    print(f"Rel error: {error/exact_energy_transverse:.3%}")
-
-    return error, error / exact_energy_transverse
 
 def postprocess(state, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
