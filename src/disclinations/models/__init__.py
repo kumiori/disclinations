@@ -80,6 +80,12 @@ class ToyPlateFVK:
                 - bc1(w) - bc2(w) \
                 - bc1(v) + bc2(v)
 
+    def _hessian(self, u):
+        return hessian(u)
+
+    def _laplacian(self, u):
+        return laplacian(u)
+
 class NonlinearPlateFVK(ToyPlateFVK):
     def __init__(self, mesh, model_parameters = {}, adimensional = False) -> None:
         self.alpha_penalty = model_parameters.get(
@@ -97,7 +103,6 @@ class NonlinearPlateFVK(ToyPlateFVK):
             self.D = 1 / (12*(1-self.nu**2))
         else:
             self.adimensional = False
-        __import__('pdb').set_trace()
         
         if model_parameters["higher_regularity"]:
             self.higher_regularity = True
@@ -117,7 +122,6 @@ class NonlinearPlateFVK(ToyPlateFVK):
         nu = self.nu
         Eh = self.E*self.t
         k_g = -D*(1-nu)
-
 
         membrane = (1/(2*Eh) * inner(hessian(v), hessian(v)) - nu/(2*Eh) * self.bracket(v, v)) * dx
         bending = (D/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w)) * dx
@@ -162,9 +166,15 @@ class NonlinearPlateFVK(ToyPlateFVK):
         # bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(P(u), outer(n, n)) * ds
         bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
         bc3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
-        
+
         c1 = self.D
         c2 = (1/(self.E*self.t))
+
+        self._dgw = c1*dg1(w) + c1*dg2(w)             
+        self._dgv = - c2*dg1(v) - c2*dg2(v)                
+        self._dgc = dgc(w, v)             
+        self._bcv = - c2*bc2(v) - c1*bc3(v)
+        self._bcw = c2*bc1(w) + c1*bc3(w)   
 
         penalisation = (c1*dg1(w) + c1*dg2(w)) \
                     - c2*dg1(v) - c2*dg2(v) \
@@ -173,6 +183,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
 
         if self.higher_regularity:
             penalisation += c1*dg3(w)
+            self._dgw += c1*dg3(w)
 
         return penalisation
     
@@ -270,7 +281,7 @@ class NonlinearPlateFVK_brenner(NonlinearPlateFVK):
         bc3 = lambda u: 1/2 * α/h * dot(grad(u),n) * dot(grad(u),n) * ds
         c1 = self.D
         c2 = (1/(self.E*self.t))
-
+        
         return   (c1*dg1(w) + c1*dg2(w)) \
                 - c2*dg1(v) - c2*dg2(v) \
                 + c2*bc1(w) - c2*bc2(v) \
@@ -379,11 +390,121 @@ def calculate_rescaling_factors(params):
     w_scale = np.sqrt(2 * _D / (_E * thickness))
     v_scale = _D
     f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
-
+    
     # Store rescaling factors in the params dictionary
     params["model"]["w_scale"] = float(w_scale)
     params["model"]["v_scale"] = float(v_scale)
     params["model"]["f_scale"] = float(f_scale)
 
     return params
+
+
+def _transverse_load_exact_solution(x, params, adimensional = False):
+    f_scale = params["model"]["f_scale"]
+    if adimensional:
+        f_scale = 1
+    _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+    return f_scale * _p
+
+
+def initialise_exact_solution_compatible_transverse(Q, params):
+    """
+    Initialize the exact solutions for v and w using the provided parameters.
+
+    Args:
+    - Q: The function space.
+    - params: A dictionary of parameters containing geometric properties (e.g., radius).
+
+    Returns:
+    - v_exact: Exact solution for v.
+    - w_exact: Exact solution for w.
+    """
+
+    # Extract the necessary parameters
+    v_scale = params["model"]["v_scale"]
+
+    q_exact = dolfinx.fem.Function(Q)
+    v_exact, w_exact = q_exact.split()
+
+    # Define the exact solution for v
+    def _v_exact(x):
+        rq = x[0] ** 2 + x[1] ** 2
+        
+        a1=-1/12
+        a2=-1/18
+        a3=-1/24
+
+        _v = a1 * rq ** 2 + a2 * rq ** 3 + a3 * rq ** 4
+        
+        return _v * v_scale  # Apply scaling
+
+    # Define the exact solution for w
+    def _w_exact(x):
+        w_scale = params["model"]["w_scale"]
+        
+        return w_scale * (1 - x[0]**2 - x[1]**2)**2  # Zero function as per your code
+
+    # Interpolate the exact solutions over the mesh
+    v_exact.interpolate(_v_exact)
+    w_exact.interpolate(_w_exact)
+    exact = {"v": v_exact, "w": w_exact}
+    
+    return exact
+
+
+def initialise_exact_solution_dipole(Q, params):
+    """
+    Initialize the exact solutions for v and w using the provided parameters.
+    TODO: Do we have an exact solution for the dipole case?
+
+    Args:
+    - Q: The function space.
+    - params: A dictionary of parameters containing geometric properties (e.g., radius).
+
+    Returns:
+    - v_exact: Exact solution for v.
+    - w_exact: Exact solution for w.
+    """
+    v_scale = params["model"]["v_scale"]
+
+    q_exact = dolfinx.fem.Function(Q)
+    v_exact, w_exact = q_exact.split()
+    distance = np.linalg.norm(
+        np.array(params['loading']['points'][0]) - np.array(params['loading']['points'][1])
+        )
+
+    # compute distance between disclinations
+
+    def _v_exact(x):
+        rq = (x[0]**2 + x[1]**2)
+        _v = (1/(16*np.pi))*( ( x[1]**2 + (x[0]-distance/2)**2 )*( np.log(4.0) + np.log( x[1]**2 + (x[0]-distance/2)**2 ) - np.log( 4 - 4*x[0]*distance + rq*distance**2 ) ) - (1/4)*( 4*(x[1]**2) + ( 2*x[0]+distance)**2 ) * ( np.log(4) + np.log( x[1]**2 + (x[0]+distance/2)**2 ) - np.log( 4 + 4*x[0]*distance + rq*distance**2 ) ) )
+        return _v * v_scale
+
+    def _w_exact(x):
+        # _w = (1 - x[0]**2 - x[1]**2)**2
+        _w = 0.0
+        return _w
+
+    v_exact.interpolate(_v_exact)
+    w_exact.interpolate(_w_exact)
+    
+    exact = {"v": v_exact, "w": w_exact}
+
+    return exact
+
+
+def exact_energy_dipole(parameters):
+    # it should depend on the signs as well
+    distance = np.linalg.norm(
+        np.array(parameters['loading']['points'][0]) - np.array(parameters['loading']['points'][1]))
+    
+    return parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
+        * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
+            (np.log(4+distance**2) - np.log(4 * distance))
+
+
+def _transverse_load_polynomial_analytic(x, params):
+    f_scale = params["model"]["f_scale"]
+    _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+    return f_scale * _p
 
