@@ -39,7 +39,8 @@ from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner,
                                   NonlinearPlateFVK_carstensen,
                                   calculate_rescaling_factors,
-                                  compute_energy_terms)
+                                  compute_energy_terms,
+                                  initialise_exact_solution_compatible_transverse)
 
 from disclinations.solvers import SNESSolver
 from disclinations.utils.la import compute_disclination_loads
@@ -48,13 +49,19 @@ from disclinations.utils import update_parameters, memory_usage, save_parameters
 from disclinations.utils import create_or_load_circle_mesh, basic_postprocess
 import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import copy
-from disclinations.utils import _logger
+from disclinations.utils import _logger, print_energy_analysis
+import pytest
+
+models = ["variational", "brenner", "carstensen"]
 
 logging.basicConfig(level=logging.INFO)
 comm = MPI.COMM_WORLD
 
-def postprocess_and_visualize(model, state, v, w, thickness, data, prefix, parameters, comm):
+
+def postprocess_and_visualize(model, state, exact_solution, data, prefix, parameters):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
+        v, w = state["v"], state["w"]
+        
         energy_components = {
             "bending": model.energy(state)[1],
             "membrane": -model.energy(state)[2],
@@ -81,14 +88,27 @@ def postprocess_and_visualize(model, state, v, w, thickness, data, prefix, param
             ) for label, penalisation_term in penalisation_components.items()
         }
         
-        __import__('pdb').set_trace()
+        exact_energy_transverse_load = comm.allreduce(
+            dolfinx.fem.assemble_scalar(
+                dolfinx.fem.form(model.energy(exact_solution)[0])),
+            op=MPI.SUM)
+        
+        abs_error, rel_error = print_energy_analysis(
+            computed_energy_terms, exact_energy_transverse_load
+        )
+
         data["membrane_energy"] = computed_energy_terms["membrane"]
         data["bending_energy"] = computed_energy_terms["bending"]
         data["coupling_energy"] = computed_energy_terms["coupling"]
-        data["thickness"] = thickness
+        
         data["v_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
             dolfinx.fem.form(ufl.inner(v, v) * dx)), op=MPI.SUM)
         data["w_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
+            dolfinx.fem.form(ufl.inner(w, w) * dx)), op=MPI.SUM)
+
+        data["∇²v_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
+            dolfinx.fem.form(ufl.inner(v, v) * dx)), op=MPI.SUM)
+        data["∇²w_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
             dolfinx.fem.form(ufl.inner(w, w) * dx)), op=MPI.SUM)
 
         import pyvista
@@ -113,7 +133,9 @@ def postprocess_and_visualize(model, state, v, w, thickness, data, prefix, param
         scalar_plot.screenshot(f"{prefix}/gaussian_curvature.png")
         print("plotted curvature")
 
+
 # def run_experiment(mesh: None, parameters: dict, series: str):
+@pytest.mark.parametrize("variant", models)
 def run_experiment(mesh, parameters, experiment_dir, variant = "variational", initial_guess=None):
 
     # Setup, output and file handling
@@ -168,8 +190,6 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
             mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
     mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
-    h = CellDiameter(mesh)
-    n = FacetNormal(mesh)
 
     # Functional setting
 
@@ -212,10 +232,10 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     def _w_exact(x):
         _w = (1 - x[0]**2 - x[1]**2)**2
         return _w*w_scale
-    
+
+    exact_solution = initialise_exact_solution_compatible_transverse(Q, parameters)
+
     f.interpolate(transverse_load)
-    v_exact.interpolate(_v_exact)
-    w_exact.interpolate(_w_exact)
 
     # Boundary conditions 
     bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
@@ -232,11 +252,9 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     )
     bcs = list({AIRY: bcs_v, TRANSVERSE: bcs_w}.values())
     # W_transv_coeff = (radius / thickness)**4 / E 
-    W_ext = f * w * dx
-    # print(b_scale)
-
-    # model = NonlinearPlateFVK(mesh, nu = nu)
-    model = NonlinearPlateFVK(mesh, parameters["model"])
+    W_ext = parameters["model"]["a_adim"]**4 * f * w * dx
+    
+    model = NonlinearPlateFVK(mesh, parameters["model"], adimensional=True)
     energy = model.energy(state)[0]
     model.W_ext = W_ext
     penalisation = model.penalisation(state)
@@ -294,10 +312,6 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     }
 
     V_P1 = dolfinx.fem.functionspace(mesh, ("CG", 1))  # "CG" stands for continuous Galerkin (Lagrange)
-
-    # with XDMFFile(comm, f"{prefix}/fields-vs-thickness.xdmf", "w",
-    #             encoding=XDMFFile.Encoding.HDF5) as file:
-    #     file.write_mesh(mesh)
     
     with XDMFFile(comm, os.path.join(outdir, series, "fields-vs-thickness.xdmf"), "a",
                     encoding=XDMFFile.Encoding.HDF5) as file:
@@ -307,36 +321,23 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
         _w.name = "displacement"
         
         interpolation = dolfinx.fem.Function(V_P1)
+        print(f"saving interpolation, {parameters['model']['a_adim']}")
 
         interpolation.interpolate(_v)
         interpolation.name = 'v'
         
-        print(f"saving interpolation, {thickness}")
-        file.write_function(interpolation, thickness)  # Specify unique mesh_xpath for velocity
+        file.write_function(interpolation, parameters['model']['a_adim'])  # Specify unique mesh_xpath for velocity
 
         interpolation.interpolate(_w)
         interpolation.name = 'w'
-        file.write_function(interpolation, thickness)  # Specify unique mesh_xpath for velocity
+        file.write_function(interpolation, parameters['model']['a_adim'])  # Specify unique mesh_xpath for velocity
     
-    # with XDMFFile(comm, f"{prefix}/w-vs-thickness.xdmf", "w",
-    #                 encoding=XDMFFile.Encoding.HDF5) as file:
-    #     _v, _w = q.split()
-    #     _v.name = "potential"
-    #     _w.name = "displacement"
-        
-    #     file.write_mesh(mesh)
-    #     interpolation = dolfinx.fem.Function(V_P1)
-
-    #     interpolation.interpolate(_w)
-    #     file.write_function(interpolation, thickness)  # Specify unique mesh_xpath for velocity
-
     del solver
 
     # Call the new function in the main code
-    postprocess_and_visualize(model, state, v, w, thickness, data, prefix, parameters, comm)
+    postprocess_and_visualize(model, state, exact_solution, data, prefix, parameters)
 
     return energy_terms, q, _simulation_data
-        # return data
 
 def load_parameters(file_path):
     """

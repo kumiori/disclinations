@@ -47,7 +47,8 @@ AIRY = 0
 TRANSVERSE = 1
 
 from disclinations.models import create_disclinations
-from disclinations.utils import (homogeneous_dirichlet_bc_H20, load_parameters,
+from disclinations.utils import (homogeneous_dirichlet_bc_H20, 
+                                #  load_parameters,
                                  save_params_to_yaml)
 from disclinations.utils import update_parameters, save_parameters
 
@@ -73,6 +74,7 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
             "membrane": model.energy(state)[2],
             "coupling": model.energy(state)[3],
             "external_work": -model.W_ext,
+            "penalisation": model.penalisation(state)
         }
 
         energy_terms = compute_energy_terms(energy_components, mesh.comm)
@@ -136,7 +138,7 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     if mesh.comm.rank == 0:
         # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
         points = [np.array([[0., 0.0, 0]], dtype=mesh.geometry.x.dtype)]
-        signs = [1]
+        signs = [-1]
     else:
         # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
         points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
@@ -159,10 +161,10 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     f.interpolate(transverse_load)
 
     state = {"v": v, "w": w}
-    _W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w * dx
     assert parameters["model"]["c_adim"] == 1
+    
     # _W_ext = parameters["model"]["c_adim"] * f * w * dx
-    _W_ext = parameters["model"]["a_adim"]**4 * f * w * dx
+    W_ext = Constant(mesh, np.array(-1., dtype=PETSc.ScalarType)) * w * dx
 
     # Define the variational problem
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
@@ -185,7 +187,7 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
         energy = model.energy(state)[0]
         
         # Dead load (transverse)
-        model.W_ext = _W_ext
+        model.W_ext = W_ext
         penalisation = model.penalisation(state)
 
         L = energy - model.W_ext + penalisation
@@ -237,6 +239,30 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
 
     return energy_terms, q, _simulation_data
 
+def load_parameters(file_path):
+    """
+    Load parameters from a YAML file.
+
+    Args:
+        file_path (str): Path to the YAML parameter file.
+
+    Returns:
+        dict: Loaded parameters.
+    """
+    import hashlib
+
+    with open(file_path) as f:
+        parameters = yaml.load(f, Loader=yaml.FullLoader)
+
+    parameters["model"]["alpha_penalty"] = 200
+    # parameters["loading"]["signs"] = 200
+
+    signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
+    print(yaml.dump(parameters, default_flow_style=False))
+
+    return parameters, signature
+
+
 if __name__ == "__main__":
     from disclinations.utils import table_timing_data, Visualisation
     _experimental_data = []
@@ -245,10 +271,10 @@ if __name__ == "__main__":
     _simulation_data = []
     
     with pkg_resources.path('disclinations.test', 'parameters.yml') as f:
-        # parameters = yaml.load(f, Loader=yaml.FullLoader)
         parameters, _ = load_parameters(f)
 
         base_parameters = copy.deepcopy(parameters)
+
         # Remove thickness from the parameters, to compute the parametric series signature
         if "model" in base_parameters and "thickness" in base_parameters["model"]:
             del base_parameters["model"]["thickness"]
@@ -257,12 +283,12 @@ if __name__ == "__main__":
 
     series = base_signature[0::6]
     experiment_dir = os.path.join(prefix, series)
-    num_runs = 10
+    num_runs = 20
     
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
-            
-    logging.info(
+    print(f"Running series {series} with {num_runs} runs")
+    _logger.info(
         f"===================- {experiment_dir} -=================")
     
     mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
@@ -272,9 +298,9 @@ if __name__ == "__main__":
         
         initial_guess = None
         
-        for i, a in enumerate(np.linspace(10, 100, num_runs)):
-
-            parameters['model']['a_adim'] = 0
+        # for i, a in enumerate(np.linspace(10, 1000, num_runs)):
+        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=30)):
+            parameters['model']['a_adim'] = None
             parameters['model']['c_adim'] = 1
 
             if changed := update_parameters(parameters, "a_adim", float(a)):
@@ -308,10 +334,11 @@ if __name__ == "__main__":
     plt.plot(experimental_data['parameter'], experimental_data['external_work'], label="External Work", marker='o')
 
     # Customize the plot
-    plt.title('Energy Terms vs Parameter')
+    plt.title(f'Energy Terms vs Parameter sign {parameters["loading"]["signs"]} penalisation {parameters["model"]["alpha_penalty"]}, ')
     plt.xlabel('a')
     plt.ylabel('Energy')
     plt.yscale('log')  # Using log scale for better visibility
+    plt.xscale('log')  # Using log scale for better visibility
     plt.legend()    
     
     plt.savefig(f"{experiment_dir}/energy_terms.png")

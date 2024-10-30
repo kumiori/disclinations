@@ -20,6 +20,7 @@ from disclinations.models import (
     NonlinearPlateFVK,
     NonlinearPlateFVK_brenner,
     NonlinearPlateFVK_carstensen,
+    calculate_rescaling_factors
 )
 from disclinations.solvers import SNESSolver
 from disclinations.utils import (
@@ -28,6 +29,7 @@ from disclinations.utils import (
     monitor,
     table_timing_data,
     write_to_output,
+    print_energy_analysis
 )
 from disclinations.utils.la import compute_disclination_loads
 from dolfinx import fem
@@ -36,7 +38,7 @@ from dolfinx.fem import Constant, dirichletbc, locate_dofs_topological
 from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
 from petsc4py import PETSc
-from disclinations.utils import create_or_load_circle_mesh
+from disclinations.utils import create_or_load_circle_mesh, homogeneous_dirichlet_bc_H20
 
 comm = MPI.COMM_WORLD
 from ufl import CellDiameter, FacetNormal, dx
@@ -58,7 +60,6 @@ def test_model_computation(variant):
     # 1. Load parameters from YML file
     params, signature = load_parameters(f"parameters.yml")
     params = calculate_rescaling_factors(params)
-    pdb.set_trace()
     # params = load_parameters(f"{model}_params.yml")
     # 2. Construct or load mesh
     prefix = os.path.join(outdir, "plate_fvk_disclinations_dipole")
@@ -66,10 +67,6 @@ def test_model_computation(variant):
         Path(prefix).mkdir(parents=True, exist_ok=True)
 
     mesh, mts, fts = create_or_load_circle_mesh(params, prefix=prefix)
-
-    # 3. Construct FEM approximation
-    h = CellDiameter(mesh)
-    n = FacetNormal(mesh)
 
     # Function spaces
 
@@ -81,7 +78,6 @@ def test_model_computation(variant):
     )  # "CG" stands for continuous Galerkin (Lagrange)
 
     DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), params["model"]["order"] - 2)
-    DG = dolfinx.fem.functionspace(mesh, DG_e)
 
     T_e = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"] - 2)
     T = dolfinx.fem.functionspace(mesh, T_e)
@@ -103,8 +99,9 @@ def test_model_computation(variant):
     disclinations, params = create_disclinations(
         mesh, params, points=points, signs=signs
     )
+    
     # 5. Initialize exact solutions (for comparison later)
-    # exact_solution = initialise_exact_solution(Q, params)
+    # exact_solution = initialise_exact_solution_dipole(Q, params)
 
     q = dolfinx.fem.Function(Q)
     v, w = ufl.split(q)
@@ -208,40 +205,6 @@ def load_parameters(file_path):
     return parameters, signature
 
 
-def homogeneous_dirichlet_bc_H20(mesh, Q):
-    """
-    Apply homogeneous Dirichlet boundary conditions (H^2_0 Sobolev space)
-    to both AIRY and TRANSVERSE fields.
-
-    Args:
-    - mesh: The mesh of the domain.
-    - Q: The function space.
-
-    Returns:
-    - A list of boundary conditions (bcs) for the problem.
-    """
-    # Create connectivity between topological dimensions
-    mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
-
-    # Identify the boundary facets
-    bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-
-    # Locate DOFs for AIRY field
-    dofs_v = locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
-
-    # Locate DOFs for TRANSVERSE field
-    dofs_w = locate_dofs_topological(
-        V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets
-    )
-
-    # Create homogeneous Dirichlet BC (value = 0) for both fields
-    bcs_v = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_v, Q.sub(AIRY))
-    bcs_w = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_w, Q.sub(TRANSVERSE))
-
-    # Return the boundary conditions as a list
-    return [bcs_v, bcs_w]
-
-
 def initialise_exact_solution(Q, params):
     """
     Initialize the exact solutions for v and w using the provided parameters.
@@ -258,36 +221,6 @@ def initialise_exact_solution(Q, params):
 
     return None, None
     # return v_exact, w_exact
-
-
-def calculate_rescaling_factors(params):
-    """
-    Calculate rescaling factors and store them in the params dictionary.
-
-    Args:
-    - params (dict): Dictionary containing geometry, material, and model parameters.
-
-    Returns:
-    - params (dict): Updated dictionary with rescaling factors.
-    """
-    # Extract necessary parameters
-    _E = params["model"]["E"]
-    nu = params["model"]["nu"]
-    # _D = params["model"]["D"]
-    thickness = params["model"]["thickness"]
-    _D = _E * thickness**3 / (12 * (1 - nu**2))
-    
-    # Calculate rescaling factors
-    w_scale = np.sqrt(2 * _D / (_E * thickness))
-    v_scale = _D
-    f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
-
-    # Store rescaling factors in the params dictionary
-    params["model"]["w_scale"] = float(w_scale)
-    params["model"]["v_scale"] = float(v_scale)
-    params["model"]["f_scale"] = float(f_scale)
-
-    return params
 
 
 def save_params_to_yaml(params, filename):
@@ -357,19 +290,6 @@ def compute_energy_terms(energy_components, comm):
         for label, energy_term in energy_components.items()
     }
     return computed_energy_terms
-
-
-def print_energy_analysis(energy_terms, exact_energy_dipole):
-    """Print computed energy vs exact energy analysis."""
-    computed_membrane_energy = energy_terms["membrane"]
-    error = np.abs(exact_energy_dipole - computed_membrane_energy)
-
-    print(f"Exact energy: {exact_energy_dipole}")
-    print(f"Computed energy: {computed_membrane_energy}")
-    print(f"Abs error: {error:.3%}")
-    print(f"Rel error: {error/exact_energy_dipole:.3%}")
-
-    return error, error / exact_energy_dipole
 
 
 def postprocess(state, model, mesh, params, exact_solution, prefix):

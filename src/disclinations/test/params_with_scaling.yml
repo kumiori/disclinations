@@ -37,14 +37,15 @@ loading:
   signs:
   - 1
 model:
+  D0: 1.0
   E: 1
   alpha_penalty: 2000
   f_scale: 3.5202051961437936e-14
+  higher_regularity: true
   model_dimension: 2
   model_type: 2D
   nu: 0.15
   order: 3
-  D0: 1.0
   thickness: 0.001
   v_scale: 8.525149190110827e-11
   w_scale: 0.000412920069507667

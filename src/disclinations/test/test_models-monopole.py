@@ -69,24 +69,20 @@ def test_model_computation(variant):
 
     mesh, mts, fts = create_or_load_circle_mesh(params, prefix=prefix)
 
-    # 3. Construct FEM approximation
-    h = CellDiameter(mesh)
-    n = FacetNormal(mesh)
-
     # Function spaces
 
     X = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"])
     Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
-    V_P1 = dolfinx.fem.functionspace(
-        mesh, ("CG", 1)
-    )  # "CG" stands for continuous Galerkin (Lagrange)
+    # V_P1 = dolfinx.fem.functionspace(
+    #     mesh, ("CG", 1)
+    # )  # "CG" stands for continuous Galerkin (Lagrange)
 
-    DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), params["model"]["order"] - 2)
-    DG = dolfinx.fem.functionspace(mesh, DG_e)
+    # DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), params["model"]["order"] - 2)
+    # DG = dolfinx.fem.functionspace(mesh, DG_e)
 
-    T_e = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"] - 2)
-    T = dolfinx.fem.functionspace(mesh, T_e)
+    # T_e = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"] - 2)
+    # T = dolfinx.fem.functionspace(mesh, T_e)
 
     # 4. Construct boundary conditions
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
@@ -111,7 +107,6 @@ def test_model_computation(variant):
     v, w = ufl.split(q)
     state = {"v": v, "w": w}
     _W_ext = Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType)) * w * dx
-    # Define the variational problem
 
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 
@@ -145,7 +140,6 @@ def test_model_computation(variant):
         penalisation = model.penalisation(state)
 
         L = energy - model.W_ext + penalisation
-        # F = ufl.derivative(L, q, ufl.TestFunction(Q))
         F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     elif variant == "carstensen":
@@ -177,7 +171,7 @@ def test_model_computation(variant):
     abs_error, rel_error = postprocess(
         state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
     )
-
+    __import__('pdb').set_trace()
     # 10. Compute absolute and relative error with respect to the exact solution
     # abs_error, rel_error = compute_error(solution, exact_solution)
 

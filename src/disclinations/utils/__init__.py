@@ -259,6 +259,19 @@ def save_parameters(parameters, prefix):
     return signature
 
 
+def print_energy_analysis(energy_terms, exact_energy_transverse):
+    """Print computed energy vs exact energy analysis."""
+    computed_membrane_energy = energy_terms["membrane"]
+    error = np.abs(exact_energy_transverse - computed_membrane_energy)
+
+    print(f"Exact energy: {exact_energy_transverse}")
+    print(f"Computed energy: {computed_membrane_energy}")
+    print(f"Abs error: {error:.3%}")
+    print(f"Rel error: {error/exact_energy_transverse:.3%}")
+
+    return error, error / exact_energy_transverse
+
+
 from dolfinx.io import XDMFFile
 
 
@@ -653,106 +666,6 @@ def create_or_load_circle_mesh(parameters, prefix):
                 file.write_mesh(mesh)
 
         return mesh, mts, fts
-
-
-def initialise_exact_solution_dipole(Q, params):
-    """
-    Initialize the exact solutions for v and w using the provided parameters.
-    TODO: Do we have an exact solution for the dipole case?
-
-    Args:
-    - Q: The function space.
-    - params: A dictionary of parameters containing geometric properties (e.g., radius).
-
-    Returns:
-    - v_exact: Exact solution for v.
-    - w_exact: Exact solution for w.
-    """
-    v_scale = params["model"]["v_scale"]
-    w_scale = params["model"]["w_scale"]
-
-    q_exact = dolfinx.fem.Function(Q)
-    v_exact, w_exact = q_exact.split()
-    distance = np.linalg.norm(
-        np.array(params['loading']['points'][0]) - np.array(params['loading']['points'][1])
-        )
-
-    # compute distance between disclinations
-
-    def _v_exact(x):
-        rq = (x[0]**2 + x[1]**2)
-        _v = (1/(16*np.pi))*( ( x[1]**2 + (x[0]-distance/2)**2 )*( np.log(4.0) + np.log( x[1]**2 + (x[0]-distance/2)**2 ) - np.log( 4 - 4*x[0]*distance + rq*distance**2 ) ) - (1/4)*( 4*(x[1]**2) + ( 2*x[0]+distance)**2 ) * ( np.log(4) + np.log( x[1]**2 + (x[0]+distance/2)**2 ) - np.log( 4 + 4*x[0]*distance + rq*distance**2 ) ) )
-        return _v * v_scale
-
-    def _w_exact(x):
-        _w = (1 - x[0]**2 - x[1]**2)**2
-        _w = 0.0*_w
-        return _w
-
-    v_exact.interpolate(_v_exact)
-    w_exact.interpolate(_w_exact)
-
-    return v_exact, w_exact
-
-
-def initialise_exact_solution_transverse(Q, params):
-    """
-    Initialize the exact solutions for v and w using the provided parameters.
-    TODO: Do we have an exact solution for the dipole case?
-
-    Args:
-    - Q: The function space.
-    - params: A dictionary of parameters containing geometric properties (e.g., radius).
-
-    Returns:
-    - v_exact: Exact solution for v.
-    - w_exact: Exact solution for w.
-    """
-    v_scale = params["model"]["v_scale"]
-    w_scale = params["model"]["w_scale"]
-
-    q_exact = dolfinx.fem.Function(Q)
-    v_exact, w_exact = q_exact.split()
-    distance = np.linalg.norm(params['loading']['points'][0] - params['loading']['points'][1])
-
-    # compute distance between disclinations
-
-    def _v_exact(x):
-        rq = x[0] ** 2 + x[1] ** 2
-
-        a1 = -1 / 12
-        a2 = -1 / 18
-        a3 = -1 / 24
-
-        _v = a1 * rq**2 + a2 * rq**3 + a3 * rq**4
-
-        return _v * v_scale  # Apply scaling
-
-    def _w_exact(x):
-        w_scale = params["model"]["w_scale"]
-        return (
-            w_scale * (1 - x[0] ** 2 - x[1] ** 2) ** 2
-        )  # Zero function as per your code
-
-    v_exact.interpolate(_v_exact)
-    w_exact.interpolate(_w_exact)
-
-    return v_exact, w_exact
-
-def exact_energy_dipole(parameters):
-    # it should depend on the signs as well
-    distance = np.linalg.norm(
-        np.array(parameters['loading']['points'][0]) - np.array(parameters['loading']['points'][1]))
-    
-    return parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
-        * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
-            (np.log(4+distance**2) - np.log(4 * distance))
-
-
-def _transverse_load_polynomial_analytic(x, params):
-    f_scale = params["model"]["f_scale"]
-    _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-    return f_scale * _p
 
 
 from disclinations.models import compute_energy_terms
