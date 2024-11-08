@@ -21,13 +21,13 @@ import argparse
 # parser.add_argument("test type", help="Either disclination or transverse")
 # parser.add_argument("dimensional / adimensional model", help="Either disclination or transverse")
 
-SCRIPT_VAR = "test_fvk_vs_analytics_transverse_Adim"
-SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner_Adim"
-SCRIPT_CAR = "test_fvk_vs_analytics_transverse-carstensen_Adim"
+#SCRIPT_VAR = "test_fvk_vs_analytics_transverse_Adim"
+#SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner_Adim"
+#SCRIPT_CAR = "test_fvk_vs_analytics_transverse-carstensen_Adim"
 
-#SCRIPT_VAR = "test_fvk_disclinations_dipole_Adim"
-#SCRIPT_BRN = "test_fvk_disclinations_dipole-brenner_Adim"
-#SCRIPT_CAR = "test_fvk_disclinations_dipole-carstensen_Adim"
+SCRIPT_VAR = "test_fvk_disclinations_dipole_Adim"
+SCRIPT_BRN = "test_fvk_disclinations_dipole-brenner_Adim"
+SCRIPT_CAR = "test_fvk_disclinations_dipole-carstensen_Adim"
 
 #SCRIPT_VAR = "test_fvk_vs_analytics_transverse"
 #SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner"
@@ -52,6 +52,12 @@ def run_script(filename):
 script_var = run_script(SCRIPT_VAR+".py")
 script_brn = run_script(SCRIPT_BRN+".py")
 script_car = run_script(SCRIPT_CAR+".py")
+
+print("script_var[energy_terms] = ", script_var["energy_terms"])
+
+smoothing = script_var["SMOOTHING"]
+#sol_tollerance = script_var["SOL_TOLLERANCE"]
+print("Smoothing: ", smoothing)
 
 V_v = script_var["V_v"]
 V_w = script_var["V_w"]
@@ -165,6 +171,10 @@ exp_dict = {
     "Error % Coupling Energy (Car)": [errorCoupling_car]
     }
 
+with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
+
+info_experiment = f"mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]:.2e}_smth_{smoothing}"
+
 experimental_data = pd.DataFrame(exp_dict)
 experimental_data.to_excel(f'{OUTDIR}/Models_comparison.xlsx', index=False)
 
@@ -176,7 +186,6 @@ pyvista.OFF_SCREEN = True
 plotter = pyvista.Plotter(title="Displacement", window_size=[1200, 600], shape=(2, 2))
 
 
-with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
 tol = 1e-3
 xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, 101)
 points = np.zeros((3, 101))
@@ -194,7 +203,7 @@ _plt.xlabel("x [m]", fontsize=30)
 _plt.ylabel("Transverse displacement [m]", fontsize=30)
 _plt.xticks(fontsize=30)
 _plt.yticks(fontsize=30)
-_plt.title(f"Comparison between FE models. Transverse displacement. Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}", size = 30)
+_plt.title(f"Comparison between FE models. Transverse displacement. {info_experiment}", size = 30)
 _plt.grid(True)
 _plt.legend(fontsize=30)
 _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
@@ -210,7 +219,7 @@ _plt.xlabel("x [m]", fontsize=30)
 _plt.ylabel("Airy's function [Nm]", fontsize=30)
 _plt.xticks(fontsize=30)
 _plt.yticks(fontsize=30)
-_plt.title(f"Comparison between FE models. Airy's function. Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}", size = 30)
+_plt.title(f"Comparison between FE models. Airy's function. {info_experiment}", size = 30)
 _plt.grid(True)
 _plt.legend(fontsize=30)
 _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-v-profiles.png")

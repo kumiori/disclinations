@@ -19,6 +19,55 @@ import pdb
 from petsc4py import PETSc
 from slepc4py import SLEPc
 
+import numpy as np
+
+# def set_initial_guess(snes, initial_vector=None, random_seed=None):
+#     """
+#     Set the initial guess for SNES solver.
+#
+#     Parameters:
+#     -----------
+#     snes : PETSc.SNES
+#         The SNES solver object
+#     initial_vector : array-like, optional
+#         Initial vector to set. If None, uses random values
+#     random_seed : int, optional
+#         Seed for random number generator if using random initial guess
+#
+#     Returns:
+#     --------
+#     x : PETSc.Vec
+#         The initial guess vector
+#     """
+#     # Get the solution vector
+#     x = snes.getSolution()
+#     if initial_vector is not None:
+#         # Convert initial_vector to numpy array if it isn't already
+#         initial_array = np.array(initial_vector, dtype=float)
+#
+#         # Check if dimensions match
+#         pdb.set_trace()
+#         if x.getSize() != len(initial_array):
+#             raise ValueError(f"Initial vector size {len(initial_array)} does not match SNES vector size {x.getSize()}")
+#
+#         # Set the values
+#         x.setArray(initial_array)
+#
+#     else:
+#         # Set random initial guess if no vector provided
+#         if random_seed is not None:
+#             np.random.seed(random_seed)
+#
+#         # Generate random values between -1 and 1
+#         random_array = 2 * np.random.random(x.getSize()) - 1
+#         x.setArray(random_array)
+#
+#     # Ensure the vector is assembled
+#     x.assemble()
+#
+#     return x
+
+
 def calculate_condition_number_1(A):
     """
     Purpose: computing the conditioning number of the matrix A using eigenvalues
@@ -58,19 +107,26 @@ def calculate_condition_number_2(A):
     import numpy as np
     dense_A = A.convert("dense")
     dense_array = dense_A.getDenseArray()
-    return np.linalg.cond(dense_array) # compute the condition number
+    c = np.linalg.cond(dense_array) # compute the condition number
+    return c
 
-# CFe end
-
-# import pdb;
-# pdb.set_trace()
 
 comm = MPI.COMM_WORLD
 DEBUG = logging.getLogger().getEffectiveLevel() == logging.DEBUG
 
 def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
-    print(f"Iteration {it}, residual {norm}")
+    #print(f"Iteration {it}, residual {norm}")
+
+    # Get the step vector Δx (update to the solution)
+    delta_x = snes.getSolutionUpdate()
+
+    # Compute the norm of Δx to see the magnitude of the change
+    delta_x_norm = delta_x.norm(PETSc.NormType.NORM_2)
+
+    # Print the current iteration, function norm, and Δx norm
+    print(f"SNES Iteration {it}: Residual norm = {norm:.6e}, Δx norm = {delta_x_norm:.6e}")
+
     return PETSc.SNES.ConvergedReason.ITERATING
 
 class SNESSolver:
@@ -131,7 +187,6 @@ class SNESSolver:
         # if self.bounds is not None:
         #     self.lb = bounds[0]
         #     self.ub = bounds[1]
-
         V = self.u.function_space
         self.comm = V.mesh.comm
         self.F_form = dolfinx.fem.form(F_form)
@@ -149,7 +204,14 @@ class SNESSolver:
 
         self.monitor = monitor
         self.solver = self.solver_setup()
+
         # self.solver = self.solver_setup_demo()
+
+    def create_snes_solution(self):
+            x = self.u.vector.copy()
+            with x.localForm() as _x, self.u.vector.localForm() as _solution:
+                _x[:] = _solution
+            return x
 
     def set_petsc_options(self):
         """
@@ -186,7 +248,7 @@ class SNESSolver:
             snes.setMonitor(self.monitor)
 
         return snes
-    
+
     def solver_setup(self):
         """
         Set up the PETSc.SNES solver.
@@ -196,22 +258,29 @@ class SNESSolver:
         PETSc.SNES
             The configured PETSc.SNES solver object.
         """
-        
+
         snes = PETSc.SNES().create(self.comm)
 
         # Set options
         snes.setOptionsPrefix(self.prefix)
         snes.setFunction(self.F, self.b)
         snes.setJacobian(self.J, self.a)
-        
-        snes.setTolerances(rtol=1.0e-9, max_it=10)
 
+        #snes.setTolerances(rtol=1.0e-9, max_it=10)
+        snes.setTolerances(rtol=1.0e-16, atol=1e-16, stol=1e-16, max_it=100)
         ksp = snes.getKSP()
         ksp.setType("preonly")
-        ksp.setTolerances(rtol=1.0e-9)
+        #ksp.setType(PETSc.KSP.Type.GMRES)
+
+
+        #ksp.setTolerances(rtol=1.0e-9)
+        ksp.setTolerances(rtol=1.0e-16, atol=1e-16)
+        #snes.setTolerances(rtol=1e-5, atol=1e-10, stol=1e-8, max_it=20)
         ksp.getPC().setType("lu")
+
         self.set_petsc_options()
-        
+        opts = PETSc.Options()
+
         if self.monitor is not None:
             snes.setMonitor(self.monitor)
 
@@ -219,10 +288,9 @@ class SNESSolver:
         #     snes.setVariableBounds(self.lb.vector, self.ub.vector)
 
         snes.setFromOptions()
-            
-        if DEBUG:
-            snes.view()
-            
+
+        if DEBUG: snes.view()
+
         return snes
 
     def F(self, snes: PETSc.SNES, x: PETSc.Vec, b: PETSc.Vec):
@@ -240,7 +308,6 @@ class SNESSolver:
         """
         
         # We need to assign the vector to the function
-
         x.ghostUpdate(addv=PETSc.InsertMode.INSERT,
                       mode=PETSc.ScatterMode.FORWARD)
         x.copy(self.u.vector)
@@ -285,11 +352,19 @@ class SNESSolver:
         assemble_matrix(A, self.J_form, self.bcs)
         A.assemble()
 
+
+        # CFe: added Apply diagonal scaling
+        # D = P.getDiagonal()
+        # D.reciprocal()
+        # P.diagonalScale(L=D, R=D)
+        # return PETSc.Mat.Structure.SAME_NONZERO_PATTERN
+        # # CFe: end
+
         # # CFe: check conditioning
         #pdb.set_trace()
-        #cond_number = calculate_condition_number_2(A)
-        #print("Condition number:", cond_number)
-        #if cond_number > 1e10: print("***********************************************************************************")
+        # cond_number = calculate_condition_number_2(A)
+        # print("Condition number of the Jacobian of the Residual :", cond_number)
+        # if cond_number > 1e10: print("***********************************************************************************")
         # # CFe: end check
 
 
@@ -312,16 +387,33 @@ class SNESSolver:
 
         with dolfinx.common.Timer(f"~First Order: min-max equilibrium") as timer:
             try:
+                #print("Initial guess: ", self.u.vector.array)
+                #self.u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+                #self.solver.setSolution(self.u.vector)
+
                 self.solver.solve(None, self.u.vector)
                 print(
                 f"{self.prefix} SNES solver converged in",
                 self.solver.getIterationNumber(),
                 "iterations",
                 "with converged reason",
-                self.solver.getConvergedReason(),
+                self.solver.getConvergedReason(), #"Initial guess", self.solver.getInitialGuess()
                 )
-                self.u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
-                                        mode=PETSc.ScatterMode.FORWARD)
+                self.u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+
+                residual_vector = self.solver.getFunction()[0]
+                jacobian_matrix_1 = self.solver.getJacobian()[0]
+                jacobian_matrix_2 = self.solver.getJacobian()[1]
+                #pdb.set_trace()
+                jacobian_norm_1 = jacobian_matrix_1.norm(PETSc.NormType.FROBENIUS)
+                jacobian_norm_2 = jacobian_matrix_2.norm(PETSc.NormType.FROBENIUS)
+                print(f"Final residual 2 norm: {residual_vector.norm(PETSc.NormType.NORM_2)}")
+                #print(f"Jacobian matrix: {jacobian_matrix_}")
+                print(f"Jacobian Frobenius_1 norm: {jacobian_norm_1}")
+                print(f"Jacobian Frobenius_2 norm: {jacobian_norm_2}")
+                # cond_number = calculate_condition_number_2(jacobian_matrix_1)
+                #print("Condition number of the Jacobian of the Residual :", cond_number)
+
                 return (self.solver.getIterationNumber(),
                         self.solver.getConvergedReason())
 

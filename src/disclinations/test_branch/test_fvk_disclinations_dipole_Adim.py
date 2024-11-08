@@ -63,6 +63,8 @@ TRANSVERSE = 1
 PREFIX = os.path.join("output", "disclinations_dipole_var_adim")
 COMM = MPI.COMM_WORLD
 
+SMOOTHING = False
+
 # DISCLINATION DISTRIBUTION
 DISCLINATION_POINTS_LIST = [[-0.2, 0.0, 0], [0.2, 0.0, 0]]
 DISCLINATION_POWER_LIST = [-1, 1]
@@ -76,10 +78,14 @@ def monitor(snes, it, norm):
     print(f"Iteration {it}, residual {norm}")
     return PETSc.SNES.ConvergedReason.ITERATING
 
+# SMOOTHING
+print("Smoothing: ", SMOOTHING)
 
 # READ PARAMETERS FILE
 with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
+
+info_test = f"smth_{SMOOTHING}_mesh_{parameters["geometry"]["mesh_size"]}"
 
 # MATERIAL / GEOMETRIC PARAMETERS
 nu = parameters["model"]["nu"]
@@ -94,13 +100,10 @@ energy_scale = (_E*thickness**5)/(parameters["geometry"]["radius"]**2)
 
 # LOAD MESH
 mesh_size = parameters["geometry"]["mesh_size"]
-#parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
 model_rank = 0
 tdim = 2
-gmsh_model, tdim = mesh_circle_gmshapi(
-    parameters["geometry"]["geom_type"], 1, mesh_size, tdim
-)
+gmsh_model, tdim = mesh_circle_gmshapi(parameters["geometry"]["geom_type"], 1, mesh_size, tdim)
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, COMM, model_rank, tdim)
 h = CellDiameter(mesh)
 n = FacetNormal(mesh)
@@ -173,7 +176,7 @@ ex_bending_energy = 0.0
 ex_coupl_energy = 0.0
 
 # DEFINE THE FEM PROBLEM
-model = A_NonlinearPlateFVK(mesh, parameters["model"])
+model = A_NonlinearPlateFVK(mesh, parameters["model"], smooth=SMOOTHING)
 energy = model.energy(state)[0]
 
 # External work
@@ -314,7 +317,7 @@ plotter.add_points(
         point_size=15.0
 )
 
-scalar_plot.screenshot(f"{PREFIX}/test_fvk.png")
+scalar_plot.screenshot(f"{PREFIX}/test_fvk_{info_test}.png")
 print("plotted scalar")
 
 npoints = 1001
@@ -379,7 +382,7 @@ _plt, data = plot_profile(
 
 _plt.legend()
 
-_plt.savefig(f"{PREFIX}/test_fvk-profiles.png")
+_plt.savefig(f"{PREFIX}/test_fvk-profiles_{info_test}.png")
 
 
 # PLOTS: MOMENTS

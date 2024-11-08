@@ -56,6 +56,11 @@ TRANSVERSE = 1
 
 OUTDIR = os.path.join("output", "analytic_transverse-brenner_Adim")
 
+# NON LINEAR SEARCH TOLLERANCES
+ABS_TOLLERANCE = 1e-11 # Absolute tollerance
+REL_TOLLERANCE = 1e-11  # Relative tollerance
+SOL_TOLLERANCE = 1e-11  # Solution tollerance
+
 # Create output folder if does not exists
 if COMM.rank == 0:
     Path(OUTDIR).mkdir(parents=True, exist_ok=True)
@@ -174,9 +179,9 @@ F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_
 solver_parameters = {
     "snes_type": "newtonls",        # Solver type: NGMRES (Nonlinear GMRES)
     "snes_max_it": 100,          # Maximum number of iterations
-    "snes_rtol": 1e-6,            # Relative tolerance for convergence
-    "snes_atol": 1e-6,           # Absolute tolerance for convergence
-    "snes_stol": 1e-6,           # Tolerance for the change in solution norm
+    "snes_rtol": REL_TOLLERANCE,            # Relative tolerance for convergence
+    "snes_atol": ABS_TOLLERANCE,           # Absolute tolerance for convergence
+    "snes_stol": SOL_TOLLERANCE,           # Tolerance for the change in solution norm
     "snes_monitor": None,         # Function for monitoring convergence (optional)
     "snes_linesearch_type": "basic",  # Type of line search
 }

@@ -171,7 +171,7 @@ ex_bending_energy = 0.0
 ex_coupl_energy = 0.0
 
 # DEFINE THE FEM PROBLEM
-model = NonlinearPlateFVK(mesh, parameters["model"])
+model = NonlinearPlateFVK(mesh, parameters["model"], False)
 energy = model.energy(state)[0]
 
 # External work

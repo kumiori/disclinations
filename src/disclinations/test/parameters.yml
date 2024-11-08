@@ -6,19 +6,19 @@ geometry:
     geometric_dimension: 2
     geom_type: "circle"
     radius: 1.
-    mesh_size: 0.05
+    mesh_size: 0.05 # Leght of an element
 
 #  === Material === #
 model:
     E: 10000000000 #20000
-    thickness: 0.05
+    thickness: 0.01
     sigma_D0: 1.
     nu: 0.15
     model_dimension: 2
     model_type: "2D"
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"
     order: 3
-    alpha_penalty: 2000
+    alpha_penalty: 300
 # === Solver === #
 solvers:
     elasticity:

@@ -338,7 +338,7 @@ def mesh_circle_gmshapi(name,
             gmsh.initialize()
         gmsh.option.setNumber("General.Terminal", 1)
 
-        gmsh.option.setNumber("Mesh.Algorithm", 6)
+        #gmsh.option.setNumber("Mesh.Algorithm", 2) # 6
         model = gmsh.model()
         model.add("Circle")
         model.setCurrent("Circle")
@@ -361,7 +361,37 @@ def mesh_circle_gmshapi(name,
         model.addPhysicalGroup(tdim, surface_entities, tag=5)
         model.setPhysicalName(tdim, 5, "Film surface")
 
+    # CFe added 6 11 24
+        # Create a mesh size field to refine the center
+        #field_id = gmsh.model.mesh.field.add("Distance")
+        #gmsh.model.mesh.field.setNumbers(field_id, "EdgesList", [c1, c2, c3, c4])
+        #gmsh.model.mesh.field.setNumber(field_id, "Sampling", 1000)
+
+        #Threshold field to define refinement size near the center
+        #threshold_id = gmsh.model.mesh.field.add("Threshold")
+        #gmsh.model.mesh.field.setNumber(threshold_id, "InField", field_id)
+        #gmsh.model.mesh.field.setNumber(threshold_id, "SizeMin", lc * 0.5 )  # Small mesh size at center
+        #gmsh.model.mesh.field.setNumber(threshold_id, "SizeMax", lc )        # Larger mesh size at edges
+        #gmsh.model.mesh.field.setNumber(threshold_id, "DistMin", R * 0.1)  # Radius of fine mesh region
+        #gmsh.model.mesh.field.setNumber(threshold_id, "DistMax", R * 0.2 )  # Transition region
+
+        # Set the threshold field as the background mesh field
+        #gmsh.model.mesh.field.setAsBackgroundMesh(threshold_id)
+    # CFe end
+
         gmsh.model.mesh.setOrder(order)
+
+        # Enable mesh optimization
+        #gmsh.option.setNumber("Mesh.Optimize", 4)
+        gmsh.option.setNumber("Mesh.OptimizeNetgen", 1) # 1: on, 0: off
+        gmsh.option.setNumber("Mesh.Optimize", 1)
+        gmsh.option.setNumber("Mesh.Smoothing", 100) # Number of smoothing iterations to perform
+        gmsh.option.setNumber("Mesh.Algorithm", 6)  # 2: Automatic, 5: Delaunay
+        #gmsh.option.setNumber("Mesh.QualityType", 3)
+        #gmsh.option.setNumber("Mesh.QualityInf", 0.01)
+        #gmsh.option.setNumber("Mesh.CharacteristicLengthExtendFromBoundary", 1)
+        #gmsh.option.setNumber("Mesh.CharacteristicLengthFromCurvature", 1)
+        #gmsh.option.setNumber("Mesh.OptimizeThreshold", 0.1)
 
         model.mesh.generate(tdim)
 
@@ -369,7 +399,7 @@ def mesh_circle_gmshapi(name,
         if msh_file is not None:
             gmsh.write(msh_file)
 
-        # gmsh.finalize()
+        #gmsh.finalize()
 
     return gmsh.model if comm.rank == 0 else None, tdim
 

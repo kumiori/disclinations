@@ -18,7 +18,7 @@ model:
     model_type: "2D"
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"
     order: 3
-    alpha_penalty: 2000.
+    alpha_penalty: 300
 # === Solver === #
 solvers:
     elasticity:

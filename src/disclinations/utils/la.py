@@ -93,5 +93,7 @@ def compute_disclination_loads(points, signs, V, V_sub_to_V_dofs=None, V_sub=Non
             dofs = np.array(V_sub_to_V_dofs)[subspace_dofs]
         # Update the function values
         b.x.array[dofs] += sign * basis_value
+        print("sign: ", sign)
+        print("basis_value", basis_value)
 
     return b

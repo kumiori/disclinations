@@ -593,6 +593,8 @@ def create_or_load_circle_mesh(parameters, prefix):
                 parameters["geometry"]["geom_type"], 1, mesh_size, tdim
             )
 
+            #gmsh_model.model.mesh.refine()
+
             mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
 
             # Save the mesh for future use

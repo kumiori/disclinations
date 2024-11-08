@@ -6,6 +6,7 @@ import yaml
 import os
 import numpy as np
 from mpi4py import MPI
+import pdb
 
 AIRY = 0
 TRANSVERSE = 1
@@ -82,14 +83,16 @@ class ToyPlateFVK:
                 - bc1(v) + bc2(v)
 
 class A_NonlinearPlateFVK(ToyPlateFVK):
-    def __init__(self, mesh, model_parameters = {}) -> None:
+
+    def __init__(self, mesh, model_parameters = {}, smooth=False) -> None:
         self.alpha_penalty = model_parameters.get("alpha_penalty", default_model_parameters["alpha_penalty"])
         self.nu = model_parameters.get("nu", default_model_parameters["nu"])
         self.E = model_parameters.get("E", default_model_parameters["E"])
         self.t = model_parameters.get("thickness", default_model_parameters["thickness"])
         #self.R = model_parameters.get("radius", default_geo_parameters["radius"])
         #self.D = self.E * self.t**3 / (12*(1-self.nu**2))
-        self.c_nu = 1/(12*(1-self.nu**2))
+        self.c_nu = 1/(12*(1-self.nu**2)) #np.round(1/(12*(1-self.nu**2)), 3)
+        self.smooth = smooth
 
         # Scaling parameters to get dimensional physical values starting from dimensionless values
         self.v_scale = self.E * (self.t**3)
@@ -101,58 +104,108 @@ class A_NonlinearPlateFVK(ToyPlateFVK):
         X = basix.ufl.element("P", str(mesh.ufl_cell()), model_parameters["order"]) 
         self.Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
+        self.dx = ufl.Measure("dx")
+        self.dS = ufl.Measure("dS")
+        self.ds = ufl.Measure("ds")
+        #self.dx = ufl.Measure("dx", domain=mesh, metadata={"quadrature_degree": 3})
+        #self.dS = ufl.Measure("dS", metadata={"quadrature_degree": 5})
+        #self.ds = ufl.Measure("ds", metadata={"quadrature_degree": 3})
+
+        W = lambda f : self.W(f)
+        h = ufl.CellDiameter(self.mesh)
+        n = ufl.FacetNormal(self.mesh)
+        #α2 = 0.01*self.alpha_penalty
+        α2 = 1*self.alpha_penalty
+        self.dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
+        self.dg2 = lambda u: + 1/2 * self.alpha_penalty/avg(h) * inner(jump(grad(u),n), jump(grad(u),n)) * dS
+        self.dg3 = lambda u: + 1/2 * α2/avg(h) * inner(jump(hessian(u), n), jump(hessian(u), n)) * dS
+        #dg3 = lambda u: + 1/2 * (α2/avg(h) * inner(jump(hessian(u)), jump(hessian(u))) )* dS
+
+        self.dgc = lambda w, g: ( avg(inner(W(w), outer(n, n)))*jump(grad(g), n) ) *dS
+
+        self.bc1 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
+        self.bc2 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
+        #self.bc3 = lambda u: 0.01*1/2 * self.alpha_penalty/h * inner(grad(u), grad(u)) * ds
+        #self.bc3 = lambda u: 0.1*1/2 * self.alpha_penalty/h * ( dot(grad(u),n) * dot(grad(u),n) ) * ds
+        self.bc3 = lambda u: 1/2 * self.alpha_penalty/h * ( dot(grad(u),n) * dot(grad(u),n) ) * ds
     
-    def energy(self, state):
-        v = state["v"]
-        w = state["w"]
-        dx = ufl.Measure("dx")
-
-        k_g = - self.c_nu*(1-self.nu)
-
-        #membrane = ( 1/2 * inner(hessian(v), hessian(v)) - self.nu/2 * self.bracket(v, v) ) * dx
-        membrane = 1/2 * laplacian(v) * laplacian(v) * dx
-        #bending = ( self.c_nu/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w) ) * dx
-        bending = self.c_nu/2 * laplacian(w) * laplacian(w) * dx
-        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx
-        #coupling = -1/2 * self.bracket(w,w) * v * dx
-        energy = bending - membrane + coupling
-
-        return energy, bending, membrane, coupling
-
     def M(self, f):
         return grad(grad(f)) + self.nu*self.σ(f)
-    
+
     def P(self, f):
         return grad(grad(f)) - self.nu*self.σ(f)
 
     def W(self, f):
         J = ufl.as_matrix([[0, -1], [1, 0]])
         return -0.5*J.T*(outer(grad(f), grad(f))) * J
-    
+
+    def energy(self, state):
+        v = state["v"]
+        w = state["w"]
+        dx = self.dx
+
+        k_g = - self.c_nu*(1-self.nu)
+
+        #membrane = ( 1/2 * inner(hessian(v), hessian(v)) - self.nu/2 * self.bracket(v, v) ) * dx
+        #bending = ( self.c_nu/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w) ) * dx
+        membrane = 1/2 * ( laplacian(v) * laplacian(v) ) * dx
+        bending = self.c_nu/2 * ( laplacian(w) * laplacian(w) ) * dx
+        coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx
+        energy = bending - membrane + coupling
+        return energy, bending, membrane, coupling
+
     def penalisation(self, state):
         v = state["v"]
         w = state["w"]
-        α = self.alpha_penalty
-        h = ufl.CellDiameter(self.mesh)
-        n = ufl.FacetNormal(self.mesh)
-        nu = self.nu
+        return_value = self.c_nu*self.dg1(w) + self.dg2(w) - self.dg1(v) - self.dg2(v) + self.c_nu*self.bc1(w) - self.bc2(v) + self.bc3(w) - self.bc3(v) + self.dgc(w, v)
+        #return_value = self.dg1(w) + self.dg2(w) - self.dg1(v) - 0.1*self.dg2(v) + self.bc1(w) - self.bc2(v) + self.bc3(w) - self.bc3(v) + self.dgc(w, v)
+        if self.smooth: return_value += self.dg3(w)
+        return return_value
 
-        dS = ufl.Measure("dS")
-        ds = ufl.Measure("ds")
+    def compute_bending_energy(self, state, COMM):
+        return COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form( self.energy(state)[1] )), op=MPI.SUM)
 
-        M = lambda f : self.M(f)
-        P = lambda f : self.P(f)
-        W = lambda f : self.W(f)
-        
-        dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
-        dg2 = lambda u: + 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
-        dgc = lambda w, g: avg(inner(W(w), outer(n, n)))*jump(grad(g), n)*dS
+    def compute_membrane_energy(self, state, COMM):
+        return COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form( self.energy(state)[2] )), op=MPI.SUM)
 
-        bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
-        bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
-        bc3 = lambda u: 1/2 * α/h * inner(grad(u), grad(u)) * ds
-        
-        return   self.c_nu*dg1(w) + dg2(w) - dg1(v) - dg2(v) + self.c_nu*bc1(w) - bc2(v) + bc3(w) - bc3(v) + dgc(w, v)
+    def compute_coupling_energy(self, state, COMM):
+        return COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form( self.energy(state)[3] )), op=MPI.SUM)
+
+    def compute_penalisation(self, state, COMM):
+        return COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form( self.penalisation(state) )), op=MPI.SUM)
+
+    def compute_penalisation_terms_w(self, state, COMM):
+        w = state["w"]
+        dg1_computed = COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.dg1(w))), op=MPI.SUM)
+        dg2_computed = COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.dg2(w))), op=MPI.SUM)
+        bc1_computed = COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.bc1(w))), op=MPI.SUM)
+        bc3_computed = COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.bc3(w))), op=MPI.SUM)
+        dg3_computed = COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.dg3(w))), op=MPI.SUM)
+        return self.c_nu*dg1_computed, dg2_computed, self.c_nu*bc1_computed, bc3_computed, dg3_computed
+
+    def compute_penalisation_terms_v(self, state, COMM):
+        v = state["v"]
+        dg1_computed = COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.dg1(v))), op=MPI.SUM)
+        dg2_computed = COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.dg2(v))), op=MPI.SUM)
+        bc1_computed = COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.bc2(v))), op=MPI.SUM)
+        bc3_computed = COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.bc3(v))), op=MPI.SUM)
+        return dg1_computed, dg2_computed, bc1_computed, bc3_computed
+
+    def compute_total_penalisation_w(self, state, COMM):
+        return_value = 0
+        for element in self.compute_penalisation_terms_w(state, COMM): return_value += element
+        return return_value
+
+    def compute_total_penalisation_v(self, state, COMM):
+        return_value = 0
+        for element in self.compute_penalisation_terms_v(state, COMM): return_value += element
+        return return_value
+
+    def compute_penalisation_coupling(self, state, COMM):
+        v = state["v"]
+        w = state["w"]
+        return COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(self.dgc(w, v))), op=MPI.SUM)
+
 
     def gaussian_curvature(self, w, order = 1):
         mesh = self.mesh
@@ -171,14 +224,25 @@ class A_NonlinearPlateFVK_brenner(A_NonlinearPlateFVK):
         v = state["v"]
         w = state["w"]
         dx = ufl.Measure("dx")
-        k_g = - self.c_nu*(1-self.nu)
 
-        #membrane = ( 1/2 * inner(hessian(v), hessian(v)) - self.nu/2 * self.bracket(v, v) ) * dx
         membrane = 1/2 * laplacian(v) * laplacian(v) * dx
-        #bending = ( self.c_nu/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w) ) * dx
-        bending = self.c_nu/2 * laplacian(w) * laplacian(w) * dx
+        bending = self.c_nu/2 * inner(laplacian(w), laplacian(w)) * dx
         coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx
         energy = bending - membrane
+
+        W = lambda f : self.W(f)
+        h = ufl.CellDiameter(self.mesh)
+        n = ufl.FacetNormal(self.mesh)
+
+        α2 = self.alpha_penalty
+
+        self.dg1 = lambda u: - 1/2 * ( jump(grad(u),n)*avg(dot(grad(grad(u)) * n, n)) ) * dS
+        self.dg2 = lambda u: + 1/2 * self.alpha_penalty/avg(h) *( jump(grad(u),n) * jump(grad(u),n) ) * dS
+        self.dg3 = lambda u: + 1/2 * α2/avg(h) * inner(jump(hessian(u), n), jump(hessian(u), n)) * dS
+
+        self.bc1 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
+        self.bc2 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
+        self.bc3 = lambda u: 0.1*1/2 * self.alpha_penalty/h * ( dot(grad(u),n) * dot(grad(u),n) ) * ds
 
         return energy, bending, membrane, coupling
 
@@ -210,26 +274,26 @@ class A_NonlinearPlateFVK_brenner(A_NonlinearPlateFVK):
     def penalisation(self, state):
         v = state["v"]
         w = state["w"]
-        α = self.alpha_penalty
-        h = ufl.CellDiameter(self.mesh)
-        n = ufl.FacetNormal(self.mesh)
-        nu = self.nu
+        #α = self.alpha_penalty
+        #h = ufl.CellDiameter(self.mesh)
+        #n = ufl.FacetNormal(self.mesh)
+        #nu = self.nu
 
-        dS = ufl.Measure("dS")
-        ds = ufl.Measure("ds")
+        #dS = ufl.Measure("dS")
+        #ds = ufl.Measure("ds")
+        #
+        #M = lambda f : self.M(f)
+        #P = lambda f : self.P(f)
+        #W = lambda f : self.W(f)
 
-        M = lambda f : self.M(f)
-        P = lambda f : self.P(f)
-        W = lambda f : self.W(f)
+        # dg1 = lambda u: - 1/2 * ( jump(grad(u),n)*avg(dot(grad(grad(u)) * n, n)) ) * dS
+        # dg2 = lambda u: + 1/2 * α/avg(h) *( jump(grad(u),n) * jump(grad(u),n) ) * dS
+        #
+        # bc1 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
+        # bc2 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
+        # bc3 = lambda u: 0.1/2 * α/h * ( dot(grad(u),n) * dot(grad(u),n) ) * ds
 
-        dg1 = lambda u: - 1/2 * jump(grad(u),n)*avg(dot(grad(grad(u)) * n, n)) * dS
-        dg2 = lambda u: + 1/2 * α/avg(h) * jump(grad(u),n) * jump(grad(u),n) * dS
-
-        bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
-        bc2 = lambda u: - 1/2 * inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) * ds
-        bc3 = lambda u: 1/2 * α/h * dot(grad(u),n) * dot(grad(u),n) * ds
-
-        return  self.c_nu*dg1(w) + dg2(w) - dg1(v) - dg2(v) + self.c_nu*bc1(w) - bc2(v) + bc3(w) - bc3(v)
+        return  self.c_nu*self.dg1(w) + self.dg2(w) - self.dg1(v) - self.dg2(v) + self.c_nu*self.bc1(w) - self.bc2(v) + self.bc3(w) - self.bc3(v)
     
 class A_NonlinearPlateFVK_carstensen(A_NonlinearPlateFVK_brenner):
     def coupling_term(self, state, v_test, w_test):

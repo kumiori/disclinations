@@ -56,6 +56,13 @@ TRANSVERSE = 1
 
 OUTDIR = os.path.join("output", "analytic_transverse_Adim")
 
+# NON LINEAR SEARCH TOLLERANCES
+ABS_TOLLERANCE = 1e-10 # Absolute tollerance
+REL_TOLLERANCE = 1e-10  # Relative tollerance
+SOL_TOLLERANCE = 1e-10  # Solution tollerance
+
+SMOOTHING = False
+
 # Create output folder if does not exists
 if COMM.rank == 0:
     Path(OUTDIR).mkdir(parents=True, exist_ok=True)
@@ -82,8 +89,13 @@ def exact_coupling_energy(v, w):
     cof = lambda v : ufl.Identity(2)*laplacian(v) - hessian(v)
     return assemble_scalar( form( 0.5* ufl.inner(cof(v), ufl.outer(grad(w),grad(w)) ) * ufl.dx ) )
 
+# SMOOTHING
+print("Smoothing: ", SMOOTHING)
+
 # LOAD PARAMETERS FILE
 with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
+
+info_test = f"smth_{SMOOTHING}_mesh_{parameters["geometry"]["mesh_size"]}"
 
 # GEOMETRIC PARAMETERS
 thickness = parameters["model"]["thickness"]
@@ -131,7 +143,7 @@ _bcs = {AIRY: bcs_v, TRANSVERSE: bcs_w}
 bcs = list(_bcs.values())
 
 # DEFINE THE VARIATIONAL PROBLEM
-model = A_NonlinearPlateFVK(mesh, parameters["model"])
+model = A_NonlinearPlateFVK(mesh, parameters["model"], smooth=SMOOTHING)
 energy = model.energy(state)[0]
 
 # DEFINE EXACT SOLUTIONS
@@ -174,9 +186,9 @@ F = ufl.derivative(L, q, ufl.TestFunction(Q))
 solver_parameters = {
     "snes_type": "newtonls",        # Solver type: NGMRES (Nonlinear GMRES)
     "snes_max_it": 100,          # Maximum number of iterations
-    "snes_rtol": 1e-6,            # Relative tolerance for convergence
-    "snes_atol": 1e-6,           # Absolute tolerance for convergence
-    "snes_stol": 1e-6,           # Tolerance for the change in solution norm
+    "snes_rtol": REL_TOLLERANCE,            # Relative tolerance for convergence
+    "snes_atol": ABS_TOLLERANCE,           # Absolute tolerance for convergence
+    "snes_stol": SOL_TOLLERANCE,           # Tolerance for the change in solution norm
     "snes_monitor": None,         # Function for monitoring convergence (optional)
     "snes_linesearch_type": "basic",  # Type of line search
 }
@@ -194,22 +206,40 @@ solver = SNESSolver(
 solver.solve()
 
 # COMPUTE DIMENSIONAL ENERGY
-energy_components = {"bending": (1/a**2)*model.energy(state_dimensional)[1],
-                    "membrane": (1/a**2)*model.energy(state_dimensional)[2],
-                    "coupling": (1/a**2)*model.energy(state_dimensional)[3]}
+# energy_components = {"bending": (1/a**2)*model.energy(state_dimensional)[1],
+#                     "membrane": (1/a**2)*model.energy(state_dimensional)[2],
+#                     "coupling": (1/a**2)*model.energy(state_dimensional)[3]}
 
-energy_terms = {label: COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(energy_term)), op=MPI.SUM)
-                         for label, energy_term in energy_components.items()}
+energy_terms = {
+        "bending": (1/a**2)*model.compute_bending_energy(state, COMM),
+        "membrane": (1/a**2)*model.compute_membrane_energy(state, COMM),
+        "coupling": (1/a**2)*model.compute_coupling_energy(state, COMM),
+        "panalty":  model.compute_penalisation(state, COMM),
+        "panalty_w":  model.compute_total_penalisation_w(state, COMM),
+        "panalty_v":  model.compute_total_penalisation_v(state, COMM),
+        "panalty_coupling":  model.compute_penalisation_coupling(state, COMM),
+        "panalty_coupling_dg1":  model.compute_penalisation_terms_w(state, COMM)[0],
+        "panalty_coupling_dg2":  model.compute_penalisation_terms_w(state, COMM)[1],
+        "panalty_coupling_bc1":  model.compute_penalisation_terms_w(state, COMM)[2],
+        "panalty_coupling_bc3":  model.compute_penalisation_terms_w(state, COMM)[3],
+        "panalty_coupling_dg3":  model.compute_penalisation_terms_w(state, COMM)[4],
+        }
+
+
+#energy_terms = {label: COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(energy_term)), op=MPI.SUM) for label, energy_term in energy_components.items()}
 
 # Print FE dimensioanal energy
 for label, energy_term in energy_terms.items(): print(f"{label}: {energy_term}")
 
-# Pring exact energy
+# Print exact energy
 print("Exact bending energy: ", ex_bending_energy)
 print("Exact membrane energy: ", ex_membrane_energy)
 print("Exact coupling energy: ", ex_coupl_energy)
-    
 
+# Print errors
+print("Percent bending energy error: ", np.round(100*(energy_terms["bending"] - ex_bending_energy)/ex_bending_energy, 4) )
+print("Percent membrane energy error: ", np.round(100*(energy_terms["membrane"] - ex_membrane_energy)/ex_membrane_energy, 4))
+print("Percent coupling energy error: ", np.round(100*(energy_terms["coupling"] - ex_coupl_energy)/ex_coupl_energy, 4))
 
 # DEFINE SOLUTIONS FOR POSTPROCESSING
 
@@ -247,7 +277,7 @@ scalar_plot = plot_scalar(wpp, plotter, subplot=(0, 1), V_sub=V_w, dofs=dofs_w)
 scalar_plot = plot_scalar(v_exact, plotter, subplot=(1, 0), V_sub=V_v, dofs=dofs_v)
 scalar_plot = plot_scalar(w_exact, plotter, subplot=(1, 1), V_sub=V_w, dofs=dofs_w)
 
-scalar_plot.screenshot(f"{OUTDIR}/test_fvk.png")
+scalar_plot.screenshot(f"{OUTDIR}/test_fvk_{info_test}.png")
 print("plotted scalar")
 
 tol = 1e-3
@@ -271,4 +301,4 @@ _plt, data = plot_profile( v_exact, points, None, subplot=(1, 2), lineproperties
 
 _plt.legend()
 
-_plt.savefig(f"{OUTDIR}/test_fvk-profiles.png")
+_plt.savefig(f"{OUTDIR}/test_fvk-profiles_{info_test}.png")

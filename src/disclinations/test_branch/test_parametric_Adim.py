@@ -55,6 +55,10 @@ from dolfinx.io import XDMFFile, gmshio
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 
+# NON LINEAR SEARCH TOLLERANCES
+ABS_TOLLERANCE = 1e-12 # Absolute tollerance
+REL_TOLLERANCE = 1e-12  # Relative tollerance
+SOL_TOLLERANCE = 1e-12  # Solution tollerance
 
 prefix = os.path.join("output", "test_parametric_adim")
 #series = base_signature[0::6]
@@ -78,6 +82,8 @@ HESSIAN_W = 1
 AIRY_V         = 2
 TRANSV_W  = 3
 CONV_ID      = 4
+
+SMOOTHING = False
 
 comm = MPI.COMM_WORLD
 CostantData = namedtuple("CostantData", ["funcSpace", "bcs"])
@@ -109,7 +115,7 @@ def solveModel(FEMmodel, costantData, parameters, f):
     elif FEMmodel == BRENNER:
         model = A_NonlinearPlateFVK_brenner(mesh, parameters["model"])
     elif FEMmodel == VARIATIONAL:
-        model = A_NonlinearPlateFVK(mesh, parameters["model"])
+        model = A_NonlinearPlateFVK(mesh, parameters["model"], smooth=SMOOTHING)
     else:
         print(f"FEMmodel = {FEMmodel} is not acceptable. Script exiting")
         exit(0)
@@ -131,9 +137,9 @@ def solveModel(FEMmodel, costantData, parameters, f):
     solver_parameters = {
         "snes_type": "newtonls",  # Solver type: NGMRES (Nonlinear GMRES)
         "snes_max_it": 100,  # Maximum number of iterations
-        "snes_rtol": 1e-12,  # Relative tolerance for convergence
-        "snes_atol": 1e-12,  # Absolute tolerance for convergence
-        "snes_stol": 1e-12,  # Tolerance for the change in solution norm
+        "snes_rtol": REL_TOLLERANCE,  # Relative tolerance for convergence
+        "snes_atol": ABS_TOLLERANCE,  # Absolute tolerance for convergence
+        "snes_stol": SOL_TOLLERANCE,  # Tolerance for the change in solution norm
         "snes_monitor": None,  # Function for monitoring convergence (optional)
         "snes_linesearch_type": "basic",  # Type of line search
     }
@@ -201,11 +207,15 @@ def exactL2Nrm(costantData, parameters):
 
 if __name__ == "__main__":
 
+    print("Smoothing: ", SMOOTHING)
+
     # CFe: choose the parameter
     # set PARAMETER_NAME equal to "thickness", "E" or "alpha_penalty"
     # set then PARAMETER_CATEGORY accordingly: "model" in all the three cases above.
 
     p_range = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07, 0.08, 0.09, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0]
+    #p_range = [0.01, 0.04, 0.07, 0.1, 0.4, 0.7, 1.0]
+    #p_range = [1.0]
     #p_range = np.linspace(0.01, 1, NUM_RUNS) # thickness
 
     # CFe: boolean, set it to true to plot with a logscale on the xaxis, False to plot with a linear scale on the xaxis
@@ -224,7 +234,9 @@ if __name__ == "__main__":
         base_signature = hashlib.md5(str(base_parameters).encode('utf-8')).hexdigest()
     
     if comm.rank == 0: Path(experiment_dir).mkdir(parents=True, exist_ok=True)
-            
+
+    info_experiment = f"mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]:.2e}_smth_{SMOOTHING}_tol = {SOL_TOLLERANCE}"
+
     logging.info(f"===================- {experiment_dir} -=================")
     
     # LOAD MESH
@@ -333,7 +345,7 @@ if __name__ == "__main__":
     plt.tick_params(axis='both', which='major', labelsize=35)
     plt.legend(fontsize=35)
     plt.grid(which='both')
-    plt.savefig(experiment_dir+f'/models_comparison_V_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]}.png', dpi=300)
+    plt.savefig(experiment_dir+f'/models_comparison_V_{info_experiment}.png', dpi=300)
     plt.show()
 
     plt.figure(figsize=(30, 20))
@@ -358,7 +370,7 @@ if __name__ == "__main__":
     plt.tick_params(axis='both', which='major', labelsize=35)
     plt.legend(fontsize=35)
     plt.grid(which='both')
-    plt.savefig(experiment_dir+f'/models_comparison_W_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]}.png', dpi=300)
+    plt.savefig(experiment_dir+f'/models_comparison_W_{info_experiment}.png', dpi=300)
     plt.show()
 
     # PERCENTAGE ERROR PLOT
@@ -385,7 +397,7 @@ if __name__ == "__main__":
     plt.legend(fontsize=35)
     plt.grid(which='both')
     plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
-    plt.savefig(experiment_dir+f'/perc_err_V_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]}.png', dpi=300)
+    plt.savefig(experiment_dir+f'/perc_err_V_{info_experiment}.png', dpi=300)
     plt.show()
 
     plt.figure(figsize=(30, 20))
@@ -410,5 +422,5 @@ if __name__ == "__main__":
     plt.legend(fontsize=35)
     plt.grid(which='both')
     plt.gca().yaxis.set_major_formatter(mtick.PercentFormatter())
-    plt.savefig(experiment_dir+f'/perc_err_W_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]}.png', dpi=300)
+    plt.savefig(experiment_dir+f'/perc_err_W_{info_experiment}.png', dpi=300)
     plt.show()
