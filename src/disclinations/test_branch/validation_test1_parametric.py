@@ -36,12 +36,10 @@ from disclinations.models import (calculate_rescaling_factors, compute_energy_te
 from disclinations.models.adimensional import A_NonlinearPlateFVK, A_NonlinearPlateFVK_brenner, A_NonlinearPlateFVK_carstensen
 from disclinations.models import create_disclinations
 from disclinations.solvers import SNESSolver
-from disclinations.utils import (Visualisation, memory_usage, monitor,
-                                 table_timing_data, write_to_output)
+from disclinations.utils import (Visualisation, memory_usage, monitor, table_timing_data, write_to_output)
 from disclinations.utils import _logger
 from disclinations.utils.la import compute_disclination_loads
-from disclinations.utils import (homogeneous_dirichlet_bc_H20, load_parameters,
-                                 save_params_to_yaml)
+from disclinations.utils import (homogeneous_dirichlet_bc_H20, load_parameters, save_params_to_yaml)
 from disclinations.utils import update_parameters, save_parameters
 from disclinations.utils import create_or_load_circle_mesh
 from disclinations.utils import table_timing_data, Visualisation
@@ -60,7 +58,7 @@ ABS_TOLLERANCE = 1e-12 # Absolute tollerance
 REL_TOLLERANCE = 1e-12  # Relative tollerance
 SOL_TOLLERANCE = 1e-12  # Solution tollerance
 
-prefix = os.path.join("output", "test_parametric_adim")
+prefix = os.path.join("output", "validation_test1_parametric")
 #series = base_signature[0::6]
 PARAMETER_NAME = "thickness"
 PARAMETER_CATEGORY = "model"

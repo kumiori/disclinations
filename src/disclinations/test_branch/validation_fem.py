@@ -7,8 +7,7 @@ ARTICLE RELATED SECTION
 "Tests 1: kinematically compatible plate under volume forces"
 "Tests 2: kinematically incompatible plate"
 """
-
-from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import yaml
 import numpy as np
 import matplotlib.pyplot as plt
@@ -17,25 +16,20 @@ import os
 import pandas as pd
 import argparse
 
+from disclinations.utils import load_parameters
+from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
+
 # parser = argparse.ArgumentParser(description="Which comparison would you like to run?")
 # parser.add_argument("test type", help="Either disclination or transverse")
 # parser.add_argument("dimensional / adimensional model", help="Either disclination or transverse")
 
-#SCRIPT_VAR = "test_fvk_vs_analytics_transverse_Adim"
-#SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner_Adim"
-#SCRIPT_CAR = "test_fvk_vs_analytics_transverse-carstensen_Adim"
+#SCRIPT_VAR = "validation_test1_adim"
+#SCRIPT_BRN = "validation_test1_BR_adim"
+#SCRIPT_CAR = "validation_test1_CA_adim"
 
-SCRIPT_VAR = "test_fvk_disclinations_dipole_Adim"
-SCRIPT_BRN = "test_fvk_disclinations_dipole-brenner_Adim"
-SCRIPT_CAR = "test_fvk_disclinations_dipole-carstensen_Adim"
-
-#SCRIPT_VAR = "test_fvk_vs_analytics_transverse"
-#SCRIPT_BRN = "test_fvk_vs_analytics_transverse-brenner"
-#SCRIPT_CAR = "test_fvk_vs_analytics_transverse-carstensen"
-
-#SCRIPT_VAR = "test_fvk_disclinations_dipole"
-#SCRIPT_BRN = "test_fvk_disclinations_dipole-brenner"
-#SCRIPT_CAR = "test_fvk_disclinations_dipole-carstensen"
+SCRIPT_VAR = "validation_test2_adim"
+SCRIPT_BRN = "validation_test2_BR_adim"
+SCRIPT_CAR = "validation_test2_CA_adim"
 
 OUTDIR = os.path.join("output", "compare", SCRIPT_VAR)
 if not os.path.exists(OUTDIR): os.makedirs(OUTDIR)
@@ -171,7 +165,10 @@ exp_dict = {
     "Error % Coupling Energy (Car)": [errorCoupling_car]
     }
 
-with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
+#with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
+PARAMETERS_FILE_PATH = 'disclinations.test'
+with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
+    parameters, _ = load_parameters(f)
 
 info_experiment = f"mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]:.2e}_smth_{smoothing}"
 

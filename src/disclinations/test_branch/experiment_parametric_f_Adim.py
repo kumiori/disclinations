@@ -57,7 +57,7 @@ from disclinations.utils import table_timing_data, Visualisation
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 
 # OUTPUT DIRECTORY
-OUTDIR = os.path.join("output", "test_parametric_b_Adim") # CFe: output directory
+OUTDIR = os.path.join("output", "experiment_parametric_f_adim") # CFe: output directory
 PATH_TO_PARAMETERS_YML_FILE = 'disclinations.test'
 
 # NON LINEAR SEARCH TOLLERANCES

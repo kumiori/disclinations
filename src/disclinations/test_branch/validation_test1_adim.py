@@ -9,6 +9,7 @@ import warnings
 import basix
 import numpy as np
 import yaml
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import pyvista
 
 import petsc4py
@@ -22,7 +23,7 @@ from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 from disclinations.solvers import SNESSolver, SNESProblem
-
+from disclinations.utils import load_parameters
 import dolfinx
 from dolfinx import log
 import dolfinx.io
@@ -54,7 +55,7 @@ COMM = MPI.COMM_WORLD
 AIRY = 0
 TRANSVERSE = 1
 
-OUTDIR = os.path.join("output", "analytic_transverse_Adim")
+OUTDIR = os.path.join("output", "validation_test1_adim")
 
 # NON LINEAR SEARCH TOLLERANCES
 ABS_TOLLERANCE = 1e-10 # Absolute tollerance
@@ -93,7 +94,10 @@ def exact_coupling_energy(v, w):
 print("Smoothing: ", SMOOTHING)
 
 # LOAD PARAMETERS FILE
-with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
+#with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
+PARAMETERS_FILE_PATH = 'disclinations.test'
+with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
+    parameters, _ = load_parameters(f)
 
 info_test = f"smth_{SMOOTHING}_mesh_{parameters["geometry"]["mesh_size"]}"
 
@@ -206,14 +210,12 @@ solver = SNESSolver(
 solver.solve()
 
 # COMPUTE DIMENSIONAL ENERGY
-# energy_components = {"bending": (1/a**2)*model.energy(state_dimensional)[1],
-#                     "membrane": (1/a**2)*model.energy(state_dimensional)[2],
-#                     "coupling": (1/a**2)*model.energy(state_dimensional)[3]}
-
+energy_dimension = E* (thickness**3) / (a**2)
+print("energy_dimension = ", energy_dimension)
 energy_terms = {
-        "bending": (1/a**2)*model.compute_bending_energy(state, COMM),
-        "membrane": (1/a**2)*model.compute_membrane_energy(state, COMM),
-        "coupling": (1/a**2)*model.compute_coupling_energy(state, COMM),
+        "bending": energy_dimension*model.compute_bending_energy(state, COMM),
+        "membrane": energy_dimension*model.compute_membrane_energy(state, COMM),
+        "coupling": energy_dimension*model.compute_coupling_energy(state, COMM),
         "panalty":  model.compute_penalisation(state, COMM),
         "panalty_w":  model.compute_total_penalisation_w(state, COMM),
         "panalty_v":  model.compute_total_penalisation_v(state, COMM),
@@ -224,9 +226,6 @@ energy_terms = {
         "panalty_coupling_bc3":  model.compute_penalisation_terms_w(state, COMM)[3],
         "panalty_coupling_dg3":  model.compute_penalisation_terms_w(state, COMM)[4],
         }
-
-
-#energy_terms = {label: COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(energy_term)), op=MPI.SUM) for label, energy_term in energy_components.items()}
 
 # Print FE dimensioanal energy
 for label, energy_term in energy_terms.items(): print(f"{label}: {energy_term}")
@@ -250,8 +249,6 @@ print("Percent coupling energy error: ", np.round(100*(energy_terms["coupling"] 
     For the post-processing we need vpp, wpp
 """
 vpp, wpp = q.split()
-vpp = E*(thickness**3)*vpp
-wpp = thickness*wpp
 vpp.name = "Airy"
 wpp.name = "deflection"
 
@@ -266,8 +263,10 @@ fig.savefig(f"{OUTDIR}/mesh.png")
 # Plot the profiles
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
-
 pyvista.OFF_SCREEN = True
+
+vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
+wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
 
 plotter = pyvista.Plotter(title="Displacement", window_size=[1200, 600], shape=(2, 2) )
 

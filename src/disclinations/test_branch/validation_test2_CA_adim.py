@@ -17,6 +17,7 @@ import numpy as np
 import petsc4py
 import yaml
 from mpi4py import MPI
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import pyvista
 from pyvista.plotting.utilities import xvfb
 
@@ -24,11 +25,7 @@ import matplotlib.tri as tri
 import matplotlib.pyplot as plt
 
 import ufl
-from ufl import (
-    CellDiameter,
-    FacetNormal,
-    dx,
-)
+from ufl import (CellDiameter, FacetNormal, dx)
 
 from disclinations.models.adimensional import A_NonlinearPlateFVK_carstensen
 from disclinations.meshes import mesh_bounding_box
@@ -36,6 +33,7 @@ from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.la import compute_cell_contributions, compute_disclination_loads
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 from disclinations.solvers import SNESSolver, SNESProblem
+from disclinations.utils import load_parameters
 
 import dolfinx
 import dolfinx.io
@@ -60,7 +58,7 @@ log.set_log_level(log.LogLevel.WARNING)
 
 AIRY = 0
 TRANSVERSE = 1
-PREFIX = os.path.join("output", "disclinations_dipole_carstensen_adim")
+PREFIX = os.path.join("output", "validation_test2_CA_adim")
 COMM = MPI.COMM_WORLD
 
 # DISCLINATION DISTRIBUTION
@@ -78,14 +76,19 @@ def monitor(snes, it, norm):
 
 
 # READ PARAMETERS FILE
-with open("parameters.yml") as f:
-    parameters = yaml.load(f, Loader=yaml.FullLoader)
+# with open("parameters.yml") as f:
+#     parameters = yaml.load(f, Loader=yaml.FullLoader)
+PARAMETERS_FILE_PATH = 'disclinations.test'
+with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
+    parameters, _ = load_parameters(f)
 
 # MATERIAL / GEOMETRIC PARAMETERS
 nu = parameters["model"]["nu"]
 thickness = parameters["model"]["thickness"]
-_E = parameters["model"]["E"]
-_D = _E * thickness**3 / (12 * (1 - nu**2))
+E = parameters["model"]["E"]
+_D = E * thickness**3 / (12 * (1 - nu**2))
+_E = E
+a = parameters["geometry"]["radius"]/thickness
 
 # Compute dimensional scales
 v_scale = _E * thickness**3
@@ -163,7 +166,7 @@ def compute_exact_energy_dipole(v_exact):
     eps = 1E-6
     for index, disc_coord in enumerate(DISCLINATION_POINTS_LIST):
         disc_coord_apprx = [disc_coord[0]+eps, disc_coord[1]+eps]
-        energy += _E*thickness*0.5*DISCLINATION_POWER_LIST[index]*v_exact(disc_coord_apprx)
+        energy += 0.5*DISCLINATION_POWER_LIST[index]*v_exact(disc_coord_apprx)
     return energy
 
 exact_energy_dipole = compute_exact_energy_dipole(function_v_exact)
@@ -186,7 +189,8 @@ L = energy - W_ext + penalisation
 
 # Disclination contribution
 Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
-b = compute_disclination_loads(disclinations, DISCLINATION_POWER_LIST, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)
+nondimensional_discl_p = [(a**2)*el for el in DISCLINATION_POWER_LIST]
+b = compute_disclination_loads(disclinations, nondimensional_discl_p, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)
 
 test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
 F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
@@ -268,13 +272,14 @@ plotter = pyvista.Plotter(
 
 # Define dimensional solutions to be used in post processing (pp)
 vpp, wpp = q.split()
-vpp = v_scale*vpp # Scale by dimnesion parameter
-wpp = w_scale*wpp # Scale by dimnesion parameter
 vpp.name = "Airy"
 wpp.name = "deflection"
 
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
+
+vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
+wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
 
 _pv_points = np.array([p[0] for p in disclinations])
 _pv_colours = np.array(-np.array(DISCLINATION_POWER_LIST))

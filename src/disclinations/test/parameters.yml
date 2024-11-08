@@ -10,7 +10,7 @@ geometry:
 
 #  === Material === #
 model:
-    E: 10000000000 #20000
+    E: 10000000000
     thickness: 0.01
     sigma_D0: 1.
     nu: 0.15

@@ -9,6 +9,7 @@ import warnings
 import basix
 import numpy as np
 import yaml
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import pyvista
 
 import petsc4py
@@ -22,6 +23,7 @@ from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 from disclinations.solvers import SNESSolver, SNESProblem
+from disclinations.utils import load_parameters
 
 import dolfinx
 from dolfinx import log
@@ -54,7 +56,7 @@ COMM = MPI.COMM_WORLD
 AIRY = 0
 TRANSVERSE = 1
 
-OUTDIR = os.path.join("output", "analytic_transverse-carstensen_Adim")
+OUTDIR = os.path.join("output", "validation_test1_CA_adim")
 
 # NON LINEAR SEARCH TOLLERANCES
 ABS_TOLLERANCE = 1e-11 # Absolute tollerance
@@ -88,7 +90,10 @@ def exact_coupling_energy(v, w):
     return assemble_scalar( form( 0.5* ufl.inner(cof(v), ufl.outer(grad(w),grad(w)) ) * ufl.dx ) )
 
 # LOAD PARAMETERS FILE
-with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
+#with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
+PARAMETERS_FILE_PATH = 'disclinations.test'
+with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
+    parameters, _ = load_parameters(f)
 
 # GEOMETRIC PARAMETERS
 thickness = parameters["model"]["thickness"]
@@ -118,12 +123,9 @@ q = dolfinx.fem.Function(Q)
 v, w = ufl.split(q)
 q_exact = dolfinx.fem.Function(Q)
 v_exact, w_exact = q_exact.split()
-v_dim = E*thickness**3*v
-w_dim = thickness*w
 f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 state = {"v": v, "w": w}
 state_exact = {"v": v_exact, "w": w_exact}
-state_dimensional = {"v": v_dim, "w": w_dim}
 
 # SET BOUDNARY CONDITIONS
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
@@ -199,9 +201,11 @@ solver = SNESSolver(
 solver.solve()
 
 # COMPUTE DIMENSIONAL ENERGY
-energy_components = {"bending": (1/a**2)*model.energy(state_dimensional)[1],
-                    "membrane": (1/a**2)*model.energy(state_dimensional)[2],
-                    "coupling": (1/a**2)*model.energy(state_dimensional)[3]}
+energy_dimension = E* (thickness**3) / (a**2)
+print("energy_dimension = ", energy_dimension)
+energy_components = {"bending": energy_dimension*model.energy(state)[1],
+                    "membrane": energy_dimension*model.energy(state)[2],
+                    "coupling": energy_dimension*model.energy(state)[3]}
 
 energy_terms = {label: COMM.allreduce( dolfinx.fem.assemble_scalar( dolfinx.fem.form(energy_term)), op=MPI.SUM)
                          for label, energy_term in energy_components.items()}
@@ -225,8 +229,6 @@ print("Exact coupling energy: ", ex_coupl_energy)
     For the post-processing we need vpp, wpp
 """
 vpp, wpp = q.split()
-vpp = E*(thickness**3)*vpp
-wpp = thickness*wpp
 vpp.name = "Airy"
 wpp.name = "deflection"
 
@@ -243,6 +245,9 @@ V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
 
 pyvista.OFF_SCREEN = True
+
+vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
+wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
 
 plotter = pyvista.Plotter(title="Displacement", window_size=[1200, 600], shape=(2, 2) )
 

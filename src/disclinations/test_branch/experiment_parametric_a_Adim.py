@@ -55,7 +55,7 @@ from disclinations.utils import table_timing_data, Visualisation
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 
 # OUTPUT DIRECTORY
-OUTDIR = os.path.join("output", "test_parametric_a_Adim") # CFe: output directory
+OUTDIR = os.path.join("output", "experiment_parametric_a_adim") # CFe: output directory
 PATH_TO_PARAMETERS_YML_FILE = 'disclinations.test'
 
 # NON LINEAR SEARCH TOLLERANCES
@@ -267,7 +267,8 @@ if __name__ == "__main__":
 
     #a_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
     #a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 130, 160, 200, 230, 260, 300, 330]
-    a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    a_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+    #a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
     #a_list = [15, 30, 40, 50, 60, 70, 80, 90, 100, 160] #, 300, 333
     #a_list  = np.linspace(100, 300, 3) #[95, 100, 105]
     #a_list = [300]
