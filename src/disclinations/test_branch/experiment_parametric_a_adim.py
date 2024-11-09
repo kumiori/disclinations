@@ -116,7 +116,7 @@ def run_experiment(FEMmodel, costantData, parameters, q_ig):
     a = 1/parameters["model"]["thickness"]
 
     # UPDATE PARAMETER "c"
-    c = 1 #((a)**4)*1e-9  # Parameter c is kept constant
+    c = 1  # Parameter c is kept constant
     def nondim_transverse_load(x): return c * LOAD_SIGN *(1.0 + 0.0*x[0] + 0.0*x[1])
 
     Q = costantData.funcSpace
@@ -126,8 +126,8 @@ def run_experiment(FEMmodel, costantData, parameters, q_ig):
 
     # FUNCTION SPACE
     q = dolfinx.fem.Function(Q)
-    q.vector.array = copy.deepcopy(q_ig.vector.array)
-    q.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+    #q.vector.array = copy.deepcopy(q_ig.vector.array)
+    #q.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
     v, w = ufl.split(q)
     state = {"v": v, "w": w}
 
@@ -265,17 +265,10 @@ if __name__ == "__main__":
     PARAMETER_CATEGORY = "model"
     NUM_RUNS = 15
 
-    #a_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
-    #a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 130, 160, 200, 230, 260, 300, 330]
-    a_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
-    #a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-    #a_list = [15, 30, 40, 50, 60, 70, 80, 90, 100, 160] #, 300, 333
-    #a_list  = np.linspace(100, 300, 3) #[95, 100, 105]
-    #a_list = [300]
+    a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
     a_range = []
 
     #x_range_plot = [10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
-    #x_range_plot = [10, 100, 200, 330]
     x_range_plot = a_list
     p_range = [1/el for el in a_list] # CFe: thickness
 
@@ -322,8 +315,6 @@ if __name__ == "__main__":
 
     # DEFINE THE DIRICHLET BOUNDARY CONDITIONS
     mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
-    #from dolfinx import mesh as msh
-    #msh.refine(mesh)
 
     #pdb.set_trace()
     bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
@@ -388,8 +379,8 @@ if __name__ == "__main__":
             #print(" q_ig.vector.norm(PETSc.NormType.NORM_2): ",  q_ig.vector.norm(PETSc.NormType.NORM_2))
             #print(" data_var[7].vector.norm(PETSc.NormType.NORM_2): ",  data_var[7].vector.norm(PETSc.NormType.NORM_2) )
             #pdb.set_trace()
-            q_ig.vector.array = copy.deepcopy(data_var["q"].vector.array)
-            q_ig.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+            #q_ig.vector.array = copy.deepcopy(data_var["q"].vector.array)
+            #q_ig.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
         else:
             print(f"At least one of the three FEM models did not converged for {PARAMETER_NAME} = {param}")
@@ -424,7 +415,6 @@ if __name__ == "__main__":
     print("Details on non-converged experiments")
     for el in non_converged_list: print(el)
     print(10*"*")
-    #pdb.set_trace()
 
     # PLOTS L2 NORM
     FIGWIDTH = 15
