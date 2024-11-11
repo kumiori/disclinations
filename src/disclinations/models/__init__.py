@@ -67,9 +67,6 @@ class ToyPlateFVK:
         h = ufl.CellDiameter(self.mesh)
         n = ufl.FacetNormal(self.mesh)
 
-        dS = ufl.Measure("dS")
-        ds = ufl.Measure("ds")
-        
         dg1 = lambda u: 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
         dg2 = lambda u: 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
         bc1 = lambda u: 1/2 * inner(grad(u), grad(grad(u)) * n) * ds
@@ -106,6 +103,8 @@ class NonlinearPlateFVK(ToyPlateFVK):
         
         if model_parameters["higher_regularity"]:
             self.higher_regularity = True
+        else:
+            self.higher_regularity = False
         
         self.mesh = mesh
         
@@ -395,19 +394,19 @@ def calculate_rescaling_factors(params):
     params["model"]["w_scale"] = float(w_scale)
     params["model"]["v_scale"] = float(v_scale)
     params["model"]["f_scale"] = float(f_scale)
-
+    
     return params
 
 
 def _transverse_load_exact_solution(x, params, adimensional = False):
     f_scale = params["model"]["f_scale"]
-    if adimensional:
-        f_scale = 1
+
     _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+
     return f_scale * _p
 
 
-def initialise_exact_solution_compatible_transverse(Q, params):
+def initialise_exact_solution_compatible_transverse(Q, params, adimensional = False):
     """
     Initialize the exact solutions for v and w using the provided parameters.
 
@@ -422,7 +421,13 @@ def initialise_exact_solution_compatible_transverse(Q, params):
 
     # Extract the necessary parameters
     v_scale = params["model"]["v_scale"]
+    w_scale = params["model"]["w_scale"]
 
+    print(f"v_scale: {v_scale}, w_scale: {w_scale}")
+    # if adimensional:
+    #     v_scale = 1
+    #     w_scale = 1
+        
     q_exact = dolfinx.fem.Function(Q)
     v_exact, w_exact = q_exact.split()
 
@@ -434,14 +439,14 @@ def initialise_exact_solution_compatible_transverse(Q, params):
         a2=-1/18
         a3=-1/24
 
-        _v = a1 * rq ** 2 + a2 * rq ** 3 + a3 * rq ** 4
+        # _v = a1 * rq ** 2 + a2 * rq ** 3 + a3 * rq ** 4
+        _v = a1 * (1-rq) ** 2 + a2 * (1 - rq) ** 3 + a3 * (1 - rq) ** 4
         
         return _v * v_scale  # Apply scaling
 
     # Define the exact solution for w
     def _w_exact(x):
-        w_scale = params["model"]["w_scale"]
-        
+
         return w_scale * (1 - x[0]**2 - x[1]**2)**2  # Zero function as per your code
 
     # Interpolate the exact solutions over the mesh
@@ -469,11 +474,12 @@ def initialise_exact_solution_dipole(Q, params):
 
     q_exact = dolfinx.fem.Function(Q)
     v_exact, w_exact = q_exact.split()
+
+    # compute distance between disclinations
     distance = np.linalg.norm(
         np.array(params['loading']['points'][0]) - np.array(params['loading']['points'][1])
         )
 
-    # compute distance between disclinations
 
     def _v_exact(x):
         rq = (x[0]**2 + x[1]**2)
@@ -481,8 +487,7 @@ def initialise_exact_solution_dipole(Q, params):
         return _v * v_scale
 
     def _w_exact(x):
-        # _w = (1 - x[0]**2 - x[1]**2)**2
-        _w = 0.0
+        _w = np.zeros_like(x[0])
         return _w
 
     v_exact.interpolate(_v_exact)
@@ -501,10 +506,4 @@ def exact_energy_dipole(parameters):
     return parameters["model"]["E"] * parameters["model"]["thickness"]**3 \
         * parameters["geometry"]["radius"]**2 / (8 * np.pi) *  distance**2 * \
             (np.log(4+distance**2) - np.log(4 * distance))
-
-
-def _transverse_load_polynomial_analytic(x, params):
-    f_scale = params["model"]["f_scale"]
-    _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-    return f_scale * _p
 
