@@ -85,13 +85,17 @@ if comm.rank == 0:
 
 AIRY = 0
 TRANSVERSE = 1
+ABS_TOLLERANCE = 1e-11
+REL_TOLLERANCE = 1e-11
+SOL_TOLLERANCE = 1e-11
 
 # SET DISCRETE DISTRIBUTION OF DISCLINATIONS
-disclination_points_list = [[-0.7, 0.0, 0], [0.0, 0.7, 0], [0.7, 0.0, 0], [0.0, -0.7, 0],
-                            [0.5, 0.5, 0], [0.5, -0.5, 0], [-0.5, -0.5, 0], [-0.5, 0.5, 0],
-                            [0, 0, 0]] #
-#disclination_points_list = [[0.0, 0.0, 0]]
-disclination_power_list = [1, 1, 1, 1, -0.5, -0.5, -0.5, -0.5, 0] #[-0.5, -0.5, -0.5, -0.5, 1, 1, 1, 1, 0]
+# disclination_points_list = [[-0.7, 0.0, 0], [0.0, 0.7, 0], [0.7, 0.0, 0], [0.0, -0.7, 0],
+#                             [0.5, 0.5, 0], [0.5, -0.5, 0], [-0.5, -0.5, 0], [-0.5, 0.5, 0],
+#                             [0, 0, 0]] #
+#disclination_power_list = [-1, -1, -1, -1, +0.5, 0.5, 0.5, 0.5, 0]
+disclination_points_list = [[-0.5, 0.0, 0], [0.0, 0.5, 0], [0.5, 0.0, 0], [0.0, -0.5, 0]]
+disclination_power_list = [-0.5, -0.5, -0.5, -0.5]
 
 # READ PARAMETERS FILE
 #with pkg_resources.path(PATH_TO_PARAMETERS_FILE, 'parameters.yml') as f:
@@ -101,18 +105,19 @@ with open('../test/parameters.yml') as f:
 
 # COMPUTE DIMENSIONLESS PARAMETERS
 a = parameters["geometry"]["radius"] / parameters["model"]["thickness"]
-p0 = 100*parameters["model"]["thickness"]
-b = p0 / parameters["model"]["E"]
+rho_g = 2e4 # Density of the material times g-accelleration
+N = 10000
+p0 = rho_g *parameters["model"]["thickness"]
+f0 = N * a**4 * p0 / parameters["model"]["E"]
 
 print(10*"*")
 print("Dimensionless parameters: ")
 print("a := R/h = ", a)
-print("b := p0/E = ", b)
+print("f := a^4 * p0/E = ", f0)
 print(10*"*")
 
 # LOAD MESH
 mesh_size = parameters["geometry"]["mesh_size"]
-#parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
 model_rank = 0
 tdim = 2
@@ -147,7 +152,8 @@ model = A_NonlinearPlateFVK(mesh, parameters["model"])
 energy = model.energy(state)[0]
 
 # Volume load
-def volume_load(x): return -((a**4)*b) * (x[0]**2 + x[1]**2)
+#def volume_load(x): return - f0 * (x[0]**2 + x[1]**2)
+def volume_load(x): return - f0 * (1 + 0*x[0]**2 + 0*x[1]**2)
 f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 f.interpolate(volume_load)
 dx = ufl.Measure("dx")
@@ -176,9 +182,9 @@ b = compute_disclination_loads(disclinations, dp_list, Q, V_sub_to_V_dofs=Q_v_to
 solver_parameters = {
         "snes_type": "newtonls",  # Solver type: NGMRES (Nonlinear GMRES)
         "snes_max_it": 50,  # Maximum number of iterations
-        "snes_rtol": 1e-11,  # Relative tolerance for convergence
-        "snes_atol": 1e-11,  # Absolute tolerance for convergence
-        "snes_stol": 1e-11,  # Tolerance for the change in solution norm
+        "snes_rtol": REL_TOLLERANCE ,  # Relative tolerance for convergence
+        "snes_atol": ABS_TOLLERANCE,  # Absolute tolerance for convergence
+        "snes_stol": SOL_TOLLERANCE,  # Tolerance for the change in solution norm
         "snes_monitor": None,  # Function for monitoring convergence (optional)
         "snes_linesearch_type": "basic",  # Type of line search
     }
@@ -217,9 +223,12 @@ print("Dimensional energy values: ", computed_energy_terms)
 print("v_scale := Eh^3 = ", model.v_scale)
 print("w_scale := h = ", model.w_scale)
 v_pp, w_pp = q.split()
-v_pp.vector.array = model.v_scale * v_pp.vector.array
-w_pp.vector.array = model.w_scale * w_pp.vector.array
-
+V_v, dofs_v = Q.sub(0).collapse()
+V_w, dofs_w = Q.sub(1).collapse()
+#v_pp.vector.array = model.v_scale * v_pp.vector.array
+#w_pp.vector.array = model.w_scale * w_pp.vector.array
+v_pp.vector.array.real[dofs_v] = model.v_scale * v_pp.vector.array.real[dofs_v]
+w_pp.vector.array.real[dofs_w] = model.w_scale * w_pp.vector.array.real[dofs_w]
 
 # PLOTS
 info_filename = f"V_mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]}_E_{parameters["model"]["E"]:.2e}_h_{parameters["model"]["thickness"]:.2e}"

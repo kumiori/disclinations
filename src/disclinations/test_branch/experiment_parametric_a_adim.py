@@ -92,6 +92,7 @@ PENALIZATION_V                   = 10
 PENALIZATION_COUPLING   = 11
 
 SMOOTHING = False
+COMPARISON = False # Comparison between FE models
 
 NUM_STEPS = 10 # Number ticks in the yaxis
 
@@ -115,9 +116,9 @@ def run_experiment(FEMmodel, costantData, parameters, q_ig):
     # UPDATE PARAMETER "a"
     a = 1/parameters["model"]["thickness"]
 
-    # UPDATE PARAMETER "c"
-    c = 1  # Parameter c is kept constant
-    def nondim_transverse_load(x): return c * LOAD_SIGN *(1.0 + 0.0*x[0] + 0.0*x[1])
+    # UPDATE PARAMETER "f"
+    f0 = 1  # Parameter f is kept constant
+    def nondim_transverse_load(x): return f0 * LOAD_SIGN *(1.0 + 0.0*x[0] + 0.0*x[1])
 
     Q = costantData.funcSpace
     f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
@@ -192,37 +193,36 @@ def run_experiment(FEMmodel, costantData, parameters, q_ig):
     # run solver
     n_iterations, convergence_id = solver.solve()
 
-    # FREE MEMORY
-    solver.solver.destroy()
-    gc.collect()
+
+    v2, w2 = q.split()
+    state2 = {"v": v2, "w": w2}
 
     # COMPUTE DIMENSIONAL ENERGY
     energy_terms = {
-        "bending": model.compute_bending_energy(state, COMM),
-        "membrane": model.compute_membrane_energy(state, COMM),
-        "coupling": model.compute_coupling_energy(state, COMM),
-        "penalty":  model.compute_penalisation(state, COMM),
-        "penalty_w_dg1":  model.compute_penalisation_terms_w(state, COMM)[0],
-        "penalty_w_dg2":  model.compute_penalisation_terms_w(state, COMM)[1],
-        "penalty_w_bc1":  model.compute_penalisation_terms_w(state, COMM)[2],
-        "penalty_w_bc3":  model.compute_penalisation_terms_w(state, COMM)[3],
-        "penalty_w_dg3":  model.compute_penalisation_terms_w(state, COMM)[4],
-        "penalty_w_tot":  model.compute_total_penalisation_w(state, COMM),
-        "penalty_v_tot":  model.compute_total_penalisation_v(state, COMM),
-        "penalty_coupling":  model.compute_penalisation_coupling(state, COMM),
+        "bending": model.compute_bending_energy(state2, COMM),
+        "membrane": model.compute_membrane_energy(state2, COMM),
+        "coupling": model.compute_coupling_energy(state2, COMM),
+        "penalty":  model.compute_penalisation(state2, COMM),
+        "penalty_w_dg1":  model.compute_penalisation_terms_w(state2, COMM)[0],
+        "penalty_w_dg2":  model.compute_penalisation_terms_w(state2, COMM)[1],
+        "penalty_w_bc1":  model.compute_penalisation_terms_w(state2, COMM)[2],
+        "penalty_w_bc3":  model.compute_penalisation_terms_w(state2, COMM)[3],
+        "penalty_w_dg3":  model.compute_penalisation_terms_w(state2, COMM)[4],
+        "penalty_w_tot":  model.compute_total_penalisation_w(state2, COMM),
+        "penalty_v_tot":  model.compute_total_penalisation_v(state2, COMM),
+        "penalty_coupling":  model.compute_penalisation_coupling(state2, COMM),
         }
 
     # Print FE dimensioanal energy
     for label, energy_term in energy_terms.items(): print(f"{label}: {energy_term}")
 
-    v, w = q.split()
-    v_Nrm = L2norm(v)
-    w_Nrm = L2norm(w)
-    v_hessianNrm = hessianL2norm(v)
-    w_hessianNrm = hessianL2norm(w)
+    v_Nrm = L2norm(v2)
+    w_Nrm = L2norm(w2)
+    v_hessianNrm = hessianL2norm(v2)
+    w_hessianNrm = hessianL2norm(w2)
 
     return_value_dic = {
-            "w": w, "v": v, "q": q,
+            "w": w2, "v": v2, "q": q,
             "v_Nrm": v_Nrm, "w_Nrm": w_Nrm,
             "v_hessianNrm": v_hessianNrm, "w_hessianNrm": w_hessianNrm,
             "bending_energy": energy_terms["bending"],
@@ -244,16 +244,20 @@ def run_experiment(FEMmodel, costantData, parameters, q_ig):
     from ufl import dot, grad
     n = ufl.FacetNormal(mesh)
     ds = ufl.Measure("ds", domain=mesh)
-    normal_derivative_v = ufl.dot(ufl.grad(v), n)
-    normal_derivative_w = ufl.dot(ufl.grad(w), n)
-    L2norm_w = np.sqrt( fem.assemble_scalar(fem.form((w**2) * ds)) )
-    L2norm_v = np.sqrt( fem.assemble_scalar(fem.form((v**2) * ds)) )
+    normal_derivative_v = ufl.dot(ufl.grad(v2), n)
+    normal_derivative_w = ufl.dot(ufl.grad(w2), n)
+    L2norm_w = np.sqrt( fem.assemble_scalar(fem.form((w2**2) * ds)) )
+    L2norm_v = np.sqrt( fem.assemble_scalar(fem.form((v2**2) * ds)) )
     L2norm_dwdn = np.sqrt( fem.assemble_scalar(fem.form((normal_derivative_w**2) * ds)) )
     L2norm_dvdn = np.sqrt( fem.assemble_scalar(fem.form((normal_derivative_v**2) * ds)) )
     print("boundary_integral_v: ", L2norm_v)
     print("boundary_integral_w: ", L2norm_w)
     print("L2norm_dwdn: ", L2norm_dwdn)
     print("L2norm_dvdn: ", L2norm_dvdn)
+
+    # FREE MEMORY
+    #solver.solver.destroy()
+    #gc.collect()
 
     return return_value_dic
 
@@ -266,10 +270,12 @@ if __name__ == "__main__":
     NUM_RUNS = 15
 
     a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    #a_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+    #a_list = [10, 20, 100]
     a_range = []
 
     #x_range_plot = [10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
-    x_range_plot = a_list
+    x_range_plot = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
     p_range = [1/el for el in a_list] # CFe: thickness
 
     # CFe: boolean, set it to true to plot with a logscale on the xaxis, False to plot with a linear scale on the xaxis
@@ -342,8 +348,12 @@ if __name__ == "__main__":
             # else:
             #     parameters["model"]["alpha_penalty"] = 200
             data_var = run_experiment(VARIATIONAL, costantData, parameters, q_ig)
-            data_brn = data_var #run_experiment(BRENNER, costantData, parameters, q_ig)
-            data_car = data_var #run_experiment(CARSTENSEN, costantData, parameters, q_ig)
+            if COMPARISON:
+                data_brn = run_experiment(BRENNER, costantData, parameters, q_ig)
+                data_car = run_experiment(CARSTENSEN, costantData, parameters, q_ig)
+            else:
+                data_brn = data_var
+                data_car = data_var
 
         if (data_var["convergence_id"] > 0) and (data_brn["convergence_id"] > 0) and (data_car["convergence_id"] > 0):
             a_range.append(1/param)
@@ -417,8 +427,8 @@ if __name__ == "__main__":
     print(10*"*")
 
     # PLOTS L2 NORM
-    FIGWIDTH = 15
-    FIGHIGHT = 10
+    FIGWIDTH = 13
+    FIGHEIGHT = 9
     FONTSIZE = 20
     MARKERSIZE = 17
     LINEWIDTH = 3
@@ -426,11 +436,11 @@ if __name__ == "__main__":
     for element in x_range_plot:
         if element in a_range: x_values.append(element)
 
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
     plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
-    plt.plot(a_range, experimental_data["L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='L2norm v (Variational)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(a_range, experimental_data["L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='L2norm v (Brenner)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(a_range, experimental_data["L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='L2norm v (Carstensen)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(a_range, experimental_data["L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(a_range, experimental_data["L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(a_range, experimental_data["L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_v = max([max(experimental_data["L2norm v (Variational)"]), max(experimental_data["L2norm v (Brenner)"]), max(experimental_data["L2norm v (Carstensen)"])])
     min_v = min([min(experimental_data["L2norm v (Variational)"]), min(experimental_data["L2norm v (Brenner)"]), min(experimental_data["L2norm v (Carstensen)"])])
@@ -451,10 +461,10 @@ if __name__ == "__main__":
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_V_{info_experiment}.png', dpi=300)
     #plt.show()
 
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(a_range, experimental_data["L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='L2norm w (Variational)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(a_range, experimental_data["L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='L2norm w (Brenner)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(a_range, experimental_data["L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='L2norm w (Carstensen)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(a_range, experimental_data["L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(a_range, experimental_data["L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_w = max([max(experimental_data["L2norm w (Variational)"]), max(experimental_data["L2norm w (Brenner)"]), max(experimental_data["L2norm w (Carstensen)"])])
     min_w = min([min(experimental_data["L2norm w (Variational)"]), min(experimental_data["L2norm w (Brenner)"]), min(experimental_data["L2norm w (Carstensen)"])])
@@ -475,10 +485,10 @@ if __name__ == "__main__":
     #plt.show()
 
     # PLOTS HESSIAN L2 NORM
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(a_range, experimental_data["Hessian L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='Hessian L2norm v (Variational)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(a_range, experimental_data["Hessian L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='Hessian L2norm v (Brenner)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(a_range, experimental_data["Hessian L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='Hessian L2norm v (Carstensen)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Hessian L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(a_range, experimental_data["Hessian L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(a_range, experimental_data["Hessian L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_v = max([max(experimental_data["Hessian L2norm v (Variational)"]), max(experimental_data["Hessian L2norm v (Brenner)"]), max(experimental_data["Hessian L2norm v (Carstensen)"])])
     min_v = min([min(experimental_data["Hessian L2norm v (Variational)"]), min(experimental_data["Hessian L2norm v (Brenner)"]), min(experimental_data["Hessian L2norm v (Carstensen)"])])
@@ -499,10 +509,10 @@ if __name__ == "__main__":
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_HessV_{info_experiment}.png', dpi=300)
     #plt.show()
 
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(a_range, experimental_data["Hessian L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='Hessian L2norm w (Variational)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(a_range, experimental_data["Hessian L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='Hessian L2norm w (Brenner)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(a_range, experimental_data["Hessian L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='Hessian L2norm w (Carstensen)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Hessian L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(a_range, experimental_data["Hessian L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(a_range, experimental_data["Hessian L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_w = max([max(experimental_data["Hessian L2norm w (Variational)"]), max(experimental_data["Hessian L2norm w (Brenner)"]), max(experimental_data["Hessian L2norm w (Carstensen)"])])
     min_w = min([min(experimental_data["Hessian L2norm w (Variational)"]), min(experimental_data["Hessian L2norm w (Brenner)"]), min(experimental_data["Hessian L2norm w (Carstensen)"])])
@@ -524,8 +534,8 @@ if __name__ == "__main__":
     #plt.show()
 
     # PLOT MEMBRANE ENERGY
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(a_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', color='b', label='Membrane Erg (Var)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_memEng = max(experimental_data["Membrane Erg (Var)"])
     min_memEng = min(experimental_data["Membrane Erg (Var)"])
@@ -544,9 +554,30 @@ if __name__ == "__main__":
     plt.grid(True)
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_MembEng_{info_experiment}.png', dpi=300)
 
+    # LOG-PLOT MEMBRANE ENERGY
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    kMembraneEngList = [(a**4)/(32*np.pi) for a in a_range]
+    plt.plot(a_range, kMembraneEngList, marker='.', linestyle='--', color='r', label='Kirchooff prediction', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+
+    steps_memEng = abs( (max_memEng - min_memEng)/NUM_STEPS )
+    if steps_memEng == 0: steps_memEng = NUM_STEPS
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
+    plt.yticks(np.arange(min_memEng, max_memEng, steps_memEng))
+    plt.xlabel("a := R/h", fontsize=FONTSIZE)
+    plt.ylabel('Membrane Energy', fontsize=FONTSIZE)
+    plt.title(f'Membrane Energy. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+    plt.legend(fontsize=FONTSIZE)
+    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+    plt.grid(True)
+    plt.savefig(EXPERIMENT_DIR+f'/varying_a_MembEng_log_{info_experiment}.png', dpi=300)
+
     # PLOT BENDING ENERGY
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(a_range, experimental_data["Bending Erg (Var)"], marker='o', linestyle='solid', color='b', label='Bending Erg (Var)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Bending Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
     plt.axhline(y=0, color='black', linewidth=2)
     max_bendEng = max(experimental_data["Bending Erg (Var)"])
     min_bendEng = min(experimental_data["Bending Erg (Var)"])
@@ -565,8 +596,8 @@ if __name__ == "__main__":
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_BendEng_{info_experiment}.png', dpi=300)
 
     # PLOT COUPLING ENERGY
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(a_range, experimental_data["Coupling Erg (Var)"], marker='o', linestyle='solid', color='b', label='Coupling Erg (Var)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Coupling Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
     plt.axhline(y=0, color='black', linewidth=2)
 
     max_couplingEng = max(experimental_data["Coupling Erg (Var)"])
@@ -591,8 +622,8 @@ if __name__ == "__main__":
     # PLOT PENALIZATION ENERGY
 
     # Penalization energy of Transverse Displacement w
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(a_range, experimental_data["Penalization W Eng (Var)"], marker='o', linestyle='solid', color='b', label='Penalization W Eng (Var)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Penalization W Eng (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_penalizWEng = max(experimental_data["Penalization W Eng (Var)"])
     min_penalizWEng = min(experimental_data["Penalization W Eng (Var)"])
@@ -613,8 +644,8 @@ if __name__ == "__main__":
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_PenEngW_{info_experiment}.png', dpi=300)
 
     # Penalization energy of the Jump of the Hessian of the Transverse Displacement w
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(a_range, experimental_data["Penalization W Hess Jump (Var)"], marker='o', linestyle='solid', color='b', label='Penalization W Hess Jump (Var)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Penalization W Hess Jump (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_penalizWEng = max(experimental_data["Penalization W Hess Jump (Var)"])
     min_penalizWEng = min(experimental_data["Penalization W Hess Jump (Var)"])
@@ -635,8 +666,8 @@ if __name__ == "__main__":
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_PenHessJumpW_{info_experiment}.png', dpi=300)
 
     # Penalization energy of Airy's function v
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(a_range, experimental_data["Penalization V Eng (Var)"], marker='o', linestyle='solid', color='b', label='Penalization V Eng (Var)', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Penalization V Eng (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_penalizVEng = max(experimental_data["Penalization V Eng (Var)"])
     min_penalizVEng = min(experimental_data["Penalization V Eng (Var)"])
@@ -663,7 +694,7 @@ if __name__ == "__main__":
     w_bc3_var_list = experimental_data["Penalty w bc3 (Var)"]
     w_dg3_var_list = experimental_data["Penalization W Hess Jump (Var)"]
 
-    fig, ax = plt.subplots(2, 2, figsize=(FIGWIDTH, FIGHIGHT))
+    fig, ax = plt.subplots(2, 2, figsize=(FIGWIDTH, FIGHEIGHT))
     ax[0,0].plot(a_range, w_dg1_var_list, marker='o', linestyle='solid', color='b', label="w_dg1", linewidth=LINEWIDTH, markersize=MARKERSIZE)
     ax[0,0].legend(fontsize=FONTSIZE)
     ax[0,0].grid(True)
@@ -697,9 +728,9 @@ if __name__ == "__main__":
 
     for i, sol_w in enumerate(sol_w_list):
 
-        fig, axes = plt.subplots(1, 1, figsize=(24, 18))
+        fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
         axes.yaxis.get_offset_text().set_size(FONTSIZE) # Size of the order of magnitude
-        plt, data = plot_profile(sol_w, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": f"w_{i}", "ls": ":"}, fig=fig, subplotnumber=1)
+        plt, data = plot_profile(sol_w, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
         plt.xlabel("x", fontsize=FONTSIZE)
         plt.ylabel("Transverse displacement", fontsize=FONTSIZE)
         plt.xticks(fontsize=FONTSIZE)
@@ -709,21 +740,21 @@ if __name__ == "__main__":
         plt.legend(fontsize=FONTSIZE)
         plt.savefig(f"{EXPERIMENT_DIR}/_{a_range[i]}a-w-profiles_{info_experiment}.png")
 
-        fig, axes = plt.subplots(1, 1, figsize=(24, 18))
-        sol_w.vector.array = sol_w.vector.array / a_range[i]
-        plt, data = plot_profile(sol_w, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": f"w_{i}", "ls": ":"}, fig=fig, subplotnumber=1)
-        plt.xlabel("x [m]", fontsize=FONTSIZE)
-        plt.ylabel("Transverse displacement [m]", fontsize=FONTSIZE)
-        plt.xticks(fontsize=FONTSIZE)
-        plt.yticks(fontsize=FONTSIZE)
-        plt.ylim(-1, 1)
-        plt.title(f"Transverse displacement [1:1] aspect ratio. Thickness = {1/a_range[i]} m; a = {a_range[i]}; Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}", size = FONTSIZE)
-        plt.grid(True)
-        plt.legend(fontsize=FONTSIZE)
-        plt.savefig(f"{EXPERIMENT_DIR}/_{a_range[i]}b-w-profiles_{info_experiment}.png")
+        # fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
+        # sol_w.vector.array = sol_w.vector.array / a_range[i]
+        # plt, data = plot_profile(sol_w, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
+        # plt.xlabel("x [m]", fontsize=FONTSIZE)
+        # plt.ylabel("Transverse displacement [m]", fontsize=FONTSIZE)
+        # plt.xticks(fontsize=FONTSIZE)
+        # plt.yticks(fontsize=FONTSIZE)
+        # plt.ylim(-1, 1)
+        # plt.title(f"Transverse displacement [1:1] aspect ratio. Thickness = {1/a_range[i]} m; a = {a_range[i]}; Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}", size = FONTSIZE)
+        # plt.grid(True)
+        # plt.legend(fontsize=FONTSIZE)
+        # plt.savefig(f"{EXPERIMENT_DIR}/_{a_range[i]}b-w-profiles_{info_experiment}.png")
 
-        fig, axes = plt.subplots(1, 1, figsize=(24, 18))
-        plt, data = plot_profile(sol_v_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "label": f"v_{i}", "ls": ":"}, fig=fig, subplotnumber=1)
+        fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
+        plt, data = plot_profile(sol_v_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
         plt.xlabel("x", fontsize=FONTSIZE)
         plt.ylabel("Airy", fontsize=FONTSIZE)
         plt.xticks(fontsize=FONTSIZE)

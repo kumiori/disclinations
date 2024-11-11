@@ -114,19 +114,15 @@ class A_NonlinearPlateFVK(ToyPlateFVK):
         W = lambda f : self.W(f)
         h = ufl.CellDiameter(self.mesh)
         n = ufl.FacetNormal(self.mesh)
-        #α2 = 0.01*self.alpha_penalty
         α2 = 1*self.alpha_penalty
         self.dg1 = lambda u: - 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
         self.dg2 = lambda u: + 1/2 * self.alpha_penalty/avg(h) * inner(jump(grad(u),n), jump(grad(u),n)) * dS
         self.dg3 = lambda u: + 1/2 * α2/avg(h) * inner(jump(hessian(u), n), jump(hessian(u), n)) * dS
-        #dg3 = lambda u: + 1/2 * (α2/avg(h) * inner(jump(hessian(u)), jump(hessian(u))) )* dS
 
         self.dgc = lambda w, g: ( avg(inner(W(w), outer(n, n)))*jump(grad(g), n) ) *dS
 
         self.bc1 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
         self.bc2 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
-        #self.bc3 = lambda u: 0.01*1/2 * self.alpha_penalty/h * inner(grad(u), grad(u)) * ds
-        #self.bc3 = lambda u: 0.1*1/2 * self.alpha_penalty/h * ( dot(grad(u),n) * dot(grad(u),n) ) * ds
         self.bc3 = lambda u: 1/2 * self.alpha_penalty/h * ( dot(grad(u),n) * dot(grad(u),n) ) * ds
     
     def M(self, f):
@@ -148,7 +144,7 @@ class A_NonlinearPlateFVK(ToyPlateFVK):
 
         #membrane = ( 1/2 * inner(hessian(v), hessian(v)) - self.nu/2 * self.bracket(v, v) ) * dx
         #bending = ( self.c_nu/2 * (inner(laplacian(w), laplacian(w))) + k_g/2 * self.bracket(w, w) ) * dx
-        membrane = 1/2 * ( laplacian(v) * laplacian(v) ) * dx
+        membrane = 1/2 * inner( laplacian(v), laplacian(v) ) * dx
         bending = self.c_nu/2 * ( laplacian(w) * laplacian(w) ) * dx
         coupling = 1/2 * inner(self.σ(v), outer(grad(w), grad(w))) * dx
         energy = bending - membrane + coupling
@@ -158,7 +154,6 @@ class A_NonlinearPlateFVK(ToyPlateFVK):
         v = state["v"]
         w = state["w"]
         return_value = self.c_nu*self.dg1(w) + self.dg2(w) - self.dg1(v) - self.dg2(v) + self.c_nu*self.bc1(w) - self.bc2(v) + self.bc3(w) - self.bc3(v) + self.dgc(w, v)
-        #return_value = self.dg1(w) + self.dg2(w) - self.dg1(v) - 0.1*self.dg2(v) + self.bc1(w) - self.bc2(v) + self.bc3(w) - self.bc3(v) + self.dgc(w, v)
         if self.smooth: return_value += self.dg3(w)
         return return_value
 
@@ -242,7 +237,7 @@ class A_NonlinearPlateFVK_brenner(A_NonlinearPlateFVK):
 
         self.bc1 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
         self.bc2 = lambda u: - 1/2 * ( inner(grad(u), n) * inner(grad(grad(u)), outer(n, n)) ) * ds
-        self.bc3 = lambda u: 0.1*1/2 * self.alpha_penalty/h * ( dot(grad(u),n) * dot(grad(u),n) ) * ds
+        self.bc3 = lambda u: 1/2 * self.alpha_penalty/h * ( dot(grad(u),n) * dot(grad(u),n) ) * ds
 
         return energy, bending, membrane, coupling
 

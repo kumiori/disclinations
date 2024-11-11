@@ -23,13 +23,13 @@ from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 # parser.add_argument("test type", help="Either disclination or transverse")
 # parser.add_argument("dimensional / adimensional model", help="Either disclination or transverse")
 
-#SCRIPT_VAR = "validation_test1_adim"
-#SCRIPT_BRN = "validation_test1_BR_adim"
-#SCRIPT_CAR = "validation_test1_CA_adim"
+SCRIPT_VAR = "validation_test1_adim"
+SCRIPT_BRN = "validation_test1_BR_adim"
+SCRIPT_CAR = "validation_test1_CA_adim"
 
-SCRIPT_VAR = "validation_test2_adim"
-SCRIPT_BRN = "validation_test2_BR_adim"
-SCRIPT_CAR = "validation_test2_CA_adim"
+#SCRIPT_VAR = "validation_test2_adim"
+#SCRIPT_BRN = "validation_test2_BR_adim"
+#SCRIPT_CAR = "validation_test2_CA_adim"
 
 OUTDIR = os.path.join("output", "compare", SCRIPT_VAR)
 if not os.path.exists(OUTDIR): os.makedirs(OUTDIR)
@@ -40,8 +40,6 @@ def run_script(filename):
     with open(filename) as file:
         exec(file.read(), globals_dict)
     return globals_dict
-
-#pdb.set_trace()
 
 script_var = run_script(SCRIPT_VAR+".py")
 script_brn = run_script(SCRIPT_BRN+".py")
@@ -79,7 +77,6 @@ columns = ["Error % Bending Energy (Var)", "Error % Bending Energy (Brn)", "Erro
 
 #experimental_data = pd.DataFrame(columns=columns)
 e_data = {}
-#pdb.set_trace()
 e_data["Bending Energy (Var)"] = script_var["energy_terms"]["bending"]
 e_data["Bending Energy (Brn)"] = script_brn["energy_terms"]["bending"]
 e_data["Bending Energy (Car)"] = script_car["energy_terms"]["bending"]
@@ -190,16 +187,15 @@ points[0] = xs
 
 fig, axes = plt.subplots(1, 1, figsize=(24, 18))
 
-_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "label": f"w_var"}, fig=fig, subplotnumber=1)
-#pdb.set_trace()
-_plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": f"w_brn", "ls": ":"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":5, "label": f"w_car", "ls": "--"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":5, "label": f"w_e", "ls": "--"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":7, "label": "VAR"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1)
 
-_plt.xlabel("x [m]", fontsize=30)
-_plt.ylabel("Transverse displacement [m]", fontsize=30)
-_plt.xticks(fontsize=30)
-_plt.yticks(fontsize=30)
+_plt.xlabel("x [m]", fontsize=35)
+_plt.ylabel("Transverse displacement [m]", fontsize=35)
+_plt.xticks(fontsize=35)
+_plt.yticks(fontsize=35)
 _plt.title(f"Comparison between FE models. Transverse displacement. {info_experiment}", size = 30)
 _plt.grid(True)
 _plt.legend(fontsize=30)
@@ -207,15 +203,15 @@ _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
 
 fig, axes = plt.subplots(1, 1, figsize=(24, 18))
 
-_plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "label": f"v_var"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": f"v_brn", "ls": ":"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":5, "label": f"v_car", "ls": "--"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":5, "label": f"v_e", "ls": "--"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":7, "label": "VAR"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1)
 
-_plt.xlabel("x [m]", fontsize=30)
-_plt.ylabel("Airy's function [Nm]", fontsize=30)
-_plt.xticks(fontsize=30)
-_plt.yticks(fontsize=30)
+_plt.xlabel("x [m]", fontsize=35)
+_plt.ylabel("Airy's function [Nm]", fontsize=35)
+_plt.xticks(fontsize=35)
+_plt.yticks(fontsize=35)
 _plt.title(f"Comparison between FE models. Airy's function. {info_experiment}", size = 30)
 _plt.grid(True)
 _plt.legend(fontsize=30)
