@@ -40,7 +40,8 @@ from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner,
                                   NonlinearPlateFVK_carstensen,
                                   calculate_rescaling_factors,
                                   compute_energy_terms,
-                                  initialise_exact_solution_compatible_transverse)
+                                  initialise_exact_solution_compatible_transverse,
+                                  _transverse_load_exact_solution)
 
 from disclinations.solvers import SNESSolver
 from disclinations.utils.la import compute_disclination_loads
@@ -217,25 +218,11 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     b = compute_disclination_loads(points, signs, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)
     
     # Transverse load (analytical solution)
-    def transverse_load(x):
-        _f = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-        return _f * f_scale
-
-    def _v_exact(x):
-        a1=-1/12
-        a2=-1/18
-        a3=-1/24
-        _v = a1 * (1 - x[0]**2 - x[1]**2)**2 + a2 * (1 - x[0]**2 - x[1]**2)**3 + a3 * (1 - x[0]**2 - x[1]**2)**4
-        _v = _v * v_scale
-        return _v
-
-    def _w_exact(x):
-        _w = (1 - x[0]**2 - x[1]**2)**2
-        return _w*w_scale
-
+    _transverse_load = lambda x: _transverse_load_exact_solution(x, parameters, adimensional=False)
+    
     exact_solution = initialise_exact_solution_compatible_transverse(Q, parameters)
 
-    f.interpolate(transverse_load)
+    f.interpolate(_transverse_load)
 
     # Boundary conditions 
     bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
@@ -251,7 +238,7 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
         dofs_v, Q.sub(AIRY)
     )
     bcs = list({AIRY: bcs_v, TRANSVERSE: bcs_w}.values())
-    # W_transv_coeff = (radius / thickness)**4 / E 
+
     W_ext = parameters["model"]["a_adim"]**4 * f * w * dx
     
     model = NonlinearPlateFVK(mesh, parameters["model"], adimensional=True)
@@ -298,7 +285,7 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     _simulation_data = {
         "signature": signature,
         "series": series,
-        "parameter": parameters["model"]["thickness"],
+        "parameter": parameters["model"]["a_adim"],
         "bending_energy": energy_terms['bending'],
         "membrane_energy": energy_terms['membrane'],
         "coupling_energy": energy_terms['coupling'],
@@ -415,7 +402,7 @@ if __name__ == "__main__":
                     encoding=XDMFFile.Encoding.HDF5) as file:
             file.write_mesh(mesh)
         
-        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=30)):
+        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=15)):
             parameters['model']['a_adim'] = None
             parameters['model']['c_adim'] = 1
 
@@ -454,24 +441,28 @@ if __name__ == "__main__":
     import matplotlib.pyplot as plt
     
     # Plot energy terms versus thickness
-    plt.figure(figsize=(10, 6))
-    plt.plot(experimental_data["parameter"], experimental_data["membrane_energy"], label="Membrane Energy", marker='o')
-    plt.plot(experimental_data["parameter"], experimental_data["bending_energy"], label="Bending Energy", marker='o')
-    plt.plot(experimental_data["parameter"], experimental_data["coupling_energy"], label="Coupling Energy", marker='o')
-    plt.xlabel("Thickness")
-    plt.ylabel("Energy")
-    plt.title("Energy Terms vs Thickness")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(experimental_data["parameter"], experimental_data["membrane_energy"], label="Membrane Energy", marker='o')
+    ax2 = ax.twinx()
+    ax2.plot(experimental_data["parameter"], experimental_data["bending_energy"], label="Bending Energy", marker='o')
+    ax2.plot(experimental_data["parameter"], experimental_data["coupling_energy"], label="Coupling Energy", marker='o')
+    ax.set_xlabel("a")
+    ax.set_ylabel("Energy")
+    plt.title("Energy Terms vs a")
     plt.legend()
     plt.savefig(f"{experiment_dir}/energy_terms.png")
 
     # Plot L2 norm terms versus thickness
-    plt.figure(figsize=(10, 6))
-    plt.plot(experimental_data["parameter"], experimental_data["w_L2"], label=r"$w_{L^2}$", marker='o')
-    plt.plot(experimental_data["parameter"], experimental_data["v_L2"], label=r"$v_{L^2}$", marker='o')
-    plt.xlabel("Thickness")
-    plt.ylabel("L2 Norms")
-    plt.title("L2 Norm Terms vs Thickness")
+    fig, ax = plt.subplots(figsize=(10, 6))
+    ax.plot(experimental_data["parameter"], experimental_data["w_L2"], label=r"$w_{L^2}$", marker='o')
+    ax2 = ax.twinx()
+    ax2.plot(experimental_data["parameter"], experimental_data["v_L2"], label=r"$v_{L^2}$", marker='o')
+    ax.set_xlabel("Thickness")
+    ax.set_ylabel("L2 Norms w")
+    ax2.set_ylabel("L2 Norm v")
+    plt.title("L2 Norm Terms vs a")
     plt.legend()
+    plt.loglog()
 
     plt.savefig(f"{experiment_dir}/norms_fields.png")
 
