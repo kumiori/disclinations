@@ -78,6 +78,7 @@ with open("parameters.yml") as f:
 mesh_size = parameters["geometry"]["mesh_size"]
 parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
+parameters["model"]["higher_regularity"] = False
 
 model_rank = 0
 tdim = 2
@@ -131,7 +132,7 @@ state = {"v": v, "w": w}
 # Define the variational problem
 
 model = NonlinearPlateFVK(mesh, parameters["model"])
-energy = model.energy(state)
+energy = model.energy(state)[0]
 
 # Dead load (transverse)
 W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx

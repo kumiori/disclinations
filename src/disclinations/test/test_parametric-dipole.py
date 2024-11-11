@@ -19,13 +19,14 @@ from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner,
                                   NonlinearPlateFVK_carstensen,
                                   calculate_rescaling_factors,
-                                  compute_energy_terms)
+                                  compute_energy_terms,
+                                  initialise_exact_solution_dipole,
+                                  exact_energy_dipole)
 from disclinations.solvers import SNESSolver
 from disclinations.utils import (Visualisation, memory_usage, monitor,
                                  table_timing_data, write_to_output, 
                                  homogeneous_dirichlet_bc_H20,
-                                 initialise_exact_solution_dipole,
-                                 exact_energy_dipole)
+                                 )
 from disclinations.utils.la import compute_disclination_loads
 from dolfinx import fem
 from dolfinx.common import list_timings
@@ -111,7 +112,7 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
                 "components": "tensor",
             },
         ]
-        pdb.set_trace()
+
         # write_to_output(prefix, q, extra_fields)
         return abs_error, rel_error
 

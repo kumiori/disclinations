@@ -12,17 +12,16 @@ geometry:
 model:
     E: 1
     thickness: .001
-    D0: 1.
     nu: 0.15
     model_dimension: 2
     model_type: "2D"
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"
     order: 3
     alpha_penalty: 2000
-    higher_regularity: True
+    higher_regularity: False
 # === Solver === #
 solvers:
-    elasticity:
+    nonlinear:
         prefix: fvk
         snes:
             snes_type: newtonls

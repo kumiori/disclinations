@@ -78,6 +78,7 @@ mesh_size = parameters["geometry"]["mesh_size"]
 parameters["geometry"]["radius"] = 1
 parameters["geometry"]["geom_type"] = "circle"
 N = 5
+parameters["model"]["higher_regularity"] = False
 
 model_rank = 0
 tdim = 2

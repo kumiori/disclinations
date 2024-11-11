@@ -18,8 +18,13 @@ import ufl
 from dolfinx.fem import dirichletbc, locate_dofs_topological
 import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 
+import hashlib
+import yaml
+
 comm = MPI.COMM_WORLD
 
+AIRY = 0
+TRANSVERSE = 1
 
 class ColorPrint:
     """
@@ -265,7 +270,7 @@ def print_energy_analysis(energy_terms, exact_energy_transverse):
     error = np.abs(exact_energy_transverse - computed_membrane_energy)
 
     print(f"Exact energy: {exact_energy_transverse}")
-    print(f"Computed energy: {computed_membrane_energy}")
+    print(f"Computed membrane energy: {computed_membrane_energy}")
     print(f"Abs error: {error:.3%}")
     print(f"Rel error: {error/exact_energy_transverse:.3%}")
 
@@ -353,6 +358,8 @@ class Visualisation:
             # a_file = open(f"{self.prefix}/{name}.json", "w")
             # json.dump(data.to_json(), a_file)
             # a_file.close()
+
+    # def save_figure(self, fig, name):
 
 
 history_data = {
@@ -518,10 +525,6 @@ def write_tensor_components(file, interpolation, tensor_expr, tensor_name):
         file.write_function(interpolation)
 
 
-AIRY = 0
-TRANSVERSE = 1
-
-
 def homogeneous_dirichlet_bc_H20(mesh, Q):
     """
     Apply homogeneous Dirichlet boundary conditions (H^2_0 Sobolev space)
@@ -567,9 +570,6 @@ def save_params_to_yaml(params, filename):
     with open(filename, "w") as file:
         yaml.dump(params, file, default_flow_style=False)
 
-
-import hashlib
-import yaml
 
 
 def parameters_vs_thickness(parameters=None, thickness=1.0):
