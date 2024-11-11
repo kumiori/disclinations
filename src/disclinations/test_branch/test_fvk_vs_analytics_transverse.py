@@ -75,6 +75,8 @@ import matplotlib.tri as tri
 with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
 
+parameters["model"]["higher_regularity"] = False
+
 mesh_size = parameters["geometry"]["mesh_size"]
 
 model_rank = 0
@@ -132,12 +134,9 @@ model = NonlinearPlateFVK(mesh, parameters["model"])
 energy = model.energy(state)[0]
 
 # Dead load (transverse)
-# W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
 
 # Explicit dead load (transverse)
 # Cf. thesis ref: 
-# f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
-
 
 nu = parameters["model"]["nu"]
 # _h = parameters["model"]["thickness"]
@@ -145,10 +144,8 @@ thickness = parameters["model"]["thickness"]
 _E = parameters["model"]["E"]
 _D = _E * thickness**3 / (12 * (1 - nu**2))
 
-# w_scale = _h * (6*(1-_nu**2)) ** 1./2.
 w_scale = np.sqrt(2*_D/(_E*thickness))
 v_scale = _D
-# p_scale = 12.*np.sqrt(6) * (1 - _nu**2)**3./2. / (_E * _h**4)
 f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
 
 def _v_initial_guess(x):
@@ -160,8 +157,8 @@ def _v_exact(x):
     a2=-1/18
     a3=-1/24
     _v = a1 * (1 - x[0]**2 - x[1]**2)**2 + a2 * (1 - x[0]**2 - x[1]**2)**3 + a3 * (1 - x[0]**2 - x[1]**2)**4
-    _v = _v * v_scale
-    return _v
+
+    return _v * v_scale
 
 def _w_exact(x):
     # return q/(64*12*(1-nu**2))*(1 - (x[0]**2 + x[1]**2))**2
@@ -197,9 +194,6 @@ Em_v = ufl.derivative(model.energy(state)[2], w, ufl.TestFunction(Q.sub(AIRY)))
 labels = ["F", "F_v", "F_w", "Ec_w", "Em_v"]
 
 
-
-# print(parameters.get("solvers").get("elasticity").get("snes"))
-
 solver_parameters = {
     "snes_type": "newtonls",        # Solver type: NGMRES (Nonlinear GMRES)
     "snes_max_it": 100,          # Maximum number of iterations
@@ -215,7 +209,6 @@ solver = SNESSolver(
     u=q,
     bcs=bcs,
     bounds=None,
-    # petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
     petsc_options=solver_parameters,
     prefix='plate_fvk',
 )
@@ -244,11 +237,6 @@ computed_energy_terms = {label: comm.allreduce(
 for label, energy_term in computed_energy_terms.items():
     print(f"{label}: {energy_term}")
 
-
-
-
-
-
 E = _E
 D = _D
 
@@ -273,7 +261,6 @@ def exact_membrane_energy(v, w):
             ufl.inner(laplacian(v), laplacian(v)) ) * ufl.dx 
             ) )
 
-
 def exact_coupling_energy(v, w):
     laplacian = lambda f : div(grad(f))
     hessian = lambda f : grad(grad(f))
@@ -287,13 +274,8 @@ ex_coupl_energy = exact_coupling_energy(v_exact, w_exact)
 for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
     print(f"Exact {energy_type} energy: {energy_function(v_exact, w_exact)}")
     
-
 for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
     print(f"Energy of approx solution {energy_type} energy: {energy_function(v, w)}")
-    
-
-
-
 
 
 import matplotlib.pyplot as plt

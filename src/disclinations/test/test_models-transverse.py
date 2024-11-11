@@ -44,9 +44,24 @@ AIRY = 0
 TRANSVERSE = 1
 
 from disclinations.models import create_disclinations
-from disclinations.utils import (homogeneous_dirichlet_bc_H20, load_parameters,
+from disclinations.utils import (homogeneous_dirichlet_bc_H20, 
+                                #  load_parameters,
                                  save_params_to_yaml)
 
+
+def load_parameters(filename):
+    with open(filename, "r") as f:
+        params = yaml.safe_load(f)
+    
+    params["model"]["thickness"] = .05
+    # params["model"]["E"] = 1e10
+    params["model"]["E"] = 1
+    params["model"]["alpha_penalty"] = 300
+    
+    signature = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()
+    
+    
+    return params, signature
 
 @pytest.mark.parametrize("variant", models)
 def test_model_computation(variant):
@@ -57,8 +72,10 @@ def test_model_computation(variant):
 
     # 1. Load parameters from YML file
     params, signature = load_parameters(f"parameters.yml")
+    
     params = calculate_rescaling_factors(params)
-
+    
+    print("Model parameters", params["model"])
     # params = load_parameters(f"{model}_params.yml")
     # 2. Construct or load mesh
     prefix = os.path.join(outdir, "validation_transverse_load")
@@ -68,29 +85,16 @@ def test_model_computation(variant):
     mesh, mts, fts = create_or_load_circle_mesh(params, prefix=prefix)
 
     # 3. Construct FEM approximation
-    h = CellDiameter(mesh)
-    n = FacetNormal(mesh)
-
     # Function spaces
 
     X = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"])
     Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
-    V_P1 = dolfinx.fem.functionspace(
-        mesh, ("CG", 1)
-    )  # "CG" stands for continuous Galerkin (Lagrange)
-
-    DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), params["model"]["order"] - 2)
-    DG = dolfinx.fem.functionspace(mesh, DG_e)
-
-    T_e = basix.ufl.element("P", str(mesh.ufl_cell()), params["model"]["order"] - 2)
-    T = dolfinx.fem.functionspace(mesh, T_e)
-
     # 4. Construct boundary conditions
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
 
     # 5. Initialize exact solutions (for comparison later)
-    exact_solution = initialise_exact_solution_compatible_transverse(Q, params)
+    exact_solution = initialise_exact_solution_compatible_transverse(Q, params, adimensional=True)
 
     q = dolfinx.fem.Function(Q)
     v, w = ufl.split(q)
@@ -98,15 +102,14 @@ def test_model_computation(variant):
     f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 
     transverse_load = lambda x: _transverse_load_exact_solution(x, params, adimensional=True)
+    # transverse_load = lambda x: _transverse_load_exact_solution(x, params, adimensional=False)
     
     f.interpolate(transverse_load)
 
     state = {"v": v, "w": w}
-    # _W_ext = f * w * dx
-    _W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
+    _W_ext = f * w * dx
 
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
-    
     
     # 6. Define variational form (depends on the model)
     if variant == "variational":
@@ -144,6 +147,7 @@ def test_model_computation(variant):
         F = ufl.derivative(L, q, ufl.TestFunction(Q)) + model.coupling_term(state, test_v, test_w)
 
     save_params_to_yaml(params, os.path.join(prefix, "parameters.yml"))
+
     if MPI.COMM_WORLD.rank == 0:
         with open(f"{prefix}/signature.md5", "w") as f:
             f.write(signature)
@@ -153,29 +157,85 @@ def test_model_computation(variant):
         F_form=F,
         u=q,
         bcs=boundary_conditions,
-        petsc_options=params["solvers"]["elasticity"]["snes"],
+        petsc_options=params["solvers"]["nonlinear"]["snes"],
         prefix="plate_fvk_transverse",
         monitor=monitor,
     )
 
     solver.solve()
     # 9. Postprocess (if any)
+    pdb.set_trace()
     # 10. Compute absolute and relative error with respect to the exact solution
 
     abs_error, rel_error = postprocess(
         state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
     )
     
+    from disclinations.utils.viz import plot_scalar, plot_mesh
+    import matplotlib.pyplot as plt
+    import matplotlib.tri as tri
+    import pyvista
+    
+    """
+    v and w belong to the class "ufl.indexed.Indexed"
+    vpp and wpp belong to the class "dolfinx.fem.function.Function"
+    For the computation we need v and w
+    For the post-processing we need vpp, wpp
+    """
+    vpp, wpp = q.split()
+    vpp.name = "Airy"
+    wpp.name = "deflection"
+
+    # PLOTS
+
+    # Plot the mesh
+    plt.figure()
+    ax = plot_mesh(mesh)
+    fig = ax.get_figure()
+    fig.savefig(f"{prefix}/mesh.png")
+
+    # Plot the profiles
+    V_v, dofs_v = Q.sub(0).collapse()
+    V_w, dofs_w = Q.sub(1).collapse()
+    pyvista.OFF_SCREEN = True
+
+    E = params["model"]["E"]
+    thickness = params["model"]["thickness"]
+    info_test = "transverse_load"
+    
+    pdb.set_trace()
+    vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
+    wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
+
+    plotter = pyvista.Plotter(title="Displacement", window_size=[1200, 600], shape=(2, 2) )
+
+    scalar_plot = plot_scalar(vpp, plotter, subplot=(0, 0), V_sub=V_v, dofs=dofs_v)
+    scalar_plot = plot_scalar(wpp, plotter, subplot=(0, 1), V_sub=V_w, dofs=dofs_w)
+    v_exact, w_exact = exact_solution['v'], exact_solution['w']
+    
+    
+    scalar_plot = plot_scalar(v_exact, plotter, subplot=(1, 0), V_sub=V_v, dofs=dofs_v)
+    scalar_plot = plot_scalar(w_exact, plotter, subplot=(1, 1), V_sub=V_w, dofs=dofs_w)
+
+    scalar_plot.screenshot(f"{prefix}/test_fvk_{info_test}.png")
+
+    
+    
+    pdb.set_trace()
+    
+    
+    
+    
     # # 11. Display error results
     print(f"Model: {model}, Absolute Error: {abs_error:.2e}, Relative Error: {rel_error:.1%}")
 
+    
     # 12. Assert that the relative error is within an acceptable range
-    rel_tol = float(params["solvers"]["elasticity"]["snes"]["snes_rtol"])
+    rel_tol = float(params["solvers"]["nonlinear"]["snes"]["snes_rtol"])
 
     # assert (
     #     rel_error < rel_tol
     # ), f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
-
 
 def postprocess(state, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
@@ -187,18 +247,22 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         }
 
         energy_terms = compute_energy_terms(energy_components, mesh.comm)
-
+        
         exact_energy_transverse = comm.allreduce(
             dolfinx.fem.assemble_scalar(
                 dolfinx.fem.form(model.energy(exact_solution)[0])),
             op=MPI.SUM)
-        
+
+        print(energy_terms)
+        print(f"Exact energy (transverse): {exact_energy_transverse}")
+
         print(yaml.dump(params["model"], sort_keys=True, default_flow_style=False))
+
         abs_error, rel_error = print_energy_analysis(
             energy_terms, exact_energy_transverse
         )
 
-        _v_exact, _w_exact = exact_solution
+        _v_exact, _w_exact = exact_solution['v'], exact_solution['w']
         extra_fields = [
             {"field": _v_exact, "name": "v_exact"},
             {"field": _w_exact, "name": "w_exact"},
@@ -213,7 +277,11 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
                 "components": "tensor",
             },
         ]
+        
+        pdb.set_trace()
         # write_to_output(prefix, q, extra_fields)
+        
+        
         return abs_error, rel_error
 
 if __name__ == "__main__":
