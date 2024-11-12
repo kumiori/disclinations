@@ -167,7 +167,7 @@ PARAMETERS_FILE_PATH = 'disclinations.test'
 with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
     parameters, _ = load_parameters(f)
 
-info_experiment = f"mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]:.2e}_smth_{smoothing}"
+info_experiment = f"mesh_{parameters['geometry']['mesh_size']}_IP_{parameters['model']['alpha_penalty']:.2e}_smth_{smoothing}"
 
 experimental_data = pd.DataFrame(exp_dict)
 experimental_data.to_excel(f'{OUTDIR}/Models_comparison.xlsx', index=False)

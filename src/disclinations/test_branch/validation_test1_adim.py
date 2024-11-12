@@ -99,7 +99,7 @@ PARAMETERS_FILE_PATH = 'disclinations.test'
 with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
     parameters, _ = load_parameters(f)
 
-info_test = f"smth_{SMOOTHING}_mesh_{parameters["geometry"]["mesh_size"]}"
+info_test = f"smth_{SMOOTHING}_mesh_{parameters['geometry']['mesh_size']}"
 
 # GEOMETRIC PARAMETERS
 thickness = parameters["model"]["thickness"]
@@ -147,6 +147,10 @@ _bcs = {AIRY: bcs_v, TRANSVERSE: bcs_w}
 bcs = list(_bcs.values())
 
 # DEFINE THE VARIATIONAL PROBLEM
+
+# print model parameters
+print("Model parameters: ", parameters["model"])
+# pdb.set_trace()
 model = A_NonlinearPlateFVK(mesh, parameters["model"], smooth=SMOOTHING)
 energy = model.energy(state)[0]
 
@@ -179,6 +183,19 @@ f.interpolate(transverse_load)
 # External work
 W_ext = f * w * dx
 
+# print f_scale, and other coefficients
+
+print("f_scale = ", np.sqrt(2 * D**3 / (E * thickness)))
+print("f_computed = ", (a**4) * (np.sqrt(2 * D**3 / (E * thickness)/E)))
+print("a = ", a)
+print("E = ", E)
+print("thickness = ", thickness)
+print("w_scale = ", ( np.sqrt(2 * D / (E * thickness))))
+print("v_scale = ", D)
+print("D = ", D)
+print("---------------------------------")
+
+
 # Stabilization and symmetrization terms
 penalisation = model.penalisation(state)
 
@@ -197,6 +214,8 @@ solver_parameters = {
     "snes_linesearch_type": "basic",  # Type of line search
 }
 
+print("Solver parameters: ", solver_parameters)
+
 solver = SNESSolver(
     F_form=F,
     u=q,
@@ -208,6 +227,7 @@ solver = SNESSolver(
 
 # Solver run
 solver.solve()
+pdb.set_trace()
 
 # COMPUTE DIMENSIONAL ENERGY
 energy_dimension = E* (thickness**3) / (a**2)
