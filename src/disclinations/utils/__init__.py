@@ -139,22 +139,39 @@ _logger = setup_logger_mpi()
 
 import subprocess
 
-# Get the current Git branch
-branch = (
-    subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
-    .strip()
-    .decode("utf-8")
-)
 
-# Get the current Git commit hash
-commit_hash = (
-    subprocess.check_output(["git", "rev-parse", "HEAD"]).strip().decode("utf-8")
-)
+def get_git_info():
+    """Attempt to retrieve the current Git branch and commit hash.
+    
+    Returns:
+        dict: A dictionary containing 'branch' and 'commit_hash'.
+              If Git information is unavailable, default values of 
+              'branch': 'unknown' and 'commit_hash': 'unknown' are returned.
+    """
+    try:
+        # Attempt to retrieve the current Git branch
+        branch = (
+            subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+    except subprocess.CalledProcessError:
+        branch = "unknown"
 
-code_info = {
-    "branch": branch,
-    "commit_hash": commit_hash,
-}
+    try:
+        # Attempt to retrieve the current Git commit hash
+        commit_hash = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+    except subprocess.CalledProcessError:
+        commit_hash = "unknown"
+
+    return {
+        "branch": branch,
+        "commit_hash": commit_hash,
+    }
 
 from dolfinx import __version__ as dolfinx_version
 from petsc4py import __version__ as petsc_version
@@ -165,6 +182,8 @@ library_info = {
     "petsc4py_version": petsc_version,
     "slepc4py_version": slepc_version,
 }
+
+code_info = get_git_info()
 
 simulation_info = {
     **library_info,
