@@ -11,8 +11,7 @@ from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
 from petsc4py import PETSc
 
-sys.path.append("../")
-from meshes.primitives import mesh_circle_gmshapi
+from disclinations.meshes.primitives import mesh_circle_gmshapi
 
 
 def compute_cell_contributions(V, points):
@@ -123,6 +122,7 @@ dolfinx.fem.petsc.apply_lifting(b.vector, [a_compiled], [[bc]])
 b.x.scatter_reverse(dolfinx.la.InsertMode.add)
 dolfinx.fem.petsc.set_bc(b.vector, [bc])
 b.x.scatter_forward()
+__import__('pdb').set_trace()
 
 A = dolfinx.fem.petsc.assemble_matrix(a_compiled, bcs=[bc])
 A.assemble()

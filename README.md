@@ -69,6 +69,10 @@ On a Windows:
 docker run --rm -ti -v "C:/...":/home/numerix" -w /home/numerix kumiori3\numerix:latest
 ```
 
+### To run the tests, execute the following command in your terminal:
+```
+pytest tests
+```
 
 ### Authors
 - Cf. commit messages

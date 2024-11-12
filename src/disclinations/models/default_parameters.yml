@@ -1,0 +1,11 @@
+#  === Material === #
+model:
+    E: 1.
+    thickness: 1.
+    D: 1.
+    D0: 1.
+    nu: 0.15
+    model_dimension: 2
+    model_type: "2D"
+    order: 2
+    alpha_penalty: 10.

@@ -18,10 +18,17 @@ from mpi4py import MPI
 comm = MPI.COMM_WORLD
 # import pdb
 import pyvista
-from pyvista.utilities import xvfb
+from pyvista.plotting.utilities import xvfb
+try:
+    xvfb.start_xvfb(wait=0.05)
+    print("Xvfb started successfully.")
+except OSError as e:
+    # If Xvfb fails to start, you can handle the error here
+    print("Xvfb could not be started, proceeding without it.")
+    print(f"Error details: {e}")
 
-xvfb.start_xvfb(wait=0.05)
-
+# Enable off-screen rendering
+pyvista.OFF_SCREEN = True
 import dolfinx.plot
 import matplotlib
 import matplotlib.collections
@@ -67,7 +74,12 @@ def plot_vector(u, plotter, subplot=None, scale=1.):
     return plotter
     # figure = plotter.screenshot(f"./output/test_viz/test_viz_MPI{comm.size}-.png")
 
-def plot_scalar(u, plotter, subplot=None, lineproperties={}):
+
+def plot_scalar(u, plotter, subplot=None, lineproperties={}, V_sub=None, dofs=None):
+    # __import__('pdb').set_trace()
+    # from dolfinx.plot import vtk_mesh as compute_topology
+    from dolfinx import plot
+    
     """Plots a scalar function using pyvista
 
     Args:
@@ -81,19 +93,28 @@ def plot_scalar(u, plotter, subplot=None, lineproperties={}):
    """
     if subplot:
         plotter.subplot(subplot[0], subplot[1])
-    V = u.function_space
+    if V_sub:
+        V = V_sub
+    else:
+        V = u.function_space
     mesh = V.mesh
     
-    ret = compute_topology(mesh, mesh.topology.dim)
-    if len(ret) == 2:
-        topology, cell_types = ret
-    else: 
-        topology, cell_types, _ = ret
-    grid = pyvista.UnstructuredGrid(topology, cell_types, mesh.geometry.x)
+    # ret = compute_topology(mesh, mesh.topology.dim)
+    # if len(ret) == 2:
+    #     topology, cell_types = ret
+    # else: 
+    #     topology, cell_types, _ = ret
+        
+    topology, cell_types, x = plot.vtk_mesh(V)
+        
+    grid = pyvista.UnstructuredGrid(topology, cell_types, x)
 
-    plotter.subplot(0, 0)
-    values = u.vector.array.real.reshape(
-        V.dofmap.index_map.size_local, V.dofmap.index_map_bs)
+    # plotter.subplot(0, 0)
+    if dofs:
+        values = u.vector.array.real[dofs]
+    else:
+        values = u.vector.array.real.reshape(
+            V.dofmap.index_map.size_local, V.dofmap.index_map_bs)
     grid.point_data["u"] = values
     grid.set_active_scalars("u")
     plotter.add_mesh(grid, **lineproperties)
@@ -129,10 +150,7 @@ def plot_profile(u, points, plotter, subplot=None, lineproperties={}, fig=None, 
         fig = plt.figure()
 
     if subplot:
-        # plotter.subplot(subplot[0], subplot[1])
-    # if subplot:
         plt.subplot(subplot[0], subplot[1], subplotnumber)
-    # plt.plot(points_on_proc[:, 0], u_values, "k", ls="-", linewidth=1, label="")
 
     if ax is not None:
         ax.plot(points_on_proc[:, 0], u_values, **lineproperties)
