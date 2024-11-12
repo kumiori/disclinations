@@ -45,7 +45,6 @@ import matplotlib.pyplot as plt
 
 import pyvista
 
-#from disclinations.models import NonlinearPlateFVK
 from disclinations.models.adimensional import A_NonlinearPlateFVK
 from disclinations.meshes import mesh_bounding_box
 from disclinations.meshes.primitives import mesh_circle_gmshapi

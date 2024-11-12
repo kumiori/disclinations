@@ -107,6 +107,19 @@ def hessianL2norm(u):
     hessian = lambda f : ufl.grad(ufl.grad(u))
     return np.sqrt( fem.assemble_scalar( fem.form( ufl.inner(hessian(u), hessian(u)) * ufl.dx ) ) )
 
+def bracket(f, g):
+    J = ufl.as_matrix([[0, -1], [1, 0]])
+    return ufl.inner(ufl.grad(ufl.grad(f)), J.T * ufl.grad(ufl.grad(g)) * J)
+
+def mongeAmpereForm(f1, f2, mesh, order = 1):
+        DG_e = basix.ufl.element("DG", str(mesh.ufl_cell()), order)
+        DG = dolfinx.fem.functionspace(mesh, DG_e)
+        kappa = bracket(f1, f2)
+        kappa_expr = dolfinx.fem.Expression(kappa, DG.element.interpolation_points())
+        Kappa = dolfinx.fem.Function(DG)
+        Kappa.interpolate(kappa_expr)
+
+        return Kappa
 
 def run_experiment(FEMmodel, costantData, parameters, q_ig):
     """
@@ -269,8 +282,9 @@ if __name__ == "__main__":
     PARAMETER_CATEGORY = "model"
     NUM_RUNS = 15
 
-    a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-    #a_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+    #a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    #a_list = [10]
+    a_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
     #a_list = [10, 20, 100]
     a_range = []
 
@@ -338,6 +352,8 @@ if __name__ == "__main__":
     # PERFORM EXPERIMENTS
     sol_v_list = []
     sol_w_list = []
+    sol_q_list = []
+
     for i, param in enumerate(p_range):
         print("Running experiment with a = ", np.round(1/param, 3))
         if changed := update_parameters(parameters, PARAMETER_NAME, param):
@@ -382,6 +398,7 @@ if __name__ == "__main__":
 
             sol_w_list.append(data_var["w"])
             sol_v_list.append(data_var["v"])
+            sol_q_list.append(data_var["q"])
 
             # Update the initial guess
             #if i == 0: q_ig.vector.array = data_var[7].vector.array
@@ -412,6 +429,16 @@ if __name__ == "__main__":
 
 
     _logger.info(f"Saving experimental data to {EXPERIMENT_DIR}")
+
+    # COMPUTE MONGE-AMPERE FORM
+    bracket_vw_list = []
+    bracket_ww_list = []
+    bracket_vv_list = []
+    for i in range(len(sol_q_list)):
+        v_airy, w_td = ufl.split(sol_q_list[i])
+        bracket_ww_list.append(mongeAmpereForm(sol_w_list[i], sol_w_list[i], mesh))
+        bracket_vw_list.append(mongeAmpereForm(sol_v_list[i], sol_w_list[i], mesh))
+        bracket_vv_list.append(mongeAmpereForm(sol_v_list[i], sol_v_list[i], mesh))
 
     # EXPORT RESULTS TO EXCEL FILE
     experimental_data = pd.DataFrame(_experimental_data, columns=columns)
@@ -450,7 +477,7 @@ if __name__ == "__main__":
 
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
     plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
-    plt.yticks(np.arange(min_v, max_v, steps_v))
+    if min_v != max_v:  plt.yticks(np.arange(min_v, max_v, steps_v))
     plt.xlabel("a := R/h", fontsize=FONTSIZE)
     plt.ylabel(r'$| v |_{L^2(\Omega)} [Nm^2]$', fontsize=FONTSIZE)
     plt.title(f'Airy function. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
@@ -473,7 +500,7 @@ if __name__ == "__main__":
 
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
     plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
-    plt.yticks(np.arange(min_w, max_w, steps_w))
+    if min_w != max_w:  plt.yticks(np.arange(min_w, max_w, steps_w))
     plt.xlabel("a := R/h", fontsize=FONTSIZE)
     plt.ylabel(r'$| w |_{L^2(\Omega)} [m^2]$', fontsize=FONTSIZE)
     plt.title(f'Transverse displacement. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
@@ -498,7 +525,7 @@ if __name__ == "__main__":
 
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
     plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
-    plt.yticks(np.arange(min_v, max_v, steps_v))
+    if min_v != max_v:  plt.yticks(np.arange(min_v, max_v, steps_v))
     plt.xlabel("a := R/h", fontsize=FONTSIZE)
     plt.ylabel(r'$| \nabla^2 v |_{L^2(\Omega)} [N]$', fontsize=FONTSIZE)
     plt.title(f'Airy function. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
@@ -522,7 +549,7 @@ if __name__ == "__main__":
 
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
     plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
-    plt.yticks(np.arange(min_w, max_w, steps_w))
+    if min_w != max_w:  plt.yticks(np.arange(min_w, max_w, steps_w))
     plt.xlabel("a := R/h", fontsize=FONTSIZE)
     plt.ylabel(r'$| \nabla^2 w |_{L^2(\Omega)} $', fontsize=FONTSIZE)
     plt.title(f'Transverse displacement. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
@@ -544,7 +571,7 @@ if __name__ == "__main__":
     if steps_memEng == 0: steps_memEng = NUM_STEPS
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
     plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
-    plt.yticks(np.arange(min_memEng, max_memEng, steps_memEng))
+    if max_memEng != min_memEng: plt.yticks(np.arange(min_memEng, max_memEng, steps_memEng))
     plt.xlabel("a := R/h", fontsize=FONTSIZE)
     plt.ylabel('Membrane Energy', fontsize=FONTSIZE)
     plt.title(f'Membrane Energy. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
@@ -565,7 +592,7 @@ if __name__ == "__main__":
     plt.xscale('log')
     plt.yscale('log')
     plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
-    plt.yticks(np.arange(min_memEng, max_memEng, steps_memEng))
+    if max_memEng != min_memEng: plt.yticks(np.arange(min_memEng, max_memEng, steps_memEng))
     plt.xlabel("a := R/h", fontsize=FONTSIZE)
     plt.ylabel('Membrane Energy', fontsize=FONTSIZE)
     plt.title(f'Membrane Energy. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
@@ -585,7 +612,7 @@ if __name__ == "__main__":
     if steps_bendEng == 0: steps_bendEng = NUM_STEPS
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
     plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
-    plt.yticks(np.arange(min_bendEng, max_bendEng, steps_bendEng))
+    if max_bendEng != min_bendEng: plt.yticks(np.arange(min_bendEng, max_bendEng, steps_bendEng))
     plt.xlabel("a := R/h", fontsize=FONTSIZE)
     plt.ylabel('Bending Energy', fontsize=FONTSIZE)
     plt.title(f'Bending Energy. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
@@ -608,7 +635,7 @@ if __name__ == "__main__":
 
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
     plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
-    plt.yticks(np.arange(min_couplingEng, max_couplingEng, steps_couplingEng))
+    if max_couplingEng != min_couplingEng: plt.yticks(np.arange(min_couplingEng, max_couplingEng, steps_couplingEng))
     plt.xlabel("a := R/h", fontsize=FONTSIZE)
     plt.ylabel('Coupling Energy', fontsize=FONTSIZE)
     plt.title(f'Coupling Energy. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
@@ -763,3 +790,39 @@ if __name__ == "__main__":
         plt.grid(True)
         plt.legend(fontsize=FONTSIZE)
         plt.savefig(f"{EXPERIMENT_DIR}/_{a_range[i]}a-v-profiles_{info_experiment}.png")
+
+        # Profiles of Monge-Ampere Bracket v, w
+        fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
+        plt, data = plot_profile(bracket_vw_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
+        plt.xlabel("x", fontsize=FONTSIZE)
+        plt.ylabel("[v, w]", fontsize=FONTSIZE)
+        plt.xticks(fontsize=FONTSIZE)
+        plt.yticks(fontsize=FONTSIZE)
+        plt.title(f"[v, w]. Thickness = {1/a_range[i]} m; a = {a_range[i]}; Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. E = {parameters["model"]["E"]:.2e} tol = {SOL_TOLLERANCE}", size = FONTSIZE)
+        plt.grid(True)
+        plt.legend(fontsize=FONTSIZE)
+        plt.savefig(f"{EXPERIMENT_DIR}/_{a_range[i]}a-[v_w]-profiles_{info_experiment}.png")
+
+        # Profiles of Monge-Ampere Bracket w, w
+        fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
+        plt, data = plot_profile(bracket_ww_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
+        plt.xlabel("x", fontsize=FONTSIZE)
+        plt.ylabel("[w, w]", fontsize=FONTSIZE)
+        plt.xticks(fontsize=FONTSIZE)
+        plt.yticks(fontsize=FONTSIZE)
+        plt.title(f"[w, w]. Thickness = {1/a_range[i]} m; a = {a_range[i]}; Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. E = {parameters["model"]["E"]:.2e} tol = {SOL_TOLLERANCE}", size = FONTSIZE)
+        plt.grid(True)
+        plt.legend(fontsize=FONTSIZE)
+        plt.savefig(f"{EXPERIMENT_DIR}/_{a_range[i]}a-[w_w]-profiles_{info_experiment}.png")
+
+        # Profiles of Monge-Ampere Bracket v, v
+        fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
+        plt, data = plot_profile(bracket_vv_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
+        plt.xlabel("x", fontsize=FONTSIZE)
+        plt.ylabel("[v, v]", fontsize=FONTSIZE)
+        plt.xticks(fontsize=FONTSIZE)
+        plt.yticks(fontsize=FONTSIZE)
+        plt.title(f"[v, v]. Thickness = {1/a_range[i]} m; a = {a_range[i]}; Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. E = {parameters["model"]["E"]:.2e} tol = {SOL_TOLLERANCE}", size = FONTSIZE)
+        plt.grid(True)
+        plt.legend(fontsize=FONTSIZE)
+        plt.savefig(f"{EXPERIMENT_DIR}/_{a_range[i]}a-[v_v]-profiles_{info_experiment}.png")
