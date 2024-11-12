@@ -159,8 +159,8 @@ def test_model_computation(variant):
         F_form=F,
         u=q,
         bcs=boundary_conditions,
-        petsc_options=params["solvers"]["elasticity"]["snes"],
-        prefix="plate_fvk_disclinations",
+        petsc_options=params["solvers"]["nonlinear"]["snes"],
+        prefix="plate_fvk_dipole",
         b0=b.vector,
         monitor=monitor,
     )
@@ -180,7 +180,7 @@ def test_model_computation(variant):
     # print(f"Model: {model}, Absolute Error: {abs_error}, Relative Error: {rel_error}")
 
     # 12. Assert that the relative error is within an acceptable range
-    rel_tol = float(params["solvers"]["elasticity"]["snes"]["snes_rtol"])
+    rel_tol = float(params["solvers"]["nonlinear"]["snes"]["snes_rtol"])
     # assert (
     #     rel_error < rel_tol
     # ), f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."

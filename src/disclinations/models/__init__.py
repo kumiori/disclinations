@@ -67,6 +67,7 @@ class ToyPlateFVK:
         h = ufl.CellDiameter(self.mesh)
         n = ufl.FacetNormal(self.mesh)
 
+        
         dg1 = lambda u: 1/2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
         dg2 = lambda u: 1/2 * α/avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
         bc1 = lambda u: 1/2 * inner(grad(u), grad(grad(u)) * n) * ds
@@ -181,6 +182,7 @@ class NonlinearPlateFVK(ToyPlateFVK):
                     + c1*bc3(w) - c1*bc3(v) + dgc(w, v)
 
         if self.higher_regularity:
+            print("Higher regularity")
             penalisation += c1*dg3(w)
             self._dgw += c1*dg3(w)
 

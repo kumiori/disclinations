@@ -148,9 +148,6 @@ w_scale = np.sqrt(2*_D/(_E*thickness))
 v_scale = _D
 f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
 
-def _v_initial_guess(x):
-    return np.cos(np.pi * np.sqrt(x[0]**2 + x[1]**2))
-
 def _v_exact(x):
     v_scale = _D
     a1=-1/12
@@ -271,12 +268,34 @@ ex_bending_energy = exact_bending_energy(v_exact, w_exact)
 ex_membrane_energy = exact_membrane_energy(v_exact, w_exact)
 ex_coupl_energy = exact_coupling_energy(v_exact, w_exact)
 
+# compute model's energy on the exact solution
+total_energy_exact_solution = model.energy(state_exact)[0]
+bending_energy_exact_solution = model.energy(state_exact)[1]
+membrane_energy_exact_solution = model.energy(state_exact)[2]
+coupling_energy_exact_solution = model.energy(state_exact)[3]
+
 for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
     print(f"Exact {energy_type} energy: {energy_function(v_exact, w_exact)}")
     
 for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
     print(f"Energy of approx solution {energy_type} energy: {energy_function(v, w)}")
 
+for energy_type, energy_function in zip(["total", "bending", "membrane", "coupling"], [total_energy_exact_solution, bending_energy_exact_solution, membrane_energy_exact_solution, coupling_energy_exact_solution]):
+    print(f"Model energy of exact solution {energy_type} energy: {assemble_scalar(dolfinx.fem.form(energy_function))}")
+    
+# now compute penalties
+
+_penalisation = [model._dgw,
+                    model._dgv,
+                    model._dgc,
+                    model._bcv,
+                    model._bcw]
+
+for label, penalisation_term in zip(["dgw", "dgv", "dgc", "bcv", "bcw"], _penalisation):
+    print(f"Penalisation term {label}: {assemble_scalar(dolfinx.fem.form(penalisation_term))}")
+
+
+pdb.set_trace()
 
 import matplotlib.pyplot as plt
 

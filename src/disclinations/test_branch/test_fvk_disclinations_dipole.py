@@ -203,7 +203,7 @@ solver = SNESSolver(
     F_form=F,
     u=q,
     bcs=bcs,
-    petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
+    petsc_options=parameters.get("solvers").get("nonlinear").get("snes"),
     prefix='plate_fvk_disclinations',
     b0=b.vector,
     monitor=monitor,
@@ -220,8 +220,6 @@ fig.savefig(f"{prefix}/mesh.png")
 
 
 energy_components = {"bending": model.energy(state)[1], "membrane": -model.energy(state)[2], "coupling": model.energy(state)[3], "external_work": -W_ext}
-# penalty_components = {"dg1_w": dg1_w(w), "dg2": dg2(w), "dg1_v": dg1_v(v), "dgc": dgc(v, w)}
-# boundary_components = {"bc1_w": bc1_w(w), "bc2": bc2(w), "bc1_v": bc1_v(v)}
 
 # Assemble the energy terms and create the dictionary
 computed_energy_terms = {label: comm.allreduce(
