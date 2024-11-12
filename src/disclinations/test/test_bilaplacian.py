@@ -86,8 +86,6 @@ def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
     return PETSc.SNES.ConvergedReason.ITERATING
 
-
-
 def test_bilaplacian_solution(setup_environment):
     mesh, parameters, prefix, comm = setup_environment
     V = dolfinx.fem.functionspace(mesh, ("Lagrange", parameters["model"]["order"]))
@@ -159,7 +157,6 @@ def test_bilaplacian_solution(setup_environment):
     print(check_terms)
     assert check_terms["penalisation"] < 1e-6, "Penalisation terms are _not_ small"
     assert np.isclose(check_terms["energy"], exact_energy, 1e-6)
-    pdb.set_trace()
 
 if __name__ == "__main__":
     pytest.main()

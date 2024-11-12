@@ -18,7 +18,13 @@ import ufl
 from dolfinx.fem import dirichletbc, locate_dofs_topological
 import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 
+import hashlib
+import yaml
+
 comm = MPI.COMM_WORLD
+
+AIRY = 0
+TRANSVERSE = 1
 
 class ColorPrint:
     """
@@ -74,9 +80,11 @@ class ColorPrint:
             sys.stdout.write("\x1b[1;37m" + message.strip() + "\x1b[0m" + end)
             sys.stdout.flush()
 
+
 def setup_logger_mpi(root_priority: int = logging.INFO):
     import dolfinx
     from mpi4py import MPI
+
     class MPIFormatter(logging.Formatter):
         def format(self, record):
             record.rank = MPI.COMM_WORLD.Get_rank()
@@ -97,48 +105,73 @@ def setup_logger_mpi(root_priority: int = logging.INFO):
     logger.propagate = False
     # StreamHandler to log messages to the console
     console_handler = logging.StreamHandler()
-    file_handler = logging.FileHandler('disclinations.log')
+    file_handler = logging.FileHandler("disclinations.log")
 
     # formatter = logging.Formatter('%(asctime)s - %(name)s - [%(levelname)s] - %(message)s')
-    formatter = MPIFormatter('%(asctime)s  [Rank %(rank)d, Size %(size)d]  - %(name)s - [%(levelname)s] - %(message)s')
+    formatter = MPIFormatter(
+        "%(asctime)s  [Rank %(rank)d, Size %(size)d]  - %(name)s - [%(levelname)s] - %(message)s"
+    )
 
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
-    
+
     # file_handler.setLevel(logging.INFO)
     file_handler.setLevel(root_process_log_level if rank == 0 else logging.CRITICAL)
     console_handler.setLevel(root_process_log_level if rank == 0 else logging.CRITICAL)
 
-
     # Disable propagation to root logger for both handlers
     console_handler.propagate = False
     file_handler.propagate = False
-    
-    
+
     # logger.addHandler(console_handler)
     logger.addHandler(file_handler)
 
     # Log messages, and only the root process will log.
     logger.info("The root process spawning an evolution computation (rank 0)")
     logger.info(
-    f"DOLFINx version: {dolfinx.__version__} based on GIT commit: {dolfinx.git_commit_hash} of https://github.com/FEniCS/dolfinx/")
+        f"DOLFINx version: {dolfinx.__version__} based on GIT commit: {dolfinx.git_commit_hash} of https://github.com/FEniCS/dolfinx/"
+    )
 
     return logger
+
 
 _logger = setup_logger_mpi()
 
 import subprocess
 
-# Get the current Git branch
-branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).strip().decode("utf-8")
 
-# Get the current Git commit hash
-commit_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).strip().decode("utf-8")
+def get_git_info():
+    """Attempt to retrieve the current Git branch and commit hash.
+    
+    Returns:
+        dict: A dictionary containing 'branch' and 'commit_hash'.
+              If Git information is unavailable, default values of 
+              'branch': 'unknown' and 'commit_hash': 'unknown' are returned.
+    """
+    try:
+        # Attempt to retrieve the current Git branch
+        branch = (
+            subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+    except subprocess.CalledProcessError:
+        branch = "unknown"
 
-code_info = {
-    "branch": branch,
-    "commit_hash": commit_hash,
-}
+    try:
+        # Attempt to retrieve the current Git commit hash
+        commit_hash = (
+            subprocess.check_output(["git", "rev-parse", "HEAD"])
+            .strip()
+            .decode("utf-8")
+        )
+    except subprocess.CalledProcessError:
+        commit_hash = "unknown"
+
+    return {
+        "branch": branch,
+        "commit_hash": commit_hash,
+    }
 
 from dolfinx import __version__ as dolfinx_version
 from petsc4py import __version__ as petsc_version
@@ -150,10 +183,13 @@ library_info = {
     "slepc4py_version": slepc_version,
 }
 
+code_info = get_git_info()
+
 simulation_info = {
     **library_info,
     **code_info,
 }
+
 
 def norm_L2(u):
     """
@@ -162,9 +198,9 @@ def norm_L2(u):
     comm = u.function_space.mesh.comm
     dx = ufl.Measure("dx", u.function_space.mesh)
     norm_form = form(ufl.inner(u, u) * dx)
-    norm = np.sqrt(comm.allreduce(
-        assemble_scalar(norm_form), op=mpi4py.MPI.SUM))
+    norm = np.sqrt(comm.allreduce(assemble_scalar(norm_form), op=mpi4py.MPI.SUM))
     return norm
+
 
 def norm_H1(u):
     """
@@ -172,11 +208,10 @@ def norm_H1(u):
     """
     comm = u.function_space.mesh.comm
     dx = ufl.Measure("dx", u.function_space.mesh)
-    norm_form = form(
-        (ufl.inner(u, u) + ufl.inner(ufl.grad(u), ufl.grad(u))) * dx)
-    norm = np.sqrt(comm.allreduce(
-        assemble_scalar(norm_form), op=mpi4py.MPI.SUM))
+    norm_form = form((ufl.inner(u, u) + ufl.inner(ufl.grad(u), ufl.grad(u))) * dx)
+    norm = np.sqrt(comm.allreduce(assemble_scalar(norm_form), op=mpi4py.MPI.SUM))
     return norm
+
 
 def seminorm_H1(u):
     """
@@ -185,14 +220,15 @@ def seminorm_H1(u):
     comm = u.function_space.mesh.comm
     dx = ufl.Measure("dx", u.function_space.mesh)
     seminorm = form((ufl.inner(ufl.grad(u), ufl.grad(u))) * dx)
-    seminorm = np.sqrt(comm.allreduce(
-        assemble_scalar(seminorm), op=mpi4py.MPI.SUM))
+    seminorm = np.sqrt(comm.allreduce(assemble_scalar(seminorm), op=mpi4py.MPI.SUM))
     return seminorm
+
 
 def set_vector_to_constant(x, value):
     with x.localForm() as local:
         local.set(value)
     x.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+
 
 def table_timing_data(tasks=None):
     import pandas as pd
@@ -204,13 +240,15 @@ def table_timing_data(tasks=None):
             "~Mesh Generation",
             "~First Order: min-max equilibrium",
             "~Postprocessing and Vis",
-            "~Computation Experiment"
-            ]
+            "~Computation Experiment",
+        ]
 
     for task in tasks:
         timing_data.append(timing(task))
-    
-    df = pd.DataFrame(timing_data, columns=["reps", "wall tot", "usr", "sys"], index=tasks)
+
+    df = pd.DataFrame(
+        timing_data, columns=["reps", "wall tot", "usr", "sys"], index=tasks
+    )
 
     return df
 
@@ -233,6 +271,7 @@ def load_parameters(file_path):
 
     return parameters, signature
 
+
 def save_parameters(parameters, prefix):
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
     if MPI.COMM_WORLD.rank == 0:
@@ -242,6 +281,20 @@ def save_parameters(parameters, prefix):
             f.write(signature)
 
     return signature
+
+
+def print_energy_analysis(energy_terms, exact_energy_transverse):
+    """Print computed energy vs exact energy analysis."""
+    computed_membrane_energy = energy_terms["membrane"]
+    error = np.abs(exact_energy_transverse - computed_membrane_energy)
+
+    print(f"Exact energy: {exact_energy_transverse}")
+    print(f"Computed membrane energy: {computed_membrane_energy}")
+    print(f"Abs error: {error:.3%}")
+    print(f"Rel error: {error/exact_energy_transverse:.3%}")
+
+    return error, error / exact_energy_transverse
+
 
 from dolfinx.io import XDMFFile
 
@@ -268,12 +321,17 @@ class ResultsStorage:
         alpha = state["alpha"]
 
         if self.comm.rank == 0:
-            with open(f"{self.prefix}/parameters.yaml", 'w') as file:
+            with open(f"{self.prefix}/parameters.yaml", "w") as file:
                 yaml.dump(parameters, file)
 
-        with XDMFFile(self.comm, f"{self.prefix}/simulation_results.xdmf", "w", encoding=XDMFFile.Encoding.HDF5) as file:
+        with XDMFFile(
+            self.comm,
+            f"{self.prefix}/simulation_results.xdmf",
+            "w",
+            encoding=XDMFFile.Encoding.HDF5,
+        ) as file:
             # for t, data in history_data.items():
-                # file.write_scalar(data, t)
+            # file.write_scalar(data, t)
             file.write_mesh(u.function_space.mesh)
 
             file.write_function(u, t)
@@ -283,7 +341,9 @@ class ResultsStorage:
             with open(f"{self.prefix}/time_data.json", "w") as file:
                 json.dump(history_data, file)
 
+
 # Visualization functions/classes
+
 
 class Visualisation:
     """
@@ -318,6 +378,9 @@ class Visualisation:
             # json.dump(data.to_json(), a_file)
             # a_file.close()
 
+    # def save_figure(self, fig, name):
+
+
 history_data = {
     "load": [],
     "elastic_energy": [],
@@ -332,16 +395,26 @@ history_data = {
     "inertia": [],
 }
 
-def _write_history_data(equilibrium, bifurcation, stability, history_data, t, inertia, stable, energies: List):
-    
+
+def _write_history_data(
+    equilibrium,
+    bifurcation,
+    stability,
+    history_data,
+    t,
+    inertia,
+    stable,
+    energies: List,
+):
+
     elastic_energy = energies[0]
     fracture_energy = energies[1]
     unique = True if inertia[0] == 0 and inertia[1] == 0 else False
-    
+
     history_data["load"].append(t)
     history_data["fracture_energy"].append(fracture_energy)
     history_data["elastic_energy"].append(elastic_energy)
-    history_data["total_energy"].append(elastic_energy+fracture_energy)
+    history_data["total_energy"].append(elastic_energy + fracture_energy)
     history_data["equilibrium_data"].append(equilibrium.data)
     history_data["inertia"].append(inertia)
     history_data["unique"].append(unique)
@@ -350,7 +423,8 @@ def _write_history_data(equilibrium, bifurcation, stability, history_data, t, in
     history_data["cone_data"].append(stability.data)
     history_data["eigs_cone"].append(stability.solution["lambda_t"])
 
-    return 
+    return
+
 
 def indicator_function(v):
     import dolfinx
@@ -358,22 +432,22 @@ def indicator_function(v):
     # Create the indicator function
     w = dolfinx.fem.Function(v.function_space)
     with w.vector.localForm() as w_loc, v.vector.localForm() as v_loc:
-        w_loc[:] = np.where(v_loc[:] > 0, 1., 0.)
+        w_loc[:] = np.where(v_loc[:] > 0, 1.0, 0.0)
 
-    w.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
-        mode=PETSc.ScatterMode.FORWARD)
-    
+    w.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+
     return w
+
 
 def update_parameters(parameters, key, value):
     """
     Recursively traverses the dictionary d to find and update the key's value.
-    
+
     Args:
     d (dict): The dictionary to traverse.
     key (str): The key to find and update.
     value: The new value to set for the key.
-    
+
     Returns:
     bool: True if the key was found and updated, False otherwise.
     """
@@ -385,31 +459,37 @@ def update_parameters(parameters, key, value):
         if isinstance(v, dict):
             if update_parameters(v, key, value):
                 return True
-    
+
     return False
+
 
 def memory_usage():
     """Get the current memory usage of the Python process."""
     mem = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
     return mem / 1024  # Convert to MB
 
+
 def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
     print(f"Iteration {it}, residual {norm}")
     return PETSc.SNES.ConvergedReason.ITERATING
 
-def write_to_output(prefix, q, extra_fields = {}):
+
+def write_to_output(prefix, q, extra_fields={}):
     # Obtain the communicator from q's mesh
     import basix
+
     comm = q.function_space.mesh.comm
-    
-    # V_P1 = 
+
+    # V_P1 =
     # create function space based on mesh
     V_P1 = dolfinx.fem.functionspace(q.function_space.mesh, ("CG", 1))
     DG_e = basix.ufl.element("DG", str(q.function_space.mesh.ufl_cell()), order=1)
-    V_DG = dolfinx.fem.functionspace(q.function_space.mesh, DG_e)  # 
-    
-    with XDMFFile(comm, f"{prefix}/fields.xdmf", "a", encoding=XDMFFile.Encoding.HDF5) as file:
+    V_DG = dolfinx.fem.functionspace(q.function_space.mesh, DG_e)  #
+
+    with XDMFFile(
+        comm, f"{prefix}/fields.xdmf", "a", encoding=XDMFFile.Encoding.HDF5
+    ) as file:
         # Split q into components: potential (_v) and displacement (_w)
         _v, _w = q.split()
         _v.name, _w.name = "potential", "displacement"
@@ -425,18 +505,19 @@ def write_to_output(prefix, q, extra_fields = {}):
 
         # Process extra fields
         for field_info in extra_fields:
-            field = field_info['field']
-            name = field_info['name']
+            field = field_info["field"]
+            name = field_info["name"]
 
             # Check if the field requires special handling (e.g., tensor components)
-            if field_info.get('components') == 'tensor':
+            if field_info.get("components") == "tensor":
                 interpolation = dolfinx.fem.Function(V_DG)
-                
+
                 write_tensor_components(file, interpolation, field, name)
             else:
                 # Interpolate and write scalar or vector fields
                 interpolate_and_write(file, interpolation, field, name)
-        __import__('pdb').set_trace()
+        __import__("pdb").set_trace()
+
 
 def interpolate_and_write(file, interpolation, field, name):
     """Interpolate a field to V_P1 and write it to an XDMF file."""
@@ -444,18 +525,17 @@ def interpolate_and_write(file, interpolation, field, name):
     interpolation.name = name
     file.write_function(interpolation)
 
+
 def write_tensor_components(file, interpolation, tensor_expr, tensor_name):
     """Interpolate and write specified components of a tensor expression."""
-    components = {
-        'xx': (0, 0),
-        'xy': (0, 1),
-        'yy': (1, 1)
-    }
+    components = {"xx": (0, 0), "xy": (0, 1), "yy": (1, 1)}
     for comp_name, (i, j) in components.items():
         # Extract the component expression
         component_expr = tensor_expr[i, j]
         # Create an expression for interpolation
-        expr = dolfinx.fem.Expression(component_expr, interpolation.function_space.element.interpolation_points())
+        expr = dolfinx.fem.Expression(
+            component_expr, interpolation.function_space.element.interpolation_points()
+        )
         # Create a function to hold the interpolated values
         interpolation.interpolate(expr)
         # Set the name accordingly
@@ -463,8 +543,6 @@ def write_tensor_components(file, interpolation, tensor_expr, tensor_name):
         # Write to file
         file.write_function(interpolation)
 
-AIRY = 0
-TRANSVERSE = 1
 
 def homogeneous_dirichlet_bc_H20(mesh, Q):
     """
@@ -499,6 +577,7 @@ def homogeneous_dirichlet_bc_H20(mesh, Q):
     # Return the boundary conditions as a list
     return [bcs_v, bcs_w]
 
+
 def save_params_to_yaml(params, filename):
     """
     Save the updated params dictionary to a YAML file.
@@ -510,44 +589,45 @@ def save_params_to_yaml(params, filename):
     with open(filename, "w") as file:
         yaml.dump(params, file, default_flow_style=False)
 
-import hashlib
-import yaml
 
-def parameters_vs_thickness(parameters=None, thickness=1.):
+
+def parameters_vs_thickness(parameters=None, thickness=1.0):
     """
     Update the model parameters for a given value of 'ell'.
 
-    This function modifies the 'thickness' parameter. 
+    This function modifies the 'thickness' parameter.
     If no parameters are provided, it loads them from the default file.
 
     Args:
-        parameters (dict, optional): Dictionary of parameters. 
+        parameters (dict, optional): Dictionary of parameters.
                                       If None, load from "../test/parameters.yml".
-        thickness (float, optional): The new 'thickness' value to set in the parameters. 
+        thickness (float, optional): The new 'thickness' value to set in the parameters.
                                Default is 1.
 
     Returns:
-        tuple: A tuple containing the updated parameters dictionary and 
+        tuple: A tuple containing the updated parameters dictionary and
                a unique hash (signature) based on the updated parameters.
     """
-    if parameters is None:    
+    if parameters is None:
         # with open("../test/parameters.yml") as f:
-            # parameters = yaml.load(f, Loader=yaml.FullLoader)
-        with pkg_resources.path('disclinations.test', 'parameters.yml') as f:
-            with open(f, 'r') as yaml_file:
+        # parameters = yaml.load(f, Loader=yaml.FullLoader)
+        with pkg_resources.path("disclinations.test", "parameters.yml") as f:
+            with open(f, "r") as yaml_file:
                 parameters = yaml.load(yaml_file, Loader=yaml.FullLoader)
-                
+
     parameters["model"]["thickness"] = thickness
 
     # Generate a unique signature using MD5 hash based on the updated parametersx
-    signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
+    signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
 
     return parameters, signature
+
 
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from dolfinx.io import XDMFFile, gmshio
 from pathlib import Path
 import os
+
 
 def create_or_load_circle_mesh(parameters, prefix):
     """
@@ -568,10 +648,9 @@ def create_or_load_circle_mesh(parameters, prefix):
     parameters["geometry"]["radius"] = 1  # Assuming the radius is 1
     parameters["geometry"]["geom_type"] = "circle"
     geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
-    sha_hash = hashlib.sha256(geometry_json.encode()).hexdigest()
-
+    hash = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
     # Set up file prefix for mesh storage
-    mesh_file_path = f"{prefix}/mesh-{sha_hash}.xdmf"
+    mesh_file_path = f"{prefix}/mesh-{hash}.xdmf"
     with dolfinx.common.Timer("~Mesh Generation") as timer:
         # Check if the mesh file already exists
         if os.path.exists(mesh_file_path):
@@ -601,10 +680,52 @@ def create_or_load_circle_mesh(parameters, prefix):
             # os.makedirs(prefix, exist_ok=True)
             if comm.rank == 0:
                 Path(prefix).mkdir(parents=True, exist_ok=True)
-                    
+
             with XDMFFile(
                 comm, mesh_file_path, "w", encoding=XDMFFile.Encoding.HDF5
             ) as file:
                 file.write_mesh(mesh)
 
         return mesh, mts, fts
+
+
+from disclinations.models import compute_energy_terms
+
+def basic_postprocess(state, model, mesh, params, exact_solution, prefix):
+    with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
+        energy_components = {
+            "bending": model.energy(state)[1],
+            "membrane": model.energy(state)[2],
+            "coupling": model.energy(state)[3],
+            "external_work": -model.W_ext,
+        }
+
+        energy_terms = compute_energy_terms(energy_components, mesh.comm)
+        print(yaml.dump(params["model"], default_flow_style=False))
+
+        if exact_solution is not None:
+            _v_exact, _w_exact = exact_solution
+        else:
+            _v_exact, _w_exact = None, None
+            
+        extra_fields = [
+            {"field": _v_exact, "name": "v_exact"},
+            {"field": _w_exact, "name": "w_exact"},
+            {
+                "field": model.M(state["w"]),  # Tensor expression
+                "name": "M",
+                "components": "tensor",
+            },
+            {
+                "field": model.P(state["v"]),  # Tensor expression
+                "name": "P",
+                "components": "tensor",
+            },
+            {
+                "field": model.gaussian_curvature(state["w"]),  # Tensor expression
+                "name": "Kappa",
+                "components": "tensor",
+            },
+        ]
+        # write_to_output(prefix, q, extra_fields)
+        return energy_terms
