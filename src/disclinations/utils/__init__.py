@@ -26,6 +26,7 @@ comm = MPI.COMM_WORLD
 AIRY = 0
 TRANSVERSE = 1
 
+
 class ColorPrint:
     """
     Colored printing functions for strings that use universal ANSI escape
@@ -85,11 +86,28 @@ def setup_logger_mpi(root_priority: int = logging.INFO):
     import dolfinx
     from mpi4py import MPI
 
+    # ANSI escape codes for colors and bold
+    RESET = "\033[0m"
+    BOLD = "\033[1m"
+    COLORS = {
+        "INFO": "\033[92m",  # Green
+        "WARNING": "\033[93m",  # Yellow
+        "ERROR": "\033[91m",  # Red
+        "DEBUG": "\033[94m",  # Blue
+        "CRITICAL": "\033[41m",  # Background red
+    }
+
     class MPIFormatter(logging.Formatter):
         def format(self, record):
             record.rank = MPI.COMM_WORLD.Get_rank()
             record.size = MPI.COMM_WORLD.Get_size()
-            return super(MPIFormatter, self).format(record)
+
+            # Select color based on the log level
+            color = COLORS.get(record.levelname, "")
+            message = super(MPIFormatter, self).format(record)
+
+            # Format message with bold and color
+            return f"{color}{BOLD}{message}{RESET}"
 
     comm = MPI.COMM_WORLD
     rank = comm.Get_rank()
@@ -123,7 +141,7 @@ def setup_logger_mpi(root_priority: int = logging.INFO):
     console_handler.propagate = False
     file_handler.propagate = False
 
-    # logger.addHandler(console_handler)
+    logger.addHandler(console_handler)
     logger.addHandler(file_handler)
 
     # Log messages, and only the root process will log.
@@ -142,10 +160,10 @@ import subprocess
 
 def get_git_info():
     """Attempt to retrieve the current Git branch and commit hash.
-    
+
     Returns:
         dict: A dictionary containing 'branch' and 'commit_hash'.
-              If Git information is unavailable, default values of 
+              If Git information is unavailable, default values of
               'branch': 'unknown' and 'commit_hash': 'unknown' are returned.
     """
     try:
@@ -172,6 +190,7 @@ def get_git_info():
         "branch": branch,
         "commit_hash": commit_hash,
     }
+
 
 from dolfinx import __version__ as dolfinx_version
 from petsc4py import __version__ as petsc_version
@@ -590,7 +609,6 @@ def save_params_to_yaml(params, filename):
         yaml.dump(params, file, default_flow_style=False)
 
 
-
 def parameters_vs_thickness(parameters=None, thickness=1.0):
     """
     Update the model parameters for a given value of 'ell'.
@@ -648,7 +666,7 @@ def create_or_load_circle_mesh(parameters, prefix):
     parameters["geometry"]["radius"] = 1  # Assuming the radius is 1
     parameters["geometry"]["geom_type"] = "circle"
     geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
-    hash = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
+    hash = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
     # Set up file prefix for mesh storage
     mesh_file_path = f"{prefix}/mesh-{hash}.xdmf"
     with dolfinx.common.Timer("~Mesh Generation") as timer:
@@ -689,6 +707,7 @@ def create_or_load_circle_mesh(parameters, prefix):
 
 from disclinations.models import compute_energy_terms
 
+
 def basic_postprocess(state, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
         energy_components = {
@@ -705,7 +724,7 @@ def basic_postprocess(state, model, mesh, params, exact_solution, prefix):
             _v_exact, _w_exact = exact_solution
         else:
             _v_exact, _w_exact = None, None
-            
+
         extra_fields = [
             {"field": _v_exact, "name": "v_exact"},
             {"field": _w_exact, "name": "w_exact"},
