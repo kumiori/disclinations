@@ -629,3 +629,26 @@ def exact_energy_dipole(parameters):
         * distance**2
         * (np.log(4 + distance**2) - np.log(4 * distance))
     )
+
+
+from disclinations.utils import _logger
+
+
+def assemble_penalisation_terms(model):
+    # Define and compute penalisation terms
+    _penalisation_terms = {
+        "dgw": model._dgw,
+        "dgv": model._dgv,
+        "dgc": model._dgc,
+        "bcv": model._bcv,
+        "bcw": model._bcw,
+    }
+
+    # Assemble each penalisation term and log its value
+    assembled_penalisation_terms = {}
+    for label, term in _penalisation_terms.items():
+        assembled_value = dolfinx.fem.assemble_scalar(dolfinx.fem.form(term))
+        assembled_penalisation_terms[label] = assembled_value
+        _logger.critical(f"Penalisation term {label}: {assembled_value:.2e}")
+
+    return assembled_penalisation_terms
