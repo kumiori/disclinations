@@ -64,10 +64,9 @@ def load_parameters(filename):
     with open(filename, "r") as f:
         params = yaml.safe_load(f)
 
-    params["model"]["thickness"] = 0.1
-    # params["model"]["E"] = 1e10
+    params["model"]["thickness"] = 0.01
     params["model"]["E"] = 1
-    params["model"]["alpha_penalty"] = 300
+    # params["model"]["alpha_penalty"] = 300
 
     signature = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()
 
@@ -194,75 +193,122 @@ def test_model_computation(variant):
     # pdb.set_trace()
     # 10. Compute absolute and relative error with respect to the exact solution
 
-    abs_error, rel_error = postprocess(
+    abs_error, rel_error, penalisation = postprocess(
         state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
     )
-
     # # 11. Display error results
-    _logger.critical(
-        f"Model: {model}, Absolute Error: {abs_error:.2e}, Relative Error: {rel_error:.1%}"
-    )
+    # _logger.critical(
+    #     f"Model: {model}, Absolute Error: {abs_error:.0e}, Relative Error: {rel_error:.1%}"
+    # )
 
     # 12. Assert that the relative error is within an acceptable range
-    rel_tol = float(params["solvers"]["nonlinear"]["snes"]["snes_rtol"])
+    sanity_check(abs_error, rel_error, penalisation, params)
+
+
+def assemble_penalisation_terms(model):
+    # Define and compute penalisation terms
+    _penalisation_terms = {
+        "dgw": model._dgw,
+        "dgv": model._dgv,
+        "dgc": model._dgc,
+        "bcv": model._bcv,
+        "bcw": model._bcw,
+    }
+
+    # Assemble each penalisation term and log its value
+    assembled_penalisation_terms = {}
+    for label, term in _penalisation_terms.items():
+        assembled_value = dolfinx.fem.assemble_scalar(dolfinx.fem.form(term))
+        assembled_penalisation_terms[label] = assembled_value
+        _logger.critical(f"Penalisation term {label}: {assembled_value:.2e}")
+
+    return assembled_penalisation_terms
+
+
+def sanity_check(abs_errors, rel_errors, penalization_terms, params):
+    atol = float(params["solvers"]["nonlinear"]["snes"]["snes_atol"])
+    rtol = float(params["solvers"]["nonlinear"]["snes"]["snes_rtol"])
+
+    _logger.info("\nSanity Check Report:")
+
+    # Check each error against tolerance
+    for energy_type, abs_err, rel_err in zip(
+        ["total", "bending", "membrane", "coupling"], abs_errors, rel_errors
+    ):
+        abs_check = abs_err < atol
+        rel_check = rel_err < rtol
+
+        _logger.info(f"{energy_type.capitalize()} Energy Error Check:")
+        _logger.info(
+            f"  Absolute Error: {abs_err:.2e} {'(PASS)' if abs_check else '(FAIL)'}"
+        )
+        _logger.info(
+            f"  Relative Error: {rel_err:.2e} {'(PASS)' if rel_check else '(FAIL)'}"
+        )
+
+        if not abs_check or not rel_check:
+            _logger.warning(
+                f"{energy_type.capitalize()} energy error exceeds tolerance: "
+                f"abs {abs_err:.2e} / {atol}, rel {rel_err:.2e} / {rtol}"
+            )
+
+    # Verify if penalization terms meet expectations
+    max_penalization = max(penalization_terms.values())
+    if max_penalization > rtol:
+        _logger.warning(
+            f"Max penalization term {max_penalization:.2e} exceeds relative tolerance {rtol:.2e}"
+        )
+    else:
+        _logger.info("All penalization terms within expected tolerance range.")
+
+    return all(
+        abs_err < atol and rel_err < rtol
+        for abs_err, rel_err in zip(abs_errors, rel_errors)
+    )
 
 
 def postprocess(state, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-        energies_model = {
-            "total": model.energy(state)[0],
-            "bending": model.energy(state)[1],
-            "membrane": model.energy(state)[2],
-            "coupling": model.energy(state)[3],
-            # "external_work": -model.W_ext,
-        }
-
-        energy_terms = compute_energy_terms(energies_model, mesh.comm)
-
         # Compute energies for the exact solution
         exact_energies = {}
-
-        # the exact solution is dimensional, to perform energy comparison
-        # we need to convert it to adimensional
+        fem_energies = {}
+        abs_errors = {}
+        rel_errors = {}
+        # the exact solution is adimensional, to perform energy comparison
 
         _logger.info("\nEnergy Analysis:")
+
         for i, energy_name in enumerate(["total", "bending", "membrane", "coupling"]):
             exact_energy = dolfinx.fem.assemble_scalar(
                 dolfinx.fem.form(model.energy(exact_solution)[i])
             )
             _exact_energy = mesh.comm.allreduce(exact_energy, op=MPI.SUM)
             exact_energies[energy_name] = _exact_energy
-            _logger.info(f"Exact {energy_name.capitalize()} Energy: {_exact_energy}")
 
-        pdb.set_trace()
-
-        # for energy_name, approx_energy in energy_terms.items():
-        #     if energy_name in exact_energies:
-        #         exact_energy = exact_energies[energy_name]
-
-        #         # Calculate absolute and relative errors
-        #         absolute_error = abs(approx_energy - exact_energy)
-        #         relative_error = (
-        #             absolute_error / abs(exact_energy)
-        #             if exact_energy != 0
-        #             else float("inf")
-        #         )
-
-        #         _logger.info(f"{energy_name.capitalize()} Energy:")
-        #         _logger.info(f"  Exact Energy: {exact_energy:.6e}")
-        #         _logger.info(f"  Approximate Energy: {approx_energy:.6e}")
-        #         _logger.info(f"  Absolute Error: {absolute_error:.6e}")
-        #         _logger.info(f"  Relative Error: {relative_error:.6%}\n")
-
-        _penalisation = [model._dgw, model._dgv, model._dgc, model._bcv, model._bcw]
-
-        for label, penalisation_term in zip(
-            ["dgw", "dgv", "dgc", "bcv", "bcw"], _penalisation
-        ):
-            _logger.critical(
-                f"Penalisation term {label}: {dolfinx.fem.assemble_scalar(dolfinx.fem.form(penalisation_term))}"
+            fem_energy = dolfinx.fem.assemble_scalar(
+                dolfinx.fem.form(model.energy(state)[i])
             )
-        pdb.set_trace()
+            _fem_energy = mesh.comm.allreduce(fem_energy, op=MPI.SUM)
+            fem_energies[energy_name] = _fem_energy
+
+            # Compute absolute and relative errors
+            abs_error = abs(fem_energies[energy_name] - exact_energies[energy_name])
+            rel_error = (
+                abs_error / abs(exact_energies[energy_name])
+                if exact_energies[energy_name] != 0
+                else float("inf")
+            )
+            abs_errors[energy_name] = abs_error
+            rel_errors[energy_name] = rel_error
+
+            # Log detailed energy information
+            _logger.info(f"{energy_name.capitalize()} Energy Analysis:")
+            _logger.info(f"  Exact Energy: {_exact_energy:.2e}")
+            _logger.info(f"  FEM Energy: {_fem_energy:.2e}")
+            _logger.info(f"  Absolute Error: {abs_error:.0e}")
+            _logger.info(f"  Relative Error: {rel_error:.2%}\n")
+
+        penalization_terms = assemble_penalisation_terms(model)
 
         _v_exact, _w_exact = exact_solution["v"], exact_solution["w"]
 
@@ -283,7 +329,12 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
 
         # write_to_output(prefix, q, extra_fields)
 
-        # return abs_error, rel_error
+        # Convert errors to numpy arrays for easy handling
+        abs_error_array = np.array(list(abs_errors.values()))
+        rel_error_array = np.array(list(rel_errors.values()))
+
+        # Optionally, return the computed values for further use
+        return abs_error_array, rel_error_array, penalization_terms
 
 
 if __name__ == "__main__":

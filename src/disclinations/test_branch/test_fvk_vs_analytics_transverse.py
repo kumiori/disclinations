@@ -35,10 +35,17 @@ import warnings
 required_version = "0.8.0"
 
 if dolfinx.__version__ != required_version:
-    warnings.warn(f"We need dolfinx version {required_version}, but found version {dolfinx.__version__}. Exiting.")
+    warnings.warn(
+        f"We need dolfinx version {required_version}, but found version {dolfinx.__version__}. Exiting."
+    )
     sys.exit(1)
 
-from dolfinx.fem.petsc import (assemble_matrix, create_vector, create_matrix, assemble_vector)
+from dolfinx.fem.petsc import (
+    assemble_matrix,
+    create_vector,
+    create_matrix,
+    assemble_vector,
+)
 
 import sys
 
@@ -65,10 +72,12 @@ comm = MPI.COMM_WORLD
 AIRY = 0
 TRANSVERSE = 1
 
+
 def monitor(snes, it, norm):
     logging.info(f"Iteration {it}, residual {norm}")
     print(f"Iteration {it}, residual {norm}")
     return PETSc.SNES.ConvergedReason.ITERATING
+
 
 import matplotlib.tri as tri
 
@@ -76,6 +85,7 @@ with open("parameters.yml") as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
 
 parameters["model"]["higher_regularity"] = False
+parameters["model"]["thickness"] = 0.1
 
 mesh_size = parameters["geometry"]["mesh_size"]
 
@@ -96,24 +106,22 @@ if comm.rank == 0:
 h = CellDiameter(mesh)
 n = FacetNormal(mesh)
 
-X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"]) 
+X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"])
 Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
 bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
-dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
+dofs_v = dolfinx.fem.locate_dofs_topological(
+    V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets
+)
+dofs_w = dolfinx.fem.locate_dofs_topological(
+    V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets
+)
 
 # Define the variational problem
 
-bcs_w = dirichletbc(
-    np.array(0, dtype=PETSc.ScalarType),
-    dofs_w, Q.sub(TRANSVERSE)
-)
-bcs_v = dirichletbc(
-    np.array(0, dtype=PETSc.ScalarType),
-    dofs_v, Q.sub(AIRY)
-)
+bcs_w = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_w, Q.sub(TRANSVERSE))
+bcs_v = dirichletbc(np.array(0, dtype=PETSc.ScalarType), dofs_v, Q.sub(AIRY))
 
 # keep track of the ordering of fields in boundary conditions
 _bcs = {AIRY: bcs_v, TRANSVERSE: bcs_w}
@@ -130,40 +138,62 @@ state = {"v": v, "w": w}
 
 # Define the variational problem
 
-model = NonlinearPlateFVK(mesh, parameters["model"])
+model = NonlinearPlateFVK(mesh, parameters["model"], adimensional=True)
 energy = model.energy(state)[0]
 
 # Dead load (transverse)
 
 # Explicit dead load (transverse)
-# Cf. thesis ref: 
+# Cf. thesis ref:
 
 nu = parameters["model"]["nu"]
 # _h = parameters["model"]["thickness"]
 thickness = parameters["model"]["thickness"]
 _E = parameters["model"]["E"]
 _D = _E * thickness**3 / (12 * (1 - nu**2))
-
-w_scale = np.sqrt(2*_D/(_E*thickness))
+c_nu = 1 / (12 * (1 - nu**2))
+w_scale = np.sqrt(2 * _D / (_E * thickness))
 v_scale = _D
-f_scale = np.sqrt(2 * _D**3 / (_E * thickness))
+adim_coeff = parameters["geometry"]["radius"] / thickness
+# f_scale = np.sqrt(2 * _D**3 / (_E * thickness)) * adim_coeff**4 / _E
+f_scale = np.sqrt(2 * c_nu**3) * parameters["geometry"]["radius"] ** 4 / _E
+energy_scale = _E * (thickness**3) / (adim_coeff**2)
+
+
+from disclinations.utils import _logger
+
+_logger.info(f"v_scale: {v_scale}")
+_logger.info(f"w_scale: {w_scale}")
+_logger.info(f"f_scale: {f_scale}")
+_logger.info(f"energy_scale: {energy_scale}")
+pdb.set_trace()
+
 
 def _v_exact(x):
     v_scale = _D
-    a1=-1/12
-    a2=-1/18
-    a3=-1/24
-    _v = a1 * (1 - x[0]**2 - x[1]**2)**2 + a2 * (1 - x[0]**2 - x[1]**2)**3 + a3 * (1 - x[0]**2 - x[1]**2)**4
+    a1 = -1 / 12
+    a2 = -1 / 18
+    a3 = -1 / 24
+    _v = (
+        a1 * (1 - x[0] ** 2 - x[1] ** 2) ** 2
+        + a2 * (1 - x[0] ** 2 - x[1] ** 2) ** 3
+        + a3 * (1 - x[0] ** 2 - x[1] ** 2) ** 4
+    )
 
     return _v * v_scale
 
+
 def _w_exact(x):
     # return q/(64*12*(1-nu**2))*(1 - (x[0]**2 + x[1]**2))**2
-    return w_scale * (1 - x[0]**2 - x[1]**2)**2
+    return w_scale * (1 - x[0] ** 2 - x[1] ** 2) ** 2
+
 
 def transverse_load(x):
-    _p = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
+    _p = (40 / 3) * (1 - x[0] ** 2 - x[1] ** 2) ** 4 + (16 / 3) * (
+        11 + x[0] ** 2 + x[1] ** 2
+    )
     return f_scale * _p
+
 
 f.interpolate(transverse_load)
 
@@ -173,9 +203,13 @@ w_exact.interpolate(_w_exact)
 state_exact = {"v": v_exact, "w": w_exact}
 exact_energy = model.energy(state_exact)[0]
 
-W_ext = f * w * dx
-# W_ext = w * dx
+if model.adimensional:
+    adim_coeff = parameters["geometry"]["radius"] / parameters["model"]["thickness"]
+else:
+    adim_coeff = 1.0
 
+
+W_ext = f * w * dx
 penalisation = model.penalisation(state)
 
 # Define the functional
@@ -192,12 +226,12 @@ labels = ["F", "F_v", "F_w", "Ec_w", "Em_v"]
 
 
 solver_parameters = {
-    "snes_type": "newtonls",        # Solver type: NGMRES (Nonlinear GMRES)
-    "snes_max_it": 100,          # Maximum number of iterations
-    "snes_rtol": 1e-6,            # Relative tolerance for convergence
-    "snes_atol": 1e-6,           # Absolute tolerance for convergence
-    "snes_stol": 1e-6,           # Tolerance for the change in solution norm
-    "snes_monitor": None,         # Function for monitoring convergence (optional)
+    "snes_type": "newtonls",  # Solver type: NGMRES (Nonlinear GMRES)
+    "snes_max_it": 100,  # Maximum number of iterations
+    "snes_rtol": 1e-6,  # Relative tolerance for convergence
+    "snes_atol": 1e-6,  # Absolute tolerance for convergence
+    "snes_stol": 1e-6,  # Tolerance for the change in solution norm
+    "snes_monitor": None,  # Function for monitoring convergence (optional)
     "snes_linesearch_type": "basic",  # Type of line search
 }
 
@@ -207,7 +241,7 @@ solver = SNESSolver(
     bcs=bcs,
     bounds=None,
     petsc_options=solver_parameters,
-    prefix='plate_fvk',
+    prefix="plate_fvk",
 )
 solver.solve()
 
@@ -221,15 +255,20 @@ V_w, dofs_w = Q.sub(1).collapse()
 _Fv = create_vector(dolfinx.fem.form(F_v))
 assemble_vector(_Fv, dolfinx.fem.form(F_v))
 
-energy_components = {"bending": model.energy(state)[1],
-                    "membrane": model.energy(state)[2],
-                    "coupling": model.energy(state)[3]}
+energy_components = {
+    "total": model.energy(state)[0],
+    "bending": model.energy(state)[1],
+    "membrane": model.energy(state)[2],
+    "coupling": model.energy(state)[3],
+}
 
-computed_energy_terms = {label: comm.allreduce(
-    dolfinx.fem.assemble_scalar(
-        dolfinx.fem.form(energy_term)),
-    op=MPI.SUM,
-) for label, energy_term in energy_components.items()}
+computed_energy_terms = {
+    label: comm.allreduce(
+        dolfinx.fem.assemble_scalar(dolfinx.fem.form(energy_term)),
+        op=MPI.SUM,
+    )
+    for label, energy_term in energy_components.items()
+}
 
 for label, energy_term in computed_energy_terms.items():
     print(f"{label}: {energy_term}")
@@ -241,58 +280,108 @@ from dolfinx.fem import assemble_scalar, form
 
 from ufl import div, grad
 
-def exact_bending_energy(v, w):
-    laplacian = lambda f : ufl.div(grad(f))
-    hessian = lambda f : ufl.grad(ufl.grad(f))
 
-    #assemble_scalar(form( ufl.dot(ufl.grad(v_exact), ufl.grad(v_exact)) * ufl.dx ))
-    return assemble_scalar( form( (D*nu/2 * ufl.inner(laplacian(w), laplacian(w)) + D*(1-nu)/2 * (ufl.inner(hessian(w), hessian(w))) )* ufl.dx) )
+def exact_bending_energy(v, w):
+    laplacian = lambda f: ufl.div(grad(f))
+    hessian = lambda f: ufl.grad(ufl.grad(f))
+
+    # assemble_scalar(form( ufl.dot(ufl.grad(v_exact), ufl.grad(v_exact)) * ufl.dx ))
+    return assemble_scalar(
+        form(
+            (
+                D * nu / 2 * ufl.inner(laplacian(w), laplacian(w))
+                + D * (1 - nu) / 2 * (ufl.inner(hessian(w), hessian(w)))
+            )
+            * ufl.dx
+        )
+    )
+
 
 def exact_membrane_energy(v, w):
-    laplacian = lambda f : div(grad(f))
-    hessian = lambda f : grad(grad(f))
-    return assemble_scalar( form( ( 
-        ((1+nu)/(2*E*thickness)) * 
-            ufl.inner(hessian(v), hessian(v)) 
-        - nu/(2*E*thickness) * 
-            ufl.inner(laplacian(v), laplacian(v)) ) * ufl.dx 
-            ) )
+    laplacian = lambda f: div(grad(f))
+    hessian = lambda f: grad(grad(f))
+    return assemble_scalar(
+        form(
+            (
+                ((1 + nu) / (2 * E * thickness)) * ufl.inner(hessian(v), hessian(v))
+                - nu / (2 * E * thickness) * ufl.inner(laplacian(v), laplacian(v))
+            )
+            * ufl.dx
+        )
+    )
+
 
 def exact_coupling_energy(v, w):
-    laplacian = lambda f : div(grad(f))
-    hessian = lambda f : grad(grad(f))
-    cof = lambda v : ufl.Identity(2)*laplacian(v) - hessian(v)
-    return assemble_scalar( form( 0.5* ufl.inner(cof(v), ufl.outer(grad(w),grad(w)) ) * ufl.dx ) )
+    laplacian = lambda f: div(grad(f))
+    hessian = lambda f: grad(grad(f))
+    cof = lambda v: ufl.Identity(2) * laplacian(v) - hessian(v)
+    return assemble_scalar(
+        form(0.5 * ufl.inner(cof(v), ufl.outer(grad(w), grad(w))) * ufl.dx)
+    )
 
-ex_bending_energy = exact_bending_energy(v_exact, w_exact)
-ex_membrane_energy = exact_membrane_energy(v_exact, w_exact)
-ex_coupl_energy = exact_coupling_energy(v_exact, w_exact)
 
-# compute model's energy on the exact solution
-total_energy_exact_solution = model.energy(state_exact)[0]
-bending_energy_exact_solution = model.energy(state_exact)[1]
-membrane_energy_exact_solution = model.energy(state_exact)[2]
-coupling_energy_exact_solution = model.energy(state_exact)[3]
+energy_coeff = E * (thickness**3) / (adim_coeff**2)
+pdb.set_trace()
+ex_bending_energy = 1 / energy_coeff * exact_bending_energy(v_exact, w_exact)
+ex_membrane_energy = 1 / energy_coeff * exact_membrane_energy(v_exact, w_exact)
+ex_coupl_energy = 1 / energy_coeff * exact_coupling_energy(v_exact, w_exact)
+ex_total_energy = ex_bending_energy + ex_membrane_energy + ex_coupl_energy
 
-for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
-    print(f"Exact {energy_type} energy: {energy_function(v_exact, w_exact)}")
-    
-for energy_type, energy_function in zip(["bending", "membrane", "coupling"], [exact_bending_energy, exact_membrane_energy, exact_coupling_energy]):
-    print(f"Energy of approx solution {energy_type} energy: {energy_function(v, w)}")
+# Compute exact and approximate energies
+energies_exact = {
+    "total": ex_total_energy,
+    "bending": ex_bending_energy,
+    "membrane": ex_membrane_energy,
+    "coupling": ex_coupl_energy,
+}
 
-for energy_type, energy_function in zip(["total", "bending", "membrane", "coupling"], [total_energy_exact_solution, bending_energy_exact_solution, membrane_energy_exact_solution, coupling_energy_exact_solution]):
-    print(f"Model energy of exact solution {energy_type} energy: {assemble_scalar(dolfinx.fem.form(energy_function))}")
-    
+energies_model = {
+    "total": model.energy(state)[0],
+    "bending": model.energy(state)[1],
+    "membrane": model.energy(state)[2],
+    "coupling": model.energy(state)[3],
+}
+
+energies_compute = {
+    "total": model.energy(state_exact)[0],
+    "bending": model.energy(state_exact)[1],
+    "membrane": model.energy(state_exact)[2],
+    "coupling": model.energy(state_exact)[3],
+}
+
+_logger.critical("\nError Analysis:")
+for energy_type in ["total", "bending", "membrane", "coupling"]:
+    # Exact and approximate energies
+    exact_energy = energies_exact[energy_type]
+    computed_energy = assemble_scalar(dolfinx.fem.form(energies_compute[energy_type]))
+    model_energy = assemble_scalar(dolfinx.fem.form(energies_model[energy_type]))
+
+    _logger.info(f"Exact {energy_type.capitalize()} Energy: {exact_energy}")
+    # _logger.info(
+    #     f"Compute {energy_type.capitalize()} Energy*: {computed_energy/energy_coeff}"
+    # )
+    # _logger.info(f"Compute {energy_type.capitalize()} Energy: {computed_energy}")
+    _logger.info(f"FEM {energy_type.capitalize()} Energy: {model_energy}")
+
+    # Calculate absolute and relative errors
+    absolute_error = abs(model_energy - exact_energy)
+    relative_error = (
+        absolute_error / abs(exact_energy) if exact_energy != 0 else float("inf")
+    )
+
+    _logger.info(f"{energy_type.capitalize()} Energy:")
+    _logger.info(f"  Absolute Error: {absolute_error:.1e}")
+    _logger.info(f"  Relative Error: {relative_error:.1%}\n")
+
+pdb.set_trace()
 # now compute penalties
 
-_penalisation = [model._dgw,
-                    model._dgv,
-                    model._dgc,
-                    model._bcv,
-                    model._bcw]
+_penalisation = [model._dgw, model._dgv, model._dgc, model._bcv, model._bcw]
 
 for label, penalisation_term in zip(["dgw", "dgv", "dgc", "bcv", "bcw"], _penalisation):
-    print(f"Penalisation term {label}: {assemble_scalar(dolfinx.fem.form(penalisation_term))}")
+    print(
+        f"Penalisation term {label}: {assemble_scalar(dolfinx.fem.form(penalisation_term))}"
+    )
 
 
 pdb.set_trace()
@@ -307,16 +396,17 @@ fig.savefig(f"{prefix}/mesh.png")
 # ------------------------------
 
 import pyvista
+
 # from pyvista.plotting.utilities import xvfb
 
 # xvfb.start_xvfb(wait=0.05)
 pyvista.OFF_SCREEN = True
 
 plotter = pyvista.Plotter(
-        title="Displacement",
-        window_size=[1200, 600],
-        shape=(2, 2),
-    )
+    title="Displacement",
+    window_size=[1200, 600],
+    shape=(2, 2),
+)
 
 
 scalar_plot = plot_scalar(v, plotter, subplot=(0, 0), V_sub=V_v, dofs=dofs_v)
@@ -340,12 +430,9 @@ _plt, data = plot_profile(
     points,
     None,
     subplot=(1, 2),
-    lineproperties={
-        "c": "k",
-        "label": f"$w(x)$"
-    },
+    lineproperties={"c": "k", "label": f"$w(x)$"},
     fig=fig,
-    subplotnumber=1
+    subplotnumber=1,
 )
 
 ax = _plt.gca()
@@ -356,14 +443,10 @@ _plt, data = plot_profile(
     points,
     None,
     subplot=(1, 2),
-    lineproperties={
-        "c": "r",
-        "label": f"$w_e(x)$",
-        "ls": "--"
-    },
+    lineproperties={"c": "r", "label": f"$w_e(x)$", "ls": "--"},
     fig=fig,
     ax=ax2,
-    subplotnumber=1
+    subplotnumber=1,
 )
 
 _plt, data = plot_profile(
@@ -371,12 +454,9 @@ _plt, data = plot_profile(
     points,
     None,
     subplot=(1, 2),
-    lineproperties={
-        "c": "k",
-        "label": f"$v(x)$"
-    },
+    lineproperties={"c": "k", "label": f"$v(x)$"},
     fig=fig,
-    subplotnumber=2
+    subplotnumber=2,
 )
 
 
@@ -385,13 +465,9 @@ _plt, data = plot_profile(
     points,
     None,
     subplot=(1, 2),
-    lineproperties={
-        "c": "r",
-        "label": f"$v_e(x)$",
-        "ls": "--"
-    },
+    lineproperties={"c": "r", "label": f"$v_e(x)$", "ls": "--"},
     fig=fig,
-    subplotnumber=2
+    subplotnumber=2,
 )
 
 _plt.legend()
