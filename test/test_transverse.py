@@ -64,7 +64,7 @@ def load_parameters(filename):
     with open(filename, "r") as f:
         params = yaml.safe_load(f)
 
-    params["model"]["thickness"] = 0.05
+    params["model"]["thickness"] = 0.1
     # params["model"]["E"] = 1e10
     params["model"]["E"] = 1
     params["model"]["alpha_penalty"] = 300
@@ -85,10 +85,15 @@ def test_model_computation(variant):
     params, signature = load_parameters(f"parameters.yaml")
 
     params = calculate_rescaling_factors(params)
+    c_nu = 1 / (12 * (1 - params["model"]["nu"] ** 2))
+
+    f_scale = (
+        np.sqrt(2 * c_nu**3) * params["geometry"]["radius"] ** 4 / params["model"]["E"]
+    )
 
     _logger.info("Model parameters")
     _logger.info(params["model"])
-    pdb.set_trace()
+
     # params = load_parameters(f"{model}_params.yml")
     # 2. Construct or load mesh
     prefix = os.path.join(outdir, "validation_transverse_load")
@@ -116,14 +121,15 @@ def test_model_computation(variant):
 
     f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 
-    transverse_load = lambda x: _transverse_load_exact_solution(x, params)
+    transverse_load = lambda x: _transverse_load_exact_solution(
+        x, params, adimensional=True
+    )
 
     f.interpolate(transverse_load)
 
     state = {"v": v, "w": w}
 
-    adim_coeff = params["geometry"]["radius"] / params["model"]["thickness"]
-    _W_ext = adim_coeff**4 * f * w * dx
+    _W_ext = f_scale * f * w * dx
 
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
 
@@ -183,6 +189,7 @@ def test_model_computation(variant):
     )
 
     solver.solve()
+
     # 9. Postprocess (if any)
     # pdb.set_trace()
     # 10. Compute absolute and relative error with respect to the exact solution
@@ -190,6 +197,7 @@ def test_model_computation(variant):
     abs_error, rel_error = postprocess(
         state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
     )
+
     # # 11. Display error results
     _logger.critical(
         f"Model: {model}, Absolute Error: {abs_error:.2e}, Relative Error: {rel_error:.1%}"
@@ -198,39 +206,53 @@ def test_model_computation(variant):
     # 12. Assert that the relative error is within an acceptable range
     rel_tol = float(params["solvers"]["nonlinear"]["snes"]["snes_rtol"])
 
-    # assert (
-    #     rel_error < rel_tol
-    # ), f"Relative error too high ({rel_error:.2e}>{rel_tol:.2e}) for {model} model."
-
 
 def postprocess(state, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-        energy_components = {
+        energies_model = {
+            "total": model.energy(state)[0],
             "bending": model.energy(state)[1],
             "membrane": model.energy(state)[2],
             "coupling": model.energy(state)[3],
-            "external_work": -model.W_ext,
+            # "external_work": -model.W_ext,
         }
 
-        energy_terms = compute_energy_terms(energy_components, mesh.comm)
+        energy_terms = compute_energy_terms(energies_model, mesh.comm)
 
-        exact_energy_transverse = comm.allreduce(
-            dolfinx.fem.assemble_scalar(
-                dolfinx.fem.form(model.energy(exact_solution)[0])
-            ),
-            op=MPI.SUM,
-        )
+        # Compute energies for the exact solution
+        exact_energies = {}
 
-        # print(energy_terms)
-        _logger.info(f"Exact energy (transverse): {exact_energy_transverse}")
+        # the exact solution is dimensional, to perform energy comparison
+        # we need to convert it to adimensional
 
-        _logger.info(
-            yaml.dump(params["model"], sort_keys=True, default_flow_style=False)
-        )
+        _logger.info("\nEnergy Analysis:")
+        for i, energy_name in enumerate(["total", "bending", "membrane", "coupling"]):
+            exact_energy = dolfinx.fem.assemble_scalar(
+                dolfinx.fem.form(model.energy(exact_solution)[i])
+            )
+            _exact_energy = mesh.comm.allreduce(exact_energy, op=MPI.SUM)
+            exact_energies[energy_name] = _exact_energy
+            _logger.info(f"Exact {energy_name.capitalize()} Energy: {_exact_energy}")
 
-        abs_error, rel_error = print_energy_analysis(
-            energy_terms, exact_energy_transverse
-        )
+        pdb.set_trace()
+
+        # for energy_name, approx_energy in energy_terms.items():
+        #     if energy_name in exact_energies:
+        #         exact_energy = exact_energies[energy_name]
+
+        #         # Calculate absolute and relative errors
+        #         absolute_error = abs(approx_energy - exact_energy)
+        #         relative_error = (
+        #             absolute_error / abs(exact_energy)
+        #             if exact_energy != 0
+        #             else float("inf")
+        #         )
+
+        #         _logger.info(f"{energy_name.capitalize()} Energy:")
+        #         _logger.info(f"  Exact Energy: {exact_energy:.6e}")
+        #         _logger.info(f"  Approximate Energy: {approx_energy:.6e}")
+        #         _logger.info(f"  Absolute Error: {absolute_error:.6e}")
+        #         _logger.info(f"  Relative Error: {relative_error:.6%}\n")
 
         _penalisation = [model._dgw, model._dgv, model._dgc, model._bcv, model._bcw]
 
@@ -261,7 +283,7 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
 
         # write_to_output(prefix, q, extra_fields)
 
-        return abs_error, rel_error
+        # return abs_error, rel_error
 
 
 if __name__ == "__main__":
