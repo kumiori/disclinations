@@ -21,7 +21,6 @@ from disclinations.models import (
     NonlinearPlateFVK_brenner,
     NonlinearPlateFVK_carstensen,
     calculate_rescaling_factors,
-    compute_energy_terms,
     _transverse_load_exact_solution,
     initialise_exact_solution_compatible_transverse,
 )
@@ -34,10 +33,8 @@ from disclinations.utils import (
     write_to_output,
 )
 from disclinations.utils import _logger
-from disclinations.utils.la import compute_disclination_loads
 from dolfinx import fem
 from dolfinx.common import list_timings
-from dolfinx.fem import Constant, dirichletbc, locate_dofs_topological
 from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
 from petsc4py import PETSc
@@ -52,10 +49,8 @@ outdir = "output"
 AIRY = 0
 TRANSVERSE = 1
 
-from disclinations.models import create_disclinations
 from disclinations.utils import (
     homogeneous_dirichlet_bc_H20,
-    #  load_parameters,
     save_params_to_yaml,
 )
 
@@ -190,39 +185,18 @@ def test_model_computation(variant):
     solver.solve()
 
     # 9. Postprocess (if any)
-    # pdb.set_trace()
     # 10. Compute absolute and relative error with respect to the exact solution
 
     abs_error, rel_error, penalisation = postprocess(
         state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
     )
     # # 11. Display error results
-    # _logger.critical(
-    #     f"Model: {model}, Absolute Error: {abs_error:.0e}, Relative Error: {rel_error:.1%}"
-    # )
 
     # 12. Assert that the relative error is within an acceptable range
     sanity_check(abs_error, rel_error, penalisation, params)
 
 
-def assemble_penalisation_terms(model):
-    # Define and compute penalisation terms
-    _penalisation_terms = {
-        "dgw": model._dgw,
-        "dgv": model._dgv,
-        "dgc": model._dgc,
-        "bcv": model._bcv,
-        "bcw": model._bcw,
-    }
-
-    # Assemble each penalisation term and log its value
-    assembled_penalisation_terms = {}
-    for label, term in _penalisation_terms.items():
-        assembled_value = dolfinx.fem.assemble_scalar(dolfinx.fem.form(term))
-        assembled_penalisation_terms[label] = assembled_value
-        _logger.critical(f"Penalisation term {label}: {assembled_value:.2e}")
-
-    return assembled_penalisation_terms
+from disclinations.models import assemble_penalisation_terms
 
 
 def sanity_check(abs_errors, rel_errors, penalization_terms, params):
