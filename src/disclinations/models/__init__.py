@@ -559,10 +559,9 @@ def initialise_exact_solution_compatible_transverse(Q, params, adimensional=Fals
     return exact
 
 
-def initialise_exact_solution_dipole(Q, params):
+def initialise_exact_solution_dipole(Q, params, adimensional=False):
     """
     Initialize the exact solutions for v and w using the provided parameters.
-    TODO: Do we have an exact solution for the dipole case?
 
     Args:
     - Q: The function space.
@@ -572,7 +571,11 @@ def initialise_exact_solution_dipole(Q, params):
     - v_exact: Exact solution for v.
     - w_exact: Exact solution for w.
     """
-    v_scale = params["model"]["v_scale"]
+    v_scale = params["model"]["E"] * params["model"]["thickness"]
+
+    if adimensional:
+        v_scale /= params["model"]["v_scale"]
+        # w_scale /= params["model"]["w_scale"]
 
     q_exact = dolfinx.fem.Function(Q)
     v_exact, w_exact = q_exact.split()
