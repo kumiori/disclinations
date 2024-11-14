@@ -13,6 +13,8 @@ from petsc4py import PETSc
 
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 
+from disclinations.utils import _logger
+
 
 def compute_cell_contributions(V, points):
     # Initialize empty arrays to store cell indices and basis values
@@ -29,22 +31,34 @@ def compute_cell_contributions(V, points):
 
     # Concatenate the lists to create NumPy arrays
     all_cells = np.concatenate(all_cells)
+    all_cells = [int(cell) for cell in all_cells]
+
     all_basis_values = np.concatenate(all_basis_values)
+    _logger.info(f"All cells {all_cells}")
 
     return all_cells, all_basis_values
+
 
 def compute_cell_contribution_point(V, points):
     # Determine what process owns a point and what cells it lies within
     mesh = V.mesh
     _, _, owning_points, cells = dolfinx.cpp.geometry.determine_point_ownership(
-        mesh._cpp_object, points, 1e-6)
+        mesh._cpp_object, points, 1e-6
+    )
     owning_points = np.asarray(owning_points).reshape(-1, 3)
 
     # Pull owning points back to reference cell
     mesh_nodes = mesh.geometry.x
-    cmap = mesh.geometry.cmaps[0]
-    ref_x = np.zeros((len(cells), mesh.geometry.dim),
-                     dtype=mesh.geometry.x.dtype)
+    if hasattr(mesh.geometry, "cmap"):
+        cmap = mesh.geometry.cmap
+    elif (
+        hasattr(mesh.geometry, "cmaps")
+        and isinstance(mesh.geometry.cmaps, list)
+        and len(mesh.geometry.cmaps) > 0
+    ):
+        cmap = mesh.geometry.cmaps[0]
+
+    ref_x = np.zeros((len(cells), mesh.geometry.dim), dtype=mesh.geometry.x.dtype)
     for i, (point, cell) in enumerate(zip(owning_points, cells)):
         geom_dofs = mesh.geometry.dofmap[cell]
         ref_x[i] = cmap.pull_back(point.reshape(-1, 3), mesh_nodes[geom_dofs])
@@ -58,10 +72,9 @@ def compute_cell_contribution_point(V, points):
         values = expr.eval(mesh, np.asarray(cells, dtype=np.int32))
 
         # Strip out basis function values per cell
-        basis_values = values[:num_dofs:num_dofs*len(cells)]
+        basis_values = values[: num_dofs : num_dofs * len(cells)]
     else:
-        basis_values = np.zeros(
-            (0, num_dofs), dtype=dolfinx.default_scalar_type)
+        basis_values = np.zeros((0, num_dofs), dtype=dolfinx.default_scalar_type)
     return cells, basis_values
 
 
@@ -70,10 +83,10 @@ domain = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, N, N)
 # domain = dolfinx.mesh.create_unit_square(MPI.COMM_WORLD, N, N)
 
 # Create the mesh of the specimen with given dimensions
-geom_type = 'circle'
+geom_type = "circle"
 tdim = 2
 D = 1
-gmsh_model, tdim = mesh_circle_gmshapi(geom_type, D/2, 1/N, tdim)
+gmsh_model, tdim = mesh_circle_gmshapi(geom_type, D / 2, 1 / N, tdim)
 
 # Get mesh and meshtags
 mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, MPI.COMM_WORLD, 0, tdim)
@@ -90,14 +103,19 @@ facets = dolfinx.mesh.exterior_facet_indices(domain.topology)
 
 if domain.comm.rank == 0:
     point = np.array([[0.68, 0.36, 0]], dtype=domain.geometry.x.dtype)
-    
-    points = [np.array([[-0.2, 0.1, 0]], dtype=domain.geometry.x.dtype),
-              np.array([[0.2, -0.1, 0]], dtype=domain.geometry.x.dtype)]
+
+    points = [
+        np.array([[-0.2, 0.1, 0]], dtype=domain.geometry.x.dtype),
+        np.array([[0.2, -0.1, 0]], dtype=domain.geometry.x.dtype),
+    ]
     signs = [-1, 1]
 else:
     point = np.zeros((0, 3), dtype=domain.geometry.x.dtype)
-    points = [np.zeros((0, 3), dtype=domain.geometry.x.dtype),
-              np.zeros((0, 3), dtype=domain.geometry.x.dtype)]
+    points = [
+        np.zeros((0, 3), dtype=domain.geometry.x.dtype),
+        np.zeros((0, 3), dtype=domain.geometry.x.dtype),
+    ]
+    signs = [0, 0]
 
 
 u = ufl.TrialFunction(V)
@@ -107,7 +125,7 @@ a_compiled = dolfinx.fem.form(a)
 
 
 dofs = dolfinx.fem.locate_dofs_topological(V, 1, facets)
-u_bc = dolfinx.fem.Constant(domain, 0.)
+u_bc = dolfinx.fem.Constant(domain, 0.0)
 bc = dolfinx.fem.dirichletbc(u_bc, dofs, V)
 
 b = dolfinx.fem.Function(V)
@@ -122,7 +140,6 @@ dolfinx.fem.petsc.apply_lifting(b.vector, [a_compiled], [[bc]])
 b.x.scatter_reverse(dolfinx.la.InsertMode.add)
 dolfinx.fem.petsc.set_bc(b.vector, [bc])
 b.x.scatter_forward()
-__import__('pdb').set_trace()
 
 A = dolfinx.fem.petsc.assemble_matrix(a_compiled, bcs=[bc])
 A.assemble()
@@ -140,29 +157,33 @@ uh.x.scatter_forward()
 
 with dolfinx.io.VTXWriter(domain.comm, "uh.bp", [uh], engine="BP4") as bp:
     bp.write(0.0)
-    
+
 
 from dolfinx import plot
 
-outdir = 'output'
+outdir = "output"
 
 try:
     import pyvista
+
+    pyvista.start_xvfb(wait=0.1)
+
     pyvista.OFF_SCREEN = True
     cells, types, x = plot.vtk_mesh(V)
     grid = pyvista.UnstructuredGrid(cells, types, x)
     grid.point_data["u"] = uh.x.array.real
     grid.set_active_scalars("u")
     plotter = pyvista.Plotter()
-    # plotter.add_mesh(grid, show_edges=True)
+    plotter.add_mesh(grid, show_edges=True)
     warped = grid.warp_by_scalar()
     plotter.add_mesh(warped, show_edges=True)
-    
+
     if pyvista.OFF_SCREEN:
-        pyvista.start_xvfb(wait=0.1)
         plotter.screenshot(f"{outdir}/point_source.png")
     else:
+        pyvista.start_xvfb(wait=0.1)
         plotter.show()
+
 except ModuleNotFoundError:
     print("'pyvista' is required to visualise the solution")
     print("Install 'pyvista' with pip: 'python3 -m pip install pyvista'")
