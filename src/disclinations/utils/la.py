@@ -103,3 +103,48 @@ def compute_disclination_loads(points, signs, V, V_sub_to_V_dofs=None, V_sub=Non
         b.x.array[dofs] += sign * basis_value
 
     return b
+
+
+from dolfinx import fem
+from ufl import dx, grad, div, inner, TrialFunction, TestFunction
+
+
+def compute_norms(v, w, mesh):
+    norms = {}
+
+    # Compute L2 norms for v and w
+    v_L2 = fem.assemble_scalar(fem.form(inner(v, v) * dx))
+    w_L2 = fem.assemble_scalar(fem.form(inner(w, w) * dx))
+    norms["v_L2"] = mesh.comm.allreduce(np.sqrt(v_L2), op=MPI.SUM)
+    norms["w_L2"] = mesh.comm.allreduce(np.sqrt(w_L2), op=MPI.SUM)
+
+    # Compute H1 norms for v and w (L2 norm + gradient)
+    v_H1 = fem.assemble_scalar(
+        fem.form(inner(v, v) * dx + inner(grad(v), grad(v)) * dx)
+    )
+    w_H1 = fem.assemble_scalar(
+        fem.form(inner(w, w) * dx + inner(grad(w), grad(w)) * dx)
+    )
+    norms["v_H1"] = mesh.comm.allreduce(np.sqrt(v_H1), op=MPI.SUM)
+    norms["w_H1"] = mesh.comm.allreduce(np.sqrt(w_H1), op=MPI.SUM)
+
+    # Compute H2 norms for v and w (L2 norm + gradient + Hessian)
+    # Define the Hessian as grad(grad(u)) for second derivatives
+    v_H2 = fem.assemble_scalar(
+        fem.form(
+            inner(v, v) * dx
+            + inner(grad(v), grad(v)) * dx
+            + inner(div(grad(v)), div(grad(v))) * dx
+        )
+    )
+    w_H2 = fem.assemble_scalar(
+        fem.form(
+            inner(w, w) * dx
+            + inner(grad(w), grad(w)) * dx
+            + inner(div(grad(w)), div(grad(w))) * dx
+        )
+    )
+    norms["v_H2"] = mesh.comm.allreduce(np.sqrt(v_H2), op=MPI.SUM)
+    norms["w_H2"] = mesh.comm.allreduce(np.sqrt(w_H2), op=MPI.SUM)
+
+    return norms
