@@ -60,7 +60,7 @@ def load_parameters(filename):
     with open(filename, "r") as f:
         params = yaml.safe_load(f)
 
-    params["model"]["thickness"] = 0.01
+    params["model"]["thickness"] = 0.1
     params["model"]["E"] = 1
     # params["model"]["alpha_penalty"] = 300
 
@@ -80,12 +80,11 @@ def test_model_computation(variant):
     params, signature = load_parameters(f"parameters.yaml")
 
     params = calculate_rescaling_factors(params)
-    c_nu = 1 / (12 * (1 - params["model"]["nu"] ** 2))
+    # c_nu = 1 / (12 * (1 - params["model"]["nu"] ** 2))
 
     _logger.info("Model parameters")
     _logger.info(params["model"])
 
-    # params = load_parameters(f"{model}_params.yml")
     # 2. Construct or load mesh
     prefix = os.path.join(outdir, "validation_dipole")
     if comm.rank == 0:
@@ -112,15 +111,11 @@ def test_model_computation(variant):
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 
-    # disclinations, parameters = create_disclinations(
-    #     mesh, parameters, points=points, signs=signs
-    # )
-
     # Point sources
     if mesh.comm.rank == 0:
         points = [
-            np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
-            np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype),
+            np.array([[-0.3, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+            np.array([[0.3, 0.0, 0]], dtype=mesh.geometry.x.dtype),
         ]
         disclination_power_list = [-1, 1]
     else:
@@ -140,7 +135,7 @@ def test_model_computation(variant):
         V_sub_to_V_dofs=Q_v_to_Q_dofs,
         V_sub=Q_v,
     )
-
+    α_adim = params["geometry"]["radius"] / params["model"]["thickness"]
     # 5. Initialize exact solutions (for comparison later)
     exact_solution = initialise_exact_solution_dipole(Q, params, adimensional=True)
 
@@ -196,7 +191,7 @@ def test_model_computation(variant):
         bcs=boundary_conditions,
         petsc_options=params["solvers"]["nonlinear"]["snes"],
         prefix="plate_fvk_dipole",
-        b0=b.vector,
+        b0=α_adim**2 * b.vector,
         monitor=monitor,
     )
 
@@ -269,7 +264,6 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         # the exact solution is adimensional, to perform energy comparison
 
         _logger.info("\nEnergy Analysis:")
-
         for i, energy_name in enumerate(["total", "bending", "membrane", "coupling"]):
             exact_energy = dolfinx.fem.assemble_scalar(
                 dolfinx.fem.form(model.energy(exact_solution)[i])
@@ -295,10 +289,11 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
 
             # Log detailed energy information
             _logger.info(f"{energy_name.capitalize()} Energy Analysis:")
-            _logger.info(f"  Exact Energy: {_exact_energy:.2e}")
-            _logger.info(f"  FEM Energy: {_fem_energy:.2e}")
+            _logger.info(f"  Exact Energy: {_exact_energy:.5e}")
+            _logger.info(f"  FEM Energy: {_fem_energy:.5e}")
             _logger.info(f"  Absolute Error: {abs_error:.0e}")
             _logger.info(f"  Relative Error: {rel_error:.2%}\n")
+        pdb.set_trace()
 
         penalization_terms = assemble_penalisation_terms(model)
 
