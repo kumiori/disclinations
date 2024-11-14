@@ -58,6 +58,52 @@ from disclinations.utils import (
 )
 
 
+def snes_solver_stats(snes):
+
+    snes_its = snes.getIterationNumber()
+    snes_reason = snes.getConvergedReason()
+    snes_residual_norm = snes.getFunctionNorm()
+    snes_function_evals = snes.getFunctionEvaluations()
+
+    # Retrieve KSP (linear solver inside SNES) information
+    ksp = snes.getKSP()
+    ksp_its = ksp.getIterationNumber()
+    ksp_reason = ksp.getConvergedReason()
+    ksp_residual_norm = ksp.getResidualNorm()
+    ksp_type = ksp.type
+    # ksp_total_its = ksp.getTotalIterations()
+
+    # Print or log the solver statistics for analysis
+    _logger.debug(f"\nSNES Solver Information:")
+    _logger.debug(f"  SNES Iterations: {snes_its}")
+    _logger.debug(
+        f"  SNES Convergence Reason: {snes_reason} ({snes.getConvergedReason()})"
+    )
+    _logger.debug(f"  SNES Final Residual Norm: {snes_residual_norm}")
+    _logger.debug(f"  SNES Function Evaluations: {snes_function_evals}")
+
+    _logger.debug(f"\nKSP Solver Information (within SNES):")
+    _logger.debug(f"  KSP Iterations (last SNES iteration): {ksp_its}")
+    _logger.debug(
+        f"  KSP Convergence Reason: {ksp_reason} ({ksp.getConvergedReason()})"
+    )
+    _logger.debug(f"  KSP Final Residual Norm: {ksp_residual_norm}")
+    # _logger.info(f"  KSP Total Iterations: {ksp_total_its}")
+
+    # Return solver statistics as a dictionary for further use
+    solver_stats = {
+        "snes_iterations": snes_its,
+        "snes_convergence_reason": snes_reason,
+        "snes_final_residual_norm": snes_residual_norm,
+        "snes_function_evaluations": snes_function_evals,
+        "ksp_iterations_last": ksp_its,
+        "ksp_convergence_reason": ksp_reason,
+        "ksp_final_residual_norm": ksp_residual_norm,
+        "ksp_type": ksp_type,
+    }
+    return solver_stats
+
+
 def load_parameters(filename):
     with open(filename, "r") as f:
         params = yaml.safe_load(f)
@@ -205,6 +251,7 @@ def parametric_computation(variant, mesh, params, experiment_folder):
     )
 
     solver.solve()
+    solver_stats = snes_solver_stats(solver.solver)
 
     # 9. Postprocess (if any)
     # 10. Compute absolute and relative error with respect to the exact solution
@@ -217,7 +264,7 @@ def parametric_computation(variant, mesh, params, experiment_folder):
     # 12. Assert that the relative error is within an acceptable range
     sanity_check(abs_error, rel_error, penalisation, params)
 
-    return energies, norms, abs_error, rel_error, penalisation
+    return energies, norms, abs_error, rel_error, penalisation, solver_stats
 
 
 from disclinations.models import assemble_penalisation_terms
@@ -365,7 +412,7 @@ if __name__ == "__main__":
     mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
 
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
-        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=30)):
+        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=num_runs)):
 
             parameters["model"]["α_adim"] = np.nan
             parameters["model"]["γ_adim"] = 0.0
@@ -373,22 +420,14 @@ if __name__ == "__main__":
                 parameters["model"]["thickness"] = parameters["geometry"]["radius"] / a
                 signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
 
-            energies, norms, abs_errors, rel_errors, penalisation = (
+            energies, norms, abs_errors, rel_errors, penalisation, solver_stats = (
                 parametric_computation("variational", mesh, parameters, prefix)
             )
             run_data = {
                 "signature": signature,
                 "param_value": a,
-                "energy_membrane": energies["membrane"],
-                "energy_bending": energies["bending"],
-                "energy_coupling": energies["coupling"],
-                "energy_total": energies["total"],
-                "norm_v_L2": norms["v_L2"],
-                "norm_v_H1": norms["v_H1"],
-                "norm_v_H2": norms["v_H2"],
-                "norm_w_L2": norms["w_L2"],
-                "norm_w_H1": norms["w_H1"],
-                "norm_w_H2": norms["w_H2"],
+                **energies,
+                **norms,
                 "abs_error_membrane": abs_errors[0],
                 "abs_error_bending": abs_errors[1],
                 "abs_error_coupling": abs_errors[2],
@@ -396,15 +435,15 @@ if __name__ == "__main__":
                 "rel_error_bending": rel_errors[1],
                 "rel_error_coupling": rel_errors[2],
                 **penalisation,  # Unpack penalization terms into individual columns
+                **solver_stats,  # Unpack solver statistics into individual columns
             }
             _experimental_data.append(run_data)
 
-            pdb.set_trace()
         # test_model_computation("brenner")
         # test_model_computation("carstensen")
 
     df = pd.DataFrame(_experimental_data)
-
+    print(df)
     # mem_after = memory_usage()
     # max_memory = max(max_memory, mem_after)
     # logging.info(f"Run Memory Usage (MB) - Before: {mem_before}, After: {mem_after}")
