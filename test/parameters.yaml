@@ -10,14 +10,15 @@ geometry:
 
 #  === Material === #
 model:
-    E: 1.
-    thickness: 1
+    E: 1
+    thickness: .001
     nu: 0.15
     model_dimension: 2
     model_type: "2D"
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"
     order: 3
-    alpha_penalty: 2000.
+    alpha_penalty: 2000
+    higher_regularity: False
 # === Solver === #
 solvers:
     nonlinear:
