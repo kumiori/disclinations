@@ -60,7 +60,7 @@ def load_parameters(filename):
     with open(filename, "r") as f:
         params = yaml.safe_load(f)
 
-    params["model"]["thickness"] = 0.1
+    params["model"]["thickness"] = 0.001
     params["model"]["E"] = 1
     # params["model"]["alpha_penalty"] = 300
 
@@ -293,7 +293,6 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
             _logger.info(f"  FEM Energy: {_fem_energy:.5e}")
             _logger.info(f"  Absolute Error: {abs_error:.0e}")
             _logger.info(f"  Relative Error: {rel_error:.2%}\n")
-        pdb.set_trace()
 
         penalization_terms = assemble_penalisation_terms(model)
 
