@@ -32,6 +32,7 @@ from disclinations.utils import (
     table_timing_data,
     write_to_output,
 )
+from disclinations.utils.la import compute_norms
 from disclinations.utils.la import compute_disclination_loads
 from disclinations.utils import _logger
 from dolfinx import fem
@@ -40,6 +41,7 @@ from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
 from petsc4py import PETSc
 from disclinations.utils import create_or_load_circle_mesh, print_energy_analysis
+import pandas as pd
 
 comm = MPI.COMM_WORLD
 from ufl import CellDiameter, FacetNormal, dx
@@ -56,11 +58,57 @@ from disclinations.utils import (
 )
 
 
+def snes_solver_stats(snes):
+
+    snes_its = snes.getIterationNumber()
+    snes_reason = snes.getConvergedReason()
+    snes_residual_norm = snes.getFunctionNorm()
+    snes_function_evals = snes.getFunctionEvaluations()
+
+    # Retrieve KSP (linear solver inside SNES) information
+    ksp = snes.getKSP()
+    ksp_its = ksp.getIterationNumber()
+    ksp_reason = ksp.getConvergedReason()
+    ksp_residual_norm = ksp.getResidualNorm()
+    ksp_type = ksp.type
+    # ksp_total_its = ksp.getTotalIterations()
+
+    # Print or log the solver statistics for analysis
+    _logger.debug(f"\nSNES Solver Information:")
+    _logger.debug(f"  SNES Iterations: {snes_its}")
+    _logger.debug(
+        f"  SNES Convergence Reason: {snes_reason} ({snes.getConvergedReason()})"
+    )
+    _logger.debug(f"  SNES Final Residual Norm: {snes_residual_norm}")
+    _logger.debug(f"  SNES Function Evaluations: {snes_function_evals}")
+
+    _logger.debug(f"\nKSP Solver Information (within SNES):")
+    _logger.debug(f"  KSP Iterations (last SNES iteration): {ksp_its}")
+    _logger.debug(
+        f"  KSP Convergence Reason: {ksp_reason} ({ksp.getConvergedReason()})"
+    )
+    _logger.debug(f"  KSP Final Residual Norm: {ksp_residual_norm}")
+    # _logger.info(f"  KSP Total Iterations: {ksp_total_its}")
+
+    # Return solver statistics as a dictionary for further use
+    solver_stats = {
+        "snes_iterations": snes_its,
+        "snes_convergence_reason": snes_reason,
+        "snes_final_residual_norm": snes_residual_norm,
+        "snes_function_evaluations": snes_function_evals,
+        "ksp_iterations_last": ksp_its,
+        "ksp_convergence_reason": ksp_reason,
+        "ksp_final_residual_norm": ksp_residual_norm,
+        "ksp_type": ksp_type,
+    }
+    return solver_stats
+
+
 def load_parameters(filename):
     with open(filename, "r") as f:
         params = yaml.safe_load(f)
 
-    params["model"]["thickness"] = 0.001
+    params["model"]["thickness"] = 0.01
     params["model"]["E"] = 1
     # params["model"]["alpha_penalty"] = 300
 
@@ -69,15 +117,18 @@ def load_parameters(filename):
     return params, signature
 
 
-@pytest.mark.parametrize("variant", models)
-def test_model_computation(variant):
+# @pytest.mark.parametrize("variant", models)
+def parametric_computation(variant, mesh, params, experiment_folder):
     """
     Parametric unit test for testing three different models:
     variational, brenner, and carstensen.
     """
+    prefix = os.path.join(experiment_dir, signature)
+    if comm.rank == 0:
+        Path(prefix).mkdir(parents=True, exist_ok=True)
 
     # 1. Load parameters from YML file
-    params, signature = load_parameters(f"parameters.yaml")
+    # params, signature = load_parameters(f"parameters.yaml")
 
     params = calculate_rescaling_factors(params)
     # c_nu = 1 / (12 * (1 - params["model"]["nu"] ** 2))
@@ -85,12 +136,9 @@ def test_model_computation(variant):
     _logger.info("Model parameters")
     _logger.info(params["model"])
 
+    # params = load_parameters(f"{model}_params.yml")
     # 2. Construct or load mesh
-    prefix = os.path.join(outdir, "validation_dipole")
-    if comm.rank == 0:
-        Path(prefix).mkdir(parents=True, exist_ok=True)
-
-    mesh, mts, fts = create_or_load_circle_mesh(params, prefix=prefix)
+    # mesh, mts, fts = create_or_load_circle_mesh(params, prefix=prefix)
 
     # 3. Construct FEM approximation
     # Function spaces
@@ -111,11 +159,15 @@ def test_model_computation(variant):
     test_v, test_w = ufl.TestFunctions(Q)[AIRY], ufl.TestFunctions(Q)[TRANSVERSE]
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 
+    # disclinations, parameters = create_disclinations(
+    #     mesh, parameters, points=points, signs=signs
+    # )
+
     # Point sources
     if mesh.comm.rank == 0:
         points = [
-            np.array([[-0.3, 0.0, 0]], dtype=mesh.geometry.x.dtype),
-            np.array([[0.3, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+            np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+            np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype),
         ]
         disclination_power_list = [-1, 1]
     else:
@@ -128,6 +180,7 @@ def test_model_computation(variant):
     disclinations, params = create_disclinations(
         mesh, params, points=points, signs=disclination_power_list
     )
+
     b = compute_disclination_loads(
         disclinations,
         disclination_power_list,
@@ -135,7 +188,9 @@ def test_model_computation(variant):
         V_sub_to_V_dofs=Q_v_to_Q_dofs,
         V_sub=Q_v,
     )
-    α_adim = params["geometry"]["radius"] / params["model"]["thickness"]
+    # α_adim = params["geometry"]["radius"] / params["model"]["thickness"]
+    α_adim = params["model"]["α_adim"]
+
     # 5. Initialize exact solutions (for comparison later)
     exact_solution = initialise_exact_solution_dipole(Q, params, adimensional=True)
 
@@ -178,7 +233,7 @@ def test_model_computation(variant):
             state, test_v, test_w
         )
 
-    save_params_to_yaml(params, os.path.join(prefix, "parameters.yml"))
+    save_params_to_yaml(params, os.path.join(prefix, "parameters.yaml"))
 
     if MPI.COMM_WORLD.rank == 0:
         with open(f"{prefix}/signature.md5", "w") as f:
@@ -196,17 +251,20 @@ def test_model_computation(variant):
     )
 
     solver.solve()
+    solver_stats = snes_solver_stats(solver.solver)
 
     # 9. Postprocess (if any)
     # 10. Compute absolute and relative error with respect to the exact solution
 
-    abs_error, rel_error, penalisation = postprocess(
+    energies, norms, abs_error, rel_error, penalisation = postprocess(
         state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
     )
     # # 11. Display error results
 
     # 12. Assert that the relative error is within an acceptable range
     sanity_check(abs_error, rel_error, penalisation, params)
+
+    return energies, norms, abs_error, rel_error, penalisation, solver_stats
 
 
 from disclinations.models import assemble_penalisation_terms
@@ -264,6 +322,7 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         # the exact solution is adimensional, to perform energy comparison
 
         _logger.info("\nEnergy Analysis:")
+
         for i, energy_name in enumerate(["total", "bending", "membrane", "coupling"]):
             exact_energy = dolfinx.fem.assemble_scalar(
                 dolfinx.fem.form(model.energy(exact_solution)[i])
@@ -289,14 +348,16 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
 
             # Log detailed energy information
             _logger.info(f"{energy_name.capitalize()} Energy Analysis:")
-            _logger.info(f"  Exact Energy: {_exact_energy:.5e}")
-            _logger.info(f"  FEM Energy: {_fem_energy:.5e}")
+            _logger.info(f"  Exact Energy: {_exact_energy:.2e}")
+            _logger.info(f"  FEM Energy: {_fem_energy:.2e}")
             _logger.info(f"  Absolute Error: {abs_error:.0e}")
             _logger.info(f"  Relative Error: {rel_error:.2%}\n")
 
         penalization_terms = assemble_penalisation_terms(model)
 
         _v_exact, _w_exact = exact_solution["v"], exact_solution["w"]
+
+        norms = compute_norms(state["v"], state["w"], mesh)
 
         extra_fields = [
             {"field": _v_exact, "name": "v_exact"},
@@ -320,22 +381,69 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         rel_error_array = np.array(list(rel_errors.values()))
 
         # Optionally, return the computed values for further use
-        return abs_error_array, rel_error_array, penalization_terms
+        return fem_energies, norms, abs_error_array, rel_error_array, penalization_terms
 
+
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
+import copy
+from disclinations.utils import update_parameters
 
 if __name__ == "__main__":
     logging.basicConfig(level=logging.INFO)
 
+    _experimental_data = []
+    outdir = "output"
+    prefix = outdir
+    # _simulation_data = []
+
     max_memory = 0
     mem_before = memory_usage()
 
-    # pytest.main()
+    # with pkg_resources.path("disclinations.test", "parameters.yml") as f:
+    parameters, _ = load_parameters("parameters.yaml")
+
+    base_parameters = copy.deepcopy(parameters)
+    base_signature = hashlib.md5(str(base_parameters).encode("utf-8")).hexdigest()
+
+    series = base_signature[0::6]
+    experiment_dir = os.path.join(prefix, series)
+    num_runs = 3
+
+    mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
 
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
-        test_model_computation("variational")
+        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=num_runs)):
+
+            parameters["model"]["α_adim"] = np.nan
+            parameters["model"]["γ_adim"] = 0.0
+            if changed := update_parameters(parameters, "α_adim", float(a)):
+                parameters["model"]["thickness"] = parameters["geometry"]["radius"] / a
+                signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
+
+            energies, norms, abs_errors, rel_errors, penalisation, solver_stats = (
+                parametric_computation("variational", mesh, parameters, prefix)
+            )
+            run_data = {
+                "signature": signature,
+                "param_value": a,
+                **energies,
+                **norms,
+                "abs_error_membrane": abs_errors[0],
+                "abs_error_bending": abs_errors[1],
+                "abs_error_coupling": abs_errors[2],
+                "rel_error_membrane": rel_errors[0],
+                "rel_error_bending": rel_errors[1],
+                "rel_error_coupling": rel_errors[2],
+                **penalisation,  # Unpack penalization terms into individual columns
+                **solver_stats,  # Unpack solver statistics into individual columns
+            }
+            _experimental_data.append(run_data)
+
         # test_model_computation("brenner")
         # test_model_computation("carstensen")
 
+    df = pd.DataFrame(_experimental_data)
+    print(df)
     # mem_after = memory_usage()
     # max_memory = max(max_memory, mem_after)
     # logging.info(f"Run Memory Usage (MB) - Before: {mem_before}, After: {mem_after}")

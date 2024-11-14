@@ -37,11 +37,10 @@ loading:
   signs:
   - 1
 model:
-  D0: 1.0
   E: 1
   alpha_penalty: 2000
   f_scale: 3.5202051961437936e-14
-  higher_regularity: true
+  higher_regularity: false
   model_dimension: 2
   model_type: 2D
   nu: 0.15
@@ -50,7 +49,7 @@ model:
   v_scale: 8.525149190110827e-11
   w_scale: 0.000412920069507667
 solvers:
-  elasticity:
+  nonlinear:
     ksp:
       ksp_type: preonly
       pc_type: lu

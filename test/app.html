@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <style>
+            @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Japanese&display=swap');
+
+            @layer mShadow, mGradientStroke;
+
+            @layer mShadow {
+                h1 {
+                    /* Text Fill GRadient */
+                    background-image: linear-gradient(
+                        90deg,
+                        rgba(2, 0, 36, 1) 0%,
+                        rgba(121, 112, 9, 1) 43%,
+                        rgba(0, 212, 255, 1) 100%
+                    );
+                    color: transparent;
+                    text-fill-color: transparent;
+                    -webkit-text-fill-color: transparent;
+                    background-clip: text;
+                    -webkit-background-clip: text;
+                    font-family: 'Noto Sans JP', sans-serif;
+
+                    font-size: 6rem;
+                    paint-order: stroke fill;
+                    text-shadow: 3px 3px 0px cyan, 5px 5px 0px darkcyan;
+                    transition: all 1.5s;
+                }
+
+                h1::before {
+                    content: '*';
+                    font-size: 1em;
+                    position: relative;
+                    top: 0;
+                    z-index: -1;
+                    left: 0;
+                    transition: all 0.5s;
+                }
+
+                h1 {
+                    font-variation-settings: 'wght' 100, 'ital' 1, 'rota' 20;
+                    /* transform: translate(-20px, -20px); */
+                    /* Multiple Shadows */
+                    text-shadow: 10px 10px 0px #07bcccdd,
+                        15px 15px 0px #e601c099, 22px 22px 0px #e9019a88,
+                        31px 31px 0px #f4046877, 42px 42px 10px #2abe5966;
+                    animation: hithere 4s ease infinite;
+                }
+
+                h1:hover {
+                    font-variation-settings: 'wght' 100, 'ital' 0, 'rota' 0;
+                    text-shadow: 10px 10px 5px #07bccc44;
+                    /* Text Stroke */
+                    -webkit-text-stroke: 0px #fff;
+                    animation-play-state: paused;
+                }
+            }
+
+            @keyframes hithere {
+                30% {
+                    transform: scale(1.1);
+                }
+                40%,
+                60% {
+                    transform: rotate(-3deg) scale(1.1);
+                }
+                50% {
+                    transform: rotate(3deg) scale(1.1);
+                }
+                70% {
+                    transform: rotate(0deg) scale(1.1);
+                }
+                100% {
+                    transform: scale(1);
+                }
+            }
+
+            /* Reset basic styling */
+            * {
+                margin: 0;
+                padding: 0;
+                box-sizing: border-box;
+            }
+
+            body,
+            html {
+                height: 100%;
+                overflow-x: hidden;
+            }
+
+            .content {
+                height: 400vh; /* Adjust to make the page scrollable */
+                background: linear-gradient(
+                    180deg,
+                    #eb5ea6,
+                    #b26dd2,
+                    #58c2c6
+                ); /* Three-color gradient */
+            }
+
+            .block {
+                height: 100vh; /* Each section takes full viewport height */
+                display: flex;
+                justify-content: center;
+                align-items: center;
+                position: relative;
+            }
+
+            .text {
+                text-align: center;
+                max-width: 600px;
+                padding: 20px;
+                font-size: 1.5rem;
+                color: #333;
+                background-color: rgba(
+                    255,
+                    255,
+                    255,
+                    0.1
+                ); /* Slight contrast with background */
+                border-radius: 10px;
+
+                position: sticky;
+                top: 10%;
+                transform: translateY(-50%);
+            }
+        </style>
+
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>Scroll Transition</title>
+        <link rel="stylesheet" href="styles.css" />
+    </head>
+    <body>
+        <div class="content">
+            <section class="block">
+                <div class="text">
+                    <h1>権利と自由</h1>
+                    <p>Some descriptive text with an illustration beside.</p>
+                    <p>
+                        Lorem ipsum dolor sit amet consectetur adipisicing elit.
+                        Voluptatum explicabo illum porro aliquid dolores, culpa
+                        optio quibusdam numquam reiciendis, velit magni maiores.
+                        aspernatur amet et.
+                    </p>
+                    <p>
+                        Perspiciatis sapiente pariatur, eos neque possimus
+                        laudantium! Debitis maxime dolorum necessitatibus
+                        corporis expedita?
+                    </p>
+                </div>
+            </section>
+            <section class="block">
+                <div class="text">
+                    <h1>Title 2</h1>
+                    <p>
+                        More text that resonates with the changing background.
+                    </p>
+                    <p>
+                        Lorem ipsum dolor sit amet consectetur adipisicing elit.
+                        Cum iure rerum adipisci, aperiam maxime pariatur tempore
+                        corporis ratione odio fugit incidunt itaque quam alias
+                        saepe exercitationem doloremque architecto nesciunt
+                        dolore neque ipsum consectetur? Sint animi ex tempora
+                        veritatis. Fugiat, ipsam. Error explicabo quidem hic
+                        eos, ullam esse necessitatibus officiis similique.
+                    </p>
+                </div>
+            </section>
+            <section class="block">
+                <div class="text">
+                    <h1>Title 3</h1>
+                    <p>Another centered block to interact with the scroll.</p>
+                </div>
+            </section>
+        </div>
+    </body>
+</html>
