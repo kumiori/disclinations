@@ -118,7 +118,7 @@ def load_parameters(filename):
 
 
 # @pytest.mark.parametrize("variant", models)
-def parametric_computation(variant, mesh, params, experiment_folder):
+def run_experiment(variant, mesh, params, experiment_folder):
     """
     Parametric unit test for testing three different models:
     variational, brenner, and carstensen.
@@ -394,7 +394,6 @@ if __name__ == "__main__":
     _experimental_data = []
     outdir = "output"
     prefix = outdir
-    # _simulation_data = []
 
     max_memory = 0
     mem_before = memory_usage()
@@ -421,7 +420,7 @@ if __name__ == "__main__":
                 signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
 
             energies, norms, abs_errors, rel_errors, penalisation, solver_stats = (
-                parametric_computation("variational", mesh, parameters, prefix)
+                run_experiment("variational", mesh, parameters, prefix)
             )
             run_data = {
                 "signature": signature,
