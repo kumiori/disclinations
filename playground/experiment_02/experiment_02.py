@@ -35,179 +35,191 @@ from mpi4py import MPI
 from petsc4py import PETSc
 
 from disclinations.meshes.primitives import mesh_circle_gmshapi
-from disclinations.models import FVKAdimensional
+from disclinations.models import (
+    NonlinearPlateFVK,
+    NonlinearPlateFVK_brenner,
+    NonlinearPlateFVK_carstensen,
+    calculate_rescaling_factors,
+    compute_energy_terms,
+    _transverse_load_exact_solution,
+)
 from disclinations.solvers import SNESSolver
 from disclinations.utils.la import compute_disclination_loads
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
-from disclinations.utils import update_parameters, memory_usage, save_parameters
+from disclinations.utils import update_parameters, memory_usage, save_parameters,homogeneous_dirichlet_bc_H20
+from disclinations.utils import _logger, snes_solver_stats,save_params_to_yaml,create_or_load_circle_mesh
+from disclinations.models import create_disclinations
+from disclinations.models import assemble_penalisation_terms
+from disclinations.utils.la import compute_norms
 
 logging.basicConfig(level=logging.INFO)
 comm = MPI.COMM_WORLD
+AIRY = 0
+TRANSVERSE = 1
+
+def postprocess(state, model, mesh, params, exact_solution, prefix):
+    with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
+
+        fem_energies = {}
+        exact_energies = {}
+
+        _logger.info("\nEnergy Analysis:")
+
+        if exact_solution is not None:
+            _v_exact, _w_exact = exact_solution
+        else:
+            _v_exact, _w_exact = None, None
+
+        for i, energy_name in enumerate(
+            ["total", "bending", "membrane", "coupling", "external_work"]
+        ):
+            if exact_solution is not None:
+                exact_energy = dolfinx.fem.assemble_scalar(
+                    dolfinx.fem.form(model.energy(exact_solution)[i])
+                )
+                _exact_energy = mesh.comm.allreduce(exact_energy, op=MPI.SUM)
+                exact_energies[energy_name] = _exact_energy
+
+            if energy_name != "external_work":
+                fem_energy = dolfinx.fem.assemble_scalar(
+                    dolfinx.fem.form(model.energy(state)[i])
+                )
+            else:
+                fem_energy = dolfinx.fem.assemble_scalar(dolfinx.fem.form(model.W_ext))
+
+            _fem_energy = mesh.comm.allreduce(fem_energy, op=MPI.SUM)
+            fem_energies[energy_name] = _fem_energy
+
+        penalisation_terms = assemble_penalisation_terms(model)
+        norms = compute_norms(state["v"], state["w"], mesh)
+
+        extra_fields = [
+            {"field": _v_exact, "name": "v_exact"},
+            {"field": _w_exact, "name": "w_exact"},
+            {
+                "field": model.M(state["w"]),  # Tensor expression
+                "name": "M",
+                "components": "tensor",
+            },
+            {
+                "field": model.P(state["v"]),  # Tensor expression
+                "name": "P",
+                "components": "tensor",
+            },
+            {
+                "field": model.gaussian_curvature(state["w"]),  # Tensor expression
+                "name": "Kappa",
+                "components": "tensor",
+            },
+        ]
+        # write_to_output(prefix, q, extra_fields)
+        return fem_energies, norms, None, None, penalisation_terms
+
 
 def run_experiment(mesh: None, parameters: dict, series: str):
-    # Setup, output and file handling
-    signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()[0:6]
-    data = {
-        'membrane_energy': [],
-        'bending_energy': [],
-        'coupling_energy': [],
-        'w_L2': [],
-        'v_L2': [],
-        'thickness': []
-    }
-    
-    outdir = "output"
-    prefix = os.path.join(outdir, series, signature)
+    _logger.info(
+        f"Running experiment of the series {series} with parameter: {parameters['model']['γ_adim']}"
+    )
 
+    parameters = calculate_rescaling_factors(parameters)
+    signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
+
+    prefix = os.path.join(experiment_dir, signature)
     if comm.rank == 0:
         Path(prefix).mkdir(parents=True, exist_ok=True)
 
-    save_parameters(parameters, prefix)
-
-    # MPI communicator and global variables
-    
-    AIRY = 0
-    TRANSVERSE = 1
-
-    # Parameters
-    
-    mesh_size = parameters["geometry"]["mesh_size"]
-    nu = parameters["model"]["nu"]
-    thickness = parameters["model"]["thickness"]
-    radius = parameters["geometry"]["radius"]
-    E = parameters["model"]["E"]
-    
-    _D = E * thickness**3 / (12 * (1 - nu**2))
-    w_scale = np.sqrt(2 * _D / (E * thickness))
-    v_scale = _D
-    f_scale = np.sqrt(2 * _D**3 / (E * thickness))
-    f0 = parameters["model"]["E"] * (parameters["model"]["thickness"] / parameters["geometry"]["radius"])**4 
-    b_scale = (radius / thickness)**2
-
-    # Mesh
-    model_rank = 0
-    tdim = 2
-    # order = 3
-    if mesh is None:
-        with dolfinx.common.Timer("~Mesh Generation") as timer:
-            gmsh_model, tdim = mesh_circle_gmshapi(
-                parameters["geometry"]["geom_type"], 1, mesh_size, tdim
-            )
-            mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-
-    mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
-    h = CellDiameter(mesh)
-    n = FacetNormal(mesh)
-
-    # Functional setting
-
-    X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"]) 
+    # Function spaces
+    X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"])
     Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
-    q = dolfinx.fem.Function(Q)
-    f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
-    
-    v, w = ufl.split(q)
-    state = {"v": v, "w": w}
+    V_P1 = dolfinx.fem.functionspace(mesh, ("CG", 1))
+
+    DG_e = basix.ufl.element(
+        "DG", str(mesh.ufl_cell()), parameters["model"]["order"] - 2
+    )
+    DG = dolfinx.fem.functionspace(mesh, DG_e)
+
+    T_e = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"] - 2)
+    T = dolfinx.fem.functionspace(mesh, T_e)
+
+    boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
 
     # Loading
     # Disclinations
-    if mesh.comm.rank == 0:
-        # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
-        points = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
-                np.array([[0.2, -0.0, 0]], dtype=mesh.geometry.x.dtype)]
-        signs = [-1, 1]
-    else:
-        # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
-        points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
-                np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
+    # if mesh.comm.rank == 0:
+    #     # point = np.array([[0.68, 0.36, 0]], dtype=mesh.geometry.x.dtype)
+    #     points = [np.array([[-0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+    #             np.array([[0.2, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+    #             np.array([[0.0, 0.2, 0]], dtype=mesh.geometry.x.dtype),
+    #             np.array([[0.0, -.2, 0]], dtype=mesh.geometry.x.dtype),
+    #             ]
+    #     signs = [1, 1, 1, 1]
+    # else:
+    #     # point = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
+    #     points = [np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+    #             np.zeros((0, 3), dtype=mesh.geometry.x.dtype)]
+    #     signs = np.zeros_like(points)
         
+    q = dolfinx.fem.Function(Q)
+    v, w = ufl.split(q)
+    state = {"v": v, "w": w}
+
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 
-    b = compute_disclination_loads(points, signs, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)
+    disclinations, parameters = create_disclinations(
+        mesh, parameters
+    )
     
-    # Transverse load (analytical solution)
-    def transverse_load(x):
-        _f = (40/3) * (1 - x[0]**2 - x[1]**2)**4 + (16/3) * (11 + x[0]**2 + x[1]**2)
-        return _f * f_scale
-        # return (11+ x[0]**2 + x[1]**2)
-
-    f.interpolate(transverse_load)
-
-    # Boundary conditions 
-    bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-    dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
-    dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
-        
-    bcs_w = dirichletbc(
-        np.array(0, dtype=PETSc.ScalarType),
-        dofs_w, Q.sub(TRANSVERSE)
+    b = compute_disclination_loads(
+        disclinations,
+        parameters["loading"]["signs"],
+        Q,
+        V_sub_to_V_dofs=Q_v_to_Q_dofs,
+        V_sub=Q_v,
     )
-    bcs_v = dirichletbc(
-        np.array(0, dtype=PETSc.ScalarType),
-        dofs_v, Q.sub(AIRY)
-    )
-    bcs = list({AIRY: bcs_v, TRANSVERSE: bcs_w}.values())
-    W_transv_coeff = (radius / thickness)**4 / E 
-    W_ext = dolfinx.fem.Constant(mesh, 0.) * f * w * dx
-    print(b_scale)
+    b.vector.scale(parameters["model"]["β_adim"] ** 2.0)
+    
+    W_ext = parameters["model"]["γ_adim"] * dolfinx.fem.Constant(mesh, -1.) * w * dx
 
-    model = FVKAdimensional(mesh, nu = nu)
+    model = NonlinearPlateFVK(mesh, parameters["model"], adimensional=True)
     energy = model.energy(state)[0]
+    # Dead load (transverse)
+    model.W_ext = W_ext
     penalisation = model.penalisation(state)
 
 
     # Define the functional
     L = energy - W_ext + penalisation
     F = ufl.derivative(L, q, ufl.TestFunction(Q))
+    save_params_to_yaml(parameters, os.path.join(prefix, "parameters.yml"))
     
     solver = SNESSolver(
         F_form=F,
         u=q,
-        bcs=bcs,
+        bcs=boundary_conditions,
         bounds=None,
-        petsc_options=parameters["solvers"]["elasticity"],
+        petsc_options=parameters["solvers"]["nonlinear"],
         prefix='plate_fvk',
-        b0=b_scale*b.vector,
+        b0=b.vector,
     )
     solver.solve()
     
+    solver_stats = snes_solver_stats(solver.solver)
     del solver
+    
     
     # Postprocessing and viz
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-        energy_components = {"bending": model.energy(state)[1],
-                            "membrane": -model.energy(state)[2],
-                            "coupling": model.energy(state)[3]}
-
-        computed_energy_terms = {label: comm.allreduce(
-            dolfinx.fem.assemble_scalar(
-                dolfinx.fem.form(energy_term)),
-            op=MPI.SUM,
-        ) for label, energy_term in energy_components.items()}
-        
-        data["membrane_energy"] = computed_energy_terms["membrane"]
-        data["bending_energy"] = computed_energy_terms["bending"]
-        data["coupling_energy"] = computed_energy_terms["coupling"]
-        data["thickness"] = thickness
-        data["v_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
-            dolfinx.fem.form(ufl.inner(v, v) * dx)), op=MPI.SUM)
-        data["w_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
-            dolfinx.fem.form(ufl.inner(w, w) * dx)), op=MPI.SUM)
-        
+        energies, norms, abs_error, rel_error, penalisation = postprocess(
+            state, model, mesh, params=parameters, exact_solution=None, prefix=prefix
+        )
         import pyvista
         from pyvista.plotting.utilities import xvfb
 
         xvfb.start_xvfb(wait=0.05)
         pyvista.OFF_SCREEN = True
 
-        # import matplotlib.pyplot as plt
 
-        # plt.figure()
-        # ax = plot_mesh(mesh)
-        # fig = ax.get_figure()
-        # fig.savefig(f"{prefix}/mesh.png")
-        
         κ = model.gaussian_curvature(w, order = parameters["model"]["order"]-2)
         # heatmap of bracket(w, w) = det Hessian = k_1 * k_2 = kappa (gaussian curvature)
         
@@ -225,7 +237,7 @@ def run_experiment(mesh: None, parameters: dict, series: str):
         scalar_plot.screenshot(f"{prefix}/gaussian_curvature.png")
         print("plotted curvature")
 
-        return data
+    return energies, norms, abs_error, rel_error, penalisation, solver_stats
 
 def load_parameters(file_path):
     """
@@ -244,7 +256,7 @@ def load_parameters(file_path):
 
     parameters["geometry"]["radius"] = 1
     parameters["geometry"]["geom_type"] = "circle"
-    parameters["solvers"]["elasticity"] = {
+    parameters["solvers"]["nonlinear"] = {
         "snes_type": "newtonls",      # Solver type: NGMRES (Nonlinear GMRES)
         "snes_max_it": 100,           # Maximum number of iterations
         "snes_rtol": 1e-6,            # Relative tolerance for convergence
@@ -253,50 +265,96 @@ def load_parameters(file_path):
         "snes_monitor": None,         # Function for monitoring convergence (optional)
         "snes_linesearch_type": "basic",  # Type of line search
     }
+    parameters["model"]["γ_adim"] = 1.0
+    parameters["model"]["β_adim"] = 1.
 
+    parameters["loading"] = {
+        "points": [np.array([[-0.2, 0.0, 0]]),
+                np.array([[0.2, 0.0, 0]]),
+                np.array([[0.0, 0.2, 0]]),
+                np.array([[0.0, -.2, 0]])],
+        "signs": [1, 1, 1, 1]
+                }
+    
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
-    print(yaml.dump(parameters, default_flow_style=False))
 
     return parameters, signature
 
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
+import copy
 if __name__ == "__main__":
     from disclinations.utils import table_timing_data, Visualisation
     _experimental_data = []
     outdir = "output"
-    parameters, signature = load_parameters("../../src/disclinations/test_branch/parameters.yml")
-    series = signature[0::6]
-    experiment_dir = os.path.join(outdir, series)
+    prefix = outdir
+    
+    with pkg_resources.path("disclinations.test", "parameters.yml") as f:
+        parameters, _ = load_parameters(f)
+        base_parameters = copy.deepcopy(parameters)
+
+        base_signature = hashlib.md5(str(base_parameters).encode("utf-8")).hexdigest()
+
+    series = base_signature[0::6]
+    experiment_dir = os.path.join(prefix, series)
+
     max_memory = 0
     num_runs = 10
+    
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
-            
-    logging.info(
-        f"===================- {experiment_dir} -=================")
-    postprocess = Visualisation(experiment_dir)
-    
+
+    _logger.info(f"Running series {series} with {num_runs} runs")
+    _logger.info(f"===================- {experiment_dir} -=================")
+    # postprocess = Visualisation(experiment_dir)
+
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
-    
+
         # Mesh is fixed for all runs
         mesh = None
         mesh_size = parameters["geometry"]["mesh_size"]
         tdim = 2
         model_rank = 0
+        mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
+        import matplotlib.pyplot as plt
+
+        plt.figure()
+        ax = plot_mesh(mesh)
+        fig = ax.get_figure()
         
-        with dolfinx.common.Timer("~Mesh Generation") as timer:
-            gmsh_model, tdim = mesh_circle_gmshapi(
-                parameters["geometry"]["geom_type"], 1, mesh_size, tdim
-            )
-            mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-    
-        for i, thickness in enumerate(np.linspace(0.1, 1, num_runs)):
+        for point in parameters["loading"]["points"]:
+            ax.plot(point[0][0], point[0][1], 'ro')
+
+        fig.savefig(f"{experiment_dir}/mesh.png")
+            
+        for i, gamma in enumerate(np.linspace(0.1, 100, num_runs)):
             # Check memory usage before computation
             mem_before = memory_usage()
+            _logger.critical(f"===================- γ_adim = {gamma} -=================")
             
             # parameters["model"]["thickness"] = thickness
-            update_parameters(parameters, "thickness", thickness)    
-            data = run_experiment(mesh, parameters, series)
-            _experimental_data.append(data)
+
+            if changed := update_parameters(parameters, "γ_adim", float(gamma)):
+                signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
+            else:
+                raise ValueError("Failed to update parameters")
+            
+            energies, norms, _, _, penalisation, solver_stats = run_experiment(mesh, parameters, series)
+            
+            run_data = {
+                "signature": signature,
+                "param_value": gamma,
+                **energies,
+                **norms,
+                # "abs_error_membrane": abs_errors[0],
+                # "abs_error_bending": abs_errors[1],
+                # "abs_error_coupling": abs_errors[2],
+                # "rel_error_membrane": rel_errors[0],
+                # "rel_error_bending": rel_errors[1],
+                # "rel_error_coupling": rel_errors[2],
+                **penalisation,  # Unpack penalization terms into individual columns
+                **solver_stats,  # Unpack solver statistics into individual columns
+            }
+            _experimental_data.append(run_data)
             
             # Check memory usage after computation
             mem_after = memory_usage()
@@ -308,46 +366,104 @@ if __name__ == "__main__":
             gc.collect()
     
     experimental_data = pd.DataFrame(_experimental_data)
-    timings = table_timing_data()
-
-
-    import matplotlib.pyplot as plt
+    print(experimental_data)
     
-    # Plot energy terms versus thickness
-    plt.figure(figsize=(10, 6))
-    plt.plot(experimental_data["thickness"], experimental_data["membrane_energy"], label="Membrane Energy")
-    plt.plot(experimental_data["thickness"], experimental_data["bending_energy"], label="Bending Energy")
-    plt.plot(experimental_data["thickness"], experimental_data["coupling_energy"], label="Coupling Energy")
-    plt.xlabel("Thickness")
-    plt.ylabel("Energy")
-    plt.title("Energy Terms vs Thickness")
-    plt.legend()
-    plt.savefig(f"{experiment_dir}/energy_terms.png")
+    with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
 
-    # Plot L2 norm terms versus thickness
-    plt.figure(figsize=(10, 6))
-    plt.plot(experimental_data["thickness"], experimental_data["w_L2"], label=r"$w_{L^2}$")
-    plt.plot(experimental_data["thickness"], experimental_data["v_L2"], label=r"$v_{L^2}$")
-    plt.xlabel("Thickness")
-    plt.ylabel("L2 Norms")
-    plt.title("L2 Norm Terms vs Thickness")
-    plt.legend()
+        if mesh.comm.rank == 0:
+            experimental_data.to_pickle(f"{experiment_dir}/experimental_data.pkl")
 
-    plt.savefig(f"{experiment_dir}/norms_fields.png")
+            with open(f"{experiment_dir}/experimental_data.json", "w") as file:
+                json.dump(_experimental_data, file)
+        import matplotlib.pyplot as plt
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(
+            experimental_data["param_value"],
+            experimental_data["bending"],
+            label="Bending Energy",
+            marker="o",
+        )
+        plt.plot(
+            experimental_data["param_value"],
+            experimental_data["membrane"],
+            label="Membrane Energy",
+            marker="o",
+        )
+        plt.plot(
+            experimental_data["param_value"],
+            experimental_data["coupling"],
+            label="Coupling Energy",
+            marker="o",
+        )
+        plt.plot(
+            experimental_data["param_value"],
+            experimental_data["external_work"],
+            label="External Work",
+            marker="o",
+        )
+
+        # Customize the plot
+        plt.title(
+            f'Energy Terms vs Parameter sign {parameters["loading"]["signs"]} penalisation {parameters["model"]["alpha_penalty"]}, '
+        )
+        plt.xlabel("a")
+        plt.ylabel("Energy")
+        plt.yscale("log")  # Using log scale for better visibility
+        plt.xscale("log")  # Using log scale for better visibility
+        plt.legend()
+
+        plt.savefig(f"{experiment_dir}/energy_terms.png")
+
+        plt.figure(figsize=(10, 6))
+        plt.plot(
+            experimental_data["param_value"],
+            experimental_data["snes_final_residual_norm"],
+            label="Residual norm",
+            marker="o",
+        )
+        plt.savefig(f"{experiment_dir}/residuals.png")
+
+    # import matplotlib.pyplot as plt
+    
+    # # Plot energy terms versus thickness
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(experimental_data["thickness"], experimental_data["membrane_energy"], label="Membrane Energy")
+    # plt.plot(experimental_data["thickness"], experimental_data["bending_energy"], label="Bending Energy")
+    # plt.plot(experimental_data["thickness"], experimental_data["coupling_energy"], label="Coupling Energy")
+    # plt.xlabel("Thickness")
+    # plt.ylabel("Energy")
+    # plt.title("Energy Terms vs Thickness")
+    # plt.legend()
+    # plt.savefig(f"{experiment_dir}/energy_terms.png")
+
+    # # Plot L2 norm terms versus thickness
+    # plt.figure(figsize=(10, 6))
+    # plt.plot(experimental_data["thickness"], experimental_data["w_L2"], label=r"$w_{L^2}$")
+    # plt.plot(experimental_data["thickness"], experimental_data["v_L2"], label=r"$v_{L^2}$")
+    # plt.xlabel("Thickness")
+    # plt.ylabel("L2 Norms")
+    # plt.title("L2 Norm Terms vs Thickness")
+    # plt.legend()
+
+    # plt.savefig(f"{experiment_dir}/norms_fields.png")
 
 
-
-
-
-
-
-
-
-
-
+    timings = table_timing_data()
+    print(timings)
     list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])
-    postprocess.visualise_results(experimental_data)
-    postprocess.save_table(timings, "timing_data")
-    postprocess.save_table(experimental_data, "postprocessing_data")
+    
+
+
+
+
+
+
+
+
+    # list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])
+    # postprocess.visualise_results(experimental_data)
+    # postprocess.save_table(timings, "timing_data")
+    # postprocess.save_table(experimental_data, "postprocessing_data")
     
     
