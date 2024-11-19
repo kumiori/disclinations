@@ -118,8 +118,6 @@ def postprocess(state, q, model, mesh, params, exact_solution, prefix):
         # Optionally, return the computed values for further use
     return fem_energies, norms, abs_error_array, rel_error_array, penalisation_terms
 
-
-
 def run_experiment(variant, mesh, parameters, experiment_folder):
     # Setup, output and file handling
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()[0:6]
@@ -143,14 +141,6 @@ def run_experiment(variant, mesh, parameters, experiment_folder):
     state = {"v": v, "w": w}
 
     # Loading
-    # Disclinations
-    if mesh.comm.rank == 0:
-        points = np.array([[0.0, 0.0, 0]], dtype=mesh.geometry.x.dtype)
-        signs = [1]
-    else:
-        points = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
-        
-    Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 
     # Transverse load (analytical solution)
     transverse_load = lambda x: _transverse_load_exact_solution(
@@ -162,10 +152,16 @@ def run_experiment(variant, mesh, parameters, experiment_folder):
 
     f.interpolate(transverse_load)
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
-    # _W_ext = 
-
-    W_ext = parameters["model"]["β_adim"]**4 * parameters["model"]["γ_adim"] * f * w * dx
-
+    
+    c_nu = 1 / (12 * (1 - parameters["model"]["nu"] ** 2))
+    
+    f_scale = (
+        np.sqrt(2 * c_nu**3) * parameters["model"]["E"] * parameters["model"]["thickness"]**4
+    )
+    # W_ext = parameters["model"]["β_adim"]**4 * parameters["model"]["γ_adim"] * f * w * dx
+    # W_ext = parameters["model"]["β_adim"]**4 * Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
+    W_ext = parameters["model"]["β_adim"]**4 * parameters["model"]["γ_adim"] * f_scale * f * w * dx
+    
     model = NonlinearPlateFVK(mesh, parameters["model"], adimensional=True)
     energy = model.energy(state)[0]
     penalisation = model.penalisation(state)
@@ -179,7 +175,7 @@ def run_experiment(variant, mesh, parameters, experiment_folder):
         u=q,
         bcs=boundary_conditions,
         bounds=None,
-        petsc_options=parameters["solvers"]["elasticity"],
+        petsc_options=parameters["solvers"]["nonlinear"],
         prefix='plate_fvk',
     )
     solver.solve()
@@ -250,15 +246,15 @@ def load_parameters(file_path):
 
     parameters["geometry"]["radius"] = 1
     parameters["geometry"]["geom_type"] = "circle"
-    parameters["solvers"]["elasticity"] = {
-        "snes_type": "newtonls",      # Solver type: NGMRES (Nonlinear GMRES)
-        "snes_max_it": 100,           # Maximum number of iterations
-        "snes_rtol": 1e-6,            # Relative tolerance for convergence
-        "snes_atol": 1e-10,           # Absolute tolerance for convergence
-        "snes_stol": 1e-5,           # Tolerance for the change in solution norm
-        "snes_monitor": None,         # Function for monitoring convergence (optional)
-        "snes_linesearch_type": "basic",  # Type of line search
-    }
+    # parameters["solvers"]["elasticity"] = {
+    #     "snes_type": "newtonls",      # Solver type: NGMRES (Nonlinear GMRES)
+    #     "snes_max_it": 100,           # Maximum number of iterations
+    #     "snes_rtol": 1e-6,            # Relative tolerance for convergence
+    #     "snes_atol": 1e-10,           # Absolute tolerance for convergence
+    #     "snes_stol": 1e-5,           # Tolerance for the change in solution norm
+    #     "snes_monitor": None,         # Function for monitoring convergence (optional)
+    #     "snes_linesearch_type": "basic",  # Type of line search
+    # }
     parameters["model"]["β_adim"] = np.nan
     parameters["model"]["γ_adim"] = 1
 
@@ -303,7 +299,7 @@ if __name__ == "__main__":
         
         mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
 
-        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=num_runs)):
+        for i, a in enumerate(np.logspace(np.log10(10), np.log10(100), num=num_runs)):
             # Check memory usage before computation
             mem_before = memory_usage()
             _logger.critical(f"===================- β_adim = {a} -=================")
