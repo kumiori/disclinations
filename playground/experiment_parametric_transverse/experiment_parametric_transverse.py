@@ -39,7 +39,7 @@ from disclinations.models import NonlinearPlateFVK, _transverse_load_exact_solut
 from disclinations.solvers import SNESSolver
 from disclinations.utils.la import compute_disclination_loads
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
-from disclinations.utils import update_parameters, memory_usage, homogeneous_dirichlet_bc_H20, _logger
+from disclinations.utils import update_parameters, memory_usage, create_or_load_circle_mesh, homogeneous_dirichlet_bc_H20, _logger
 from disclinations.models import assemble_penalisation_terms, initialise_exact_solution_compatible_transverse
 
 logging.basicConfig(level=logging.INFO)
@@ -118,7 +118,7 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         return abs_error_array, rel_error_array, penalization_terms
 
 
-def run_experiment(mesh: None, parameters: dict, series: str):
+def run_experiment(variant, mesh, parameters, experiment_folder):
     # Setup, output and file handling
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()[0:6]
     data = {
@@ -270,32 +270,44 @@ def load_parameters(file_path):
         "snes_type": "newtonls",      # Solver type: NGMRES (Nonlinear GMRES)
         "snes_max_it": 100,           # Maximum number of iterations
         "snes_rtol": 1e-6,            # Relative tolerance for convergence
-        "snes_atol": 1e-15,           # Absolute tolerance for convergence
+        "snes_atol": 1e-10,           # Absolute tolerance for convergence
         "snes_stol": 1e-5,           # Tolerance for the change in solution norm
         "snes_monitor": None,         # Function for monitoring convergence (optional)
         "snes_linesearch_type": "basic",  # Type of line search
     }
+    parameters["model"]["β_adim"] = np.nan
+    
+    parameters["model"]["γ_adim"] = 1
 
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
     print(yaml.dump(parameters, default_flow_style=False))
 
     return parameters, signature
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
+import copy
 
 if __name__ == "__main__":
     from disclinations.utils import table_timing_data, Visualisation
     _experimental_data = []
     outdir = "output"
-    parameters, signature = load_parameters("../../src/disclinations/test_branch/parameters.yml")
-    series = signature[0::6]
-    experiment_dir = os.path.join(outdir, series)
+    prefix = outdir
+
+    with pkg_resources.path("disclinations.test", "parameters.yml") as f:
+        parameters, _ = load_parameters(f)
+        base_parameters = copy.deepcopy(parameters)
+
+        base_signature = hashlib.md5(str(base_parameters).encode("utf-8")).hexdigest()
+
+    series = base_signature[0::6]
+    experiment_dir = os.path.join(prefix, series)
     max_memory = 0
     num_runs = 10
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
             
-    logging.info(
-        f"===================- {experiment_dir} -=================")
-    postprocess = Visualisation(experiment_dir)
+
+    _logger.info(f"Running series {series} with {num_runs} runs")
+    _logger.info(f"===================- {experiment_dir} -=================")
     
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
     
@@ -305,21 +317,39 @@ if __name__ == "__main__":
         tdim = 2
         model_rank = 0
         
-        with dolfinx.common.Timer("~Mesh Generation") as timer:
-            gmsh_model, tdim = mesh_circle_gmshapi(
-                parameters["geometry"]["geom_type"], 1, mesh_size, tdim
-            )
-            mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-    
-        for i, thickness in enumerate(np.linspace(0.1, 1, num_runs)):
+        mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
+
+        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=num_runs)):
             # Check memory usage before computation
             mem_before = memory_usage()
+            _logger.critical(f"===================- β_adim = {a} -=================")
+
+            if changed := update_parameters(parameters, "β_adim", float(a)):
+                parameters["model"]["thickness"] = parameters["geometry"]["radius"] / a
+                signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
+            else:
+                raise ValueError("Failed to update parameters")
             
-            # parameters["model"]["thickness"] = thickness
-            update_parameters(parameters, "thickness", thickness)    
-            data = run_experiment(mesh, parameters, series)
-            _experimental_data.append(data)
-            
+            energies, norms, abs_errors, rel_errors, penalisation, solver_stats = (
+                run_experiment("variational", mesh, parameters, prefix)
+            )
+            run_data = {
+                "signature": signature,
+                # "variant": 
+                "param_value": a,
+                **energies,
+                **norms,
+                "abs_error_membrane": abs_errors[0],
+                "abs_error_bending": abs_errors[1],
+                "abs_error_coupling": abs_errors[2],
+                "rel_error_membrane": rel_errors[0],
+                "rel_error_bending": rel_errors[1],
+                "rel_error_coupling": rel_errors[2],
+                **penalisation,  # Unpack penalization terms into individual columns
+                **solver_stats,  # Unpack solver statistics into individual columns
+            }
+            _experimental_data.append(run_data)
+
             # Check memory usage after computation
             mem_after = memory_usage()
             max_memory = max(max_memory, mem_after)
