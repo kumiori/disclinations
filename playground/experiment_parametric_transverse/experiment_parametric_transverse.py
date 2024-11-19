@@ -37,9 +37,9 @@ from petsc4py import PETSc
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.models import NonlinearPlateFVK, _transverse_load_exact_solution, calculate_rescaling_factors
 from disclinations.solvers import SNESSolver
-from disclinations.utils.la import compute_disclination_loads
+from disclinations.utils.la import compute_norms
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
-from disclinations.utils import update_parameters, memory_usage, create_or_load_circle_mesh, homogeneous_dirichlet_bc_H20, _logger
+from disclinations.utils import update_parameters, snes_solver_stats, memory_usage, create_or_load_circle_mesh, homogeneous_dirichlet_bc_H20, _logger
 from disclinations.models import assemble_penalisation_terms, initialise_exact_solution_compatible_transverse
 
 logging.basicConfig(level=logging.INFO)
@@ -48,7 +48,7 @@ AIRY = 0
 TRANSVERSE = 1
 
 
-def postprocess(state, model, mesh, params, exact_solution, prefix):
+def postprocess(state, q, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
         # Compute energies for the exact solution
         exact_energies = {}
@@ -89,7 +89,8 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
             _logger.info(f"  Absolute Error: {abs_error:.0e}")
             _logger.info(f"  Relative Error: {rel_error:.2%}\n")
 
-        penalization_terms = assemble_penalisation_terms(model)
+        penalisation_terms = assemble_penalisation_terms(model)
+        norms = compute_norms(state["v"], state["w"], mesh)
 
         _v_exact, _w_exact = exact_solution["v"], exact_solution["w"]
 
@@ -115,21 +116,14 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         rel_error_array = np.array(list(rel_errors.values()))
 
         # Optionally, return the computed values for further use
-        return abs_error_array, rel_error_array, penalization_terms
+    return fem_energies, norms, abs_error_array, rel_error_array, penalisation_terms
+
 
 
 def run_experiment(variant, mesh, parameters, experiment_folder):
     # Setup, output and file handling
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()[0:6]
-    data = {
-        'membrane_energy': [],
-        'bending_energy': [],
-        'coupling_energy': [],
-        'w_L2': [],
-        'v_L2': [],
-        'thickness': []
-    }
-    
+
     outdir = "output"
     prefix = os.path.join(experiment_dir, signature)
     if comm.rank == 0:
@@ -189,34 +183,24 @@ def run_experiment(variant, mesh, parameters, experiment_folder):
         prefix='plate_fvk',
     )
     solver.solve()
+    solver_stats = snes_solver_stats(solver.solver)
     
     del solver
 
-    abs_error, rel_error = postprocess(
-        state, model, mesh, params=parameters, exact_solution=exact_solution, prefix=prefix
+    energies, norms, abs_error, rel_error, penalisation = postprocess(
+        state,
+        q,
+        model,
+        mesh,
+        params=parameters,
+        exact_solution=exact_solution,
+        prefix=prefix,
     )
+
     
     # Postprocessing and viz
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-        energy_components = {"bending": model.energy(state)[1],
-                            "membrane": -model.energy(state)[2],
-                            "coupling": model.energy(state)[3]}
 
-        computed_energy_terms = {label: comm.allreduce(
-            dolfinx.fem.assemble_scalar(
-                dolfinx.fem.form(energy_term)),
-            op=MPI.SUM,
-        ) for label, energy_term in energy_components.items()}
-        
-        data["membrane_energy"] = computed_energy_terms["membrane"]
-        data["bending_energy"] = computed_energy_terms["bending"]
-        data["coupling_energy"] = computed_energy_terms["coupling"]
-        data["thickness"] = thickness
-        data["v_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
-            dolfinx.fem.form(ufl.inner(v, v) * dx)), op=MPI.SUM)
-        data["w_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
-            dolfinx.fem.form(ufl.inner(w, w) * dx)), op=MPI.SUM)
-        
         import pyvista
         from pyvista.plotting.utilities import xvfb
 
@@ -247,7 +231,7 @@ def run_experiment(variant, mesh, parameters, experiment_folder):
         scalar_plot.screenshot(f"{prefix}/gaussian_curvature.png")
         print("plotted curvature")
 
-        return data
+    return energies, norms, abs_error, rel_error, penalisation, solver_stats
 
 def load_parameters(file_path):
     """
