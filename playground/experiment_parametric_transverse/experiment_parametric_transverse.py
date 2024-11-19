@@ -39,7 +39,7 @@ from disclinations.models import NonlinearPlateFVK, _transverse_load_exact_solut
 from disclinations.solvers import SNESSolver
 from disclinations.utils.la import compute_norms
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
-from disclinations.utils import update_parameters, snes_solver_stats, memory_usage, create_or_load_circle_mesh, homogeneous_dirichlet_bc_H20, _logger
+from disclinations.utils import update_parameters, save_params_to_yaml, snes_solver_stats, memory_usage, create_or_load_circle_mesh, homogeneous_dirichlet_bc_H20, _logger
 from disclinations.models import assemble_penalisation_terms, initialise_exact_solution_compatible_transverse
 
 logging.basicConfig(level=logging.INFO)
@@ -164,7 +164,7 @@ def run_experiment(variant, mesh, parameters, experiment_folder):
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
     # _W_ext = 
 
-    W_ext = f * w * dx
+    W_ext = parameters["model"]["β_adim"]**4 * parameters["model"]["γ_adim"] * f * w * dx
 
     model = NonlinearPlateFVK(mesh, parameters["model"], adimensional=True)
     energy = model.energy(state)[0]
@@ -260,7 +260,6 @@ def load_parameters(file_path):
         "snes_linesearch_type": "basic",  # Type of line search
     }
     parameters["model"]["β_adim"] = np.nan
-    
     parameters["model"]["γ_adim"] = 1
 
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
@@ -289,6 +288,7 @@ if __name__ == "__main__":
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
             
+    save_params_to_yaml(base_parameters, os.path.join(experiment_dir, "parameters.yaml"))
 
     _logger.info(f"Running series {series} with {num_runs} runs")
     _logger.info(f"===================- {experiment_dir} -=================")
@@ -344,46 +344,47 @@ if __name__ == "__main__":
             gc.collect()
     
     experimental_data = pd.DataFrame(_experimental_data)
-    timings = table_timing_data()
+    
+    
+    with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
+        if mesh.comm.rank == 0:
+            experimental_data.to_pickle(f"{experiment_dir}/experimental_data.pkl")
 
-
+            with open(f"{experiment_dir}/experimental_data.json", "w") as file:
+                json.dump(_experimental_data, file)
+                
+    
+    print(experimental_data)
     import matplotlib.pyplot as plt
     
     # Plot energy terms versus thickness
     plt.figure(figsize=(10, 6))
-    plt.plot(experimental_data["thickness"], experimental_data["membrane_energy"], label="Membrane Energy")
-    plt.plot(experimental_data["thickness"], experimental_data["bending_energy"], label="Bending Energy")
-    plt.plot(experimental_data["thickness"], experimental_data["coupling_energy"], label="Coupling Energy")
-    plt.xlabel("Thickness")
+    plt.plot(experimental_data["param_value"], experimental_data["membrane"], label="Membrane Energy")
+    plt.plot(experimental_data["param_value"], experimental_data["bending"], label="Bending Energy")
+    plt.plot(experimental_data["param_value"], experimental_data["coupling"], label="Coupling Energy")
+    plt.xlabel("param_value")
     plt.ylabel("Energy")
-    plt.title("Energy Terms vs Thickness")
+    plt.title("Energy Terms vs param_value")
     plt.legend()
     plt.savefig(f"{experiment_dir}/energy_terms.png")
 
     # Plot L2 norm terms versus thickness
     plt.figure(figsize=(10, 6))
-    plt.plot(experimental_data["thickness"], experimental_data["w_L2"], label=r"$w_{L^2}$")
-    plt.plot(experimental_data["thickness"], experimental_data["v_L2"], label=r"$v_{L^2}$")
-    plt.xlabel("Thickness")
+    plt.plot(experimental_data["param_value"], experimental_data["w_L2"], label=r"$w_{L^2}$")
+    plt.plot(experimental_data["param_value"], experimental_data["v_L2"], label=r"$v_{L^2}$")
+    plt.xlabel("param_value")
     plt.ylabel("L2 Norms")
-    plt.title("L2 Norm Terms vs Thickness")
+    plt.title("L2 Norm Terms vs param_value")
     plt.legend()
 
     plt.savefig(f"{experiment_dir}/norms_fields.png")
 
-
-
-
-
-
-
-
-
+    timings = table_timing_data()
 
 
     list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])
-    postprocess.visualise_results(experimental_data)
-    postprocess.save_table(timings, "timing_data")
-    postprocess.save_table(experimental_data, "postprocessing_data")
+    # postprocess.visualise_results(experimental_data)
+    # postprocess.save_table(timings, "timing_data")
+    # postprocess.save_table(experimental_data, "postprocessing_data")
     
     
