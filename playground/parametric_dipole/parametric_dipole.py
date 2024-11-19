@@ -1,21 +1,14 @@
-import gc
 import hashlib
 import json
 import logging
 import os
-import pdb
-import sys
 from pathlib import Path
 
 import basix
-import disclinations
 import dolfinx
 import numpy as np
-import petsc4py
-import pytest
 import ufl
 import yaml
-from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.models import (
     NonlinearPlateFVK,
     NonlinearPlateFVK_brenner,
@@ -26,25 +19,21 @@ from disclinations.models import (
 )
 from disclinations.solvers import SNESSolver
 from disclinations.utils import (
-    Visualisation,
     memory_usage,
     monitor,
     table_timing_data,
-    write_to_output,
 )
 from disclinations.utils.la import compute_norms
 from disclinations.utils.la import compute_disclination_loads
 from disclinations.utils import _logger
-from dolfinx import fem
 from dolfinx.common import list_timings
-from dolfinx.io import XDMFFile, gmshio
 from mpi4py import MPI
 from petsc4py import PETSc
-from disclinations.utils import create_or_load_circle_mesh, print_energy_analysis
+from disclinations.utils import create_or_load_circle_mesh
 import pandas as pd
 
 comm = MPI.COMM_WORLD
-from ufl import CellDiameter, FacetNormal, dx
+from ufl import dx
 
 models = ["variational", "brenner", "carstensen"]
 outdir = "output"
@@ -257,7 +246,13 @@ def run_experiment(variant, mesh, params, experiment_folder):
     # 10. Compute absolute and relative error with respect to the exact solution
 
     energies, norms, abs_error, rel_error, penalisation = postprocess(
-        state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
+        state,
+        q,
+        model,
+        mesh,
+        params=params,
+        exact_solution=exact_solution,
+        prefix=prefix,
     )
     # # 11. Display error results
 
@@ -312,30 +307,41 @@ def sanity_check(abs_errors, rel_errors, penalization_terms, params):
     )
 
 
-def postprocess(state, model, mesh, params, exact_solution, prefix):
+def postprocess(state, q, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-        # Compute energies for the exact solution
-        exact_energies = {}
+
         fem_energies = {}
+        exact_energies = {}
         abs_errors = {}
         rel_errors = {}
-        # the exact solution is adimensional, to perform energy comparison
-
         _logger.info("\nEnergy Analysis:")
 
-        for i, energy_name in enumerate(["total", "bending", "membrane", "coupling"]):
-            exact_energy = dolfinx.fem.assemble_scalar(
-                dolfinx.fem.form(model.energy(exact_solution)[i])
-            )
-            _exact_energy = mesh.comm.allreduce(exact_energy, op=MPI.SUM)
-            exact_energies[energy_name] = _exact_energy
+        if exact_solution is not None:
+            _v_exact, _w_exact = exact_solution
+        else:
+            _v_exact, _w_exact = None, None
 
-            fem_energy = dolfinx.fem.assemble_scalar(
-                dolfinx.fem.form(model.energy(state)[i])
-            )
+        for i, energy_name in enumerate(
+            ["total", "bending", "membrane", "coupling"]
+            # , "external_work"
+        ):
+            if exact_solution is not None:
+                exact_energy = dolfinx.fem.assemble_scalar(
+                    dolfinx.fem.form(model.energy(exact_solution)[i])
+                )
+                _exact_energy = mesh.comm.allreduce(exact_energy, op=MPI.SUM)
+                exact_energies[energy_name] = _exact_energy
+
+            if energy_name != "external_work":
+                fem_energy = dolfinx.fem.assemble_scalar(
+                    dolfinx.fem.form(model.energy(state)[i])
+                )
+            else:
+                fem_energy = dolfinx.fem.assemble_scalar(dolfinx.fem.form(model.W_ext))
+
             _fem_energy = mesh.comm.allreduce(fem_energy, op=MPI.SUM)
             fem_energies[energy_name] = _fem_energy
-
+            
             # Compute absolute and relative errors
             abs_error = abs(fem_energies[energy_name] - exact_energies[energy_name])
             rel_error = (
@@ -345,19 +351,31 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
             )
             abs_errors[energy_name] = abs_error
             rel_errors[energy_name] = rel_error
-
+            
             # Log detailed energy information
             _logger.info(f"{energy_name.capitalize()} Energy Analysis:")
-            _logger.info(f"  Exact Energy: {_exact_energy:.2e}")
-            _logger.info(f"  FEM Energy: {_fem_energy:.2e}")
+            _logger.info(f"  Exact Energy: {_exact_energy:.5e}")
+            _logger.info(f"  FEM Energy: {_fem_energy:.5e}")
             _logger.info(f"  Absolute Error: {abs_error:.0e}")
             _logger.info(f"  Relative Error: {rel_error:.2%}\n")
 
-        penalization_terms = assemble_penalisation_terms(model)
-
-        _v_exact, _w_exact = exact_solution["v"], exact_solution["w"]
-
+        penalisation_terms = assemble_penalisation_terms(model)
         norms = compute_norms(state["v"], state["w"], mesh)
+
+        w, v = q.split()
+
+        v = q.sub(0).collapse()
+        w = q.sub(1).collapse()
+
+        # Compute max values locally
+        local_max_w = np.max(w.x.array)
+        local_max_v = np.max(v.x.array)
+
+        global_max_w = mesh.comm.allreduce(local_max_w, op=MPI.MAX)
+        global_max_v = mesh.comm.allreduce(local_max_v, op=MPI.MAX)
+
+        norms["v_max"] = global_max_v
+        norms["w_max"] = global_max_w
 
         extra_fields = [
             {"field": _v_exact, "name": "v_exact"},
@@ -372,19 +390,20 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
                 "name": "P",
                 "components": "tensor",
             },
+            {
+                "field": model.gaussian_curvature(state["w"]),  # Tensor expression
+                "name": "Kappa",
+                "components": "tensor",
+            },
         ]
-
         # write_to_output(prefix, q, extra_fields)
-
         # Convert errors to numpy arrays for easy handling
         abs_error_array = np.array(list(abs_errors.values()))
         rel_error_array = np.array(list(rel_errors.values()))
 
-        # Optionally, return the computed values for further use
-        return fem_energies, norms, abs_error_array, rel_error_array, penalization_terms
+        return fem_energies, norms, abs_error_array, rel_error_array, penalisation_terms
 
 
-import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import copy
 from disclinations.utils import update_parameters
 
