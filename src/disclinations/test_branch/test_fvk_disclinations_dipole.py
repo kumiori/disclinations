@@ -68,6 +68,7 @@ from ufl import (
     FacetNormal,
     dx,
 )
+from disclinations.utils import _logger
 
 petsc4py.init(sys.argv)
 log.set_log_level(log.LogLevel.WARNING)
@@ -177,7 +178,9 @@ else:
         np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
         np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
     ]
-    disclination_power_list = [-0, 0]
+    disclination_power_list = [0, 0]
+
+_logger.critical(disclinations)
 
 # compute distance between disclinations
 distance = np.linalg.norm(disclinations[0] - disclinations[1])
@@ -204,8 +207,7 @@ def _v_exact(x):
 
 
 def _w_exact(x):
-    _w = (1 - x[0] ** 2 - x[1] ** 2) ** 2
-    _w = 0.0 * _w
+    _w = np.zeros_like(x[0])
     return _w
 
 
