@@ -746,3 +746,49 @@ def basic_postprocess(state, model, mesh, params, exact_solution, prefix):
         ]
         # write_to_output(prefix, q, extra_fields)
         return energy_terms
+
+
+def snes_solver_stats(snes):
+
+    snes_its = snes.getIterationNumber()
+    snes_reason = snes.getConvergedReason()
+    snes_residual_norm = snes.getFunctionNorm()
+    snes_function_evals = snes.getFunctionEvaluations()
+
+    # Retrieve KSP (linear solver inside SNES) information
+    ksp = snes.getKSP()
+    ksp_its = ksp.getIterationNumber()
+    ksp_reason = ksp.getConvergedReason()
+    ksp_residual_norm = ksp.getResidualNorm()
+    ksp_type = ksp.type
+    # ksp_total_its = ksp.getTotalIterations()
+
+    # Print or log the solver statistics for analysis
+    _logger.debug(f"\nSNES Solver Information:")
+    _logger.debug(f"  SNES Iterations: {snes_its}")
+    _logger.debug(
+        f"  SNES Convergence Reason: {snes_reason} ({snes.getConvergedReason()})"
+    )
+    _logger.debug(f"  SNES Final Residual Norm: {snes_residual_norm}")
+    _logger.debug(f"  SNES Function Evaluations: {snes_function_evals}")
+
+    _logger.debug(f"\nKSP Solver Information (within SNES):")
+    _logger.debug(f"  KSP Iterations (last SNES iteration): {ksp_its}")
+    _logger.debug(
+        f"  KSP Convergence Reason: {ksp_reason} ({ksp.getConvergedReason()})"
+    )
+    _logger.debug(f"  KSP Final Residual Norm: {ksp_residual_norm}")
+    # _logger.info(f"  KSP Total Iterations: {ksp_total_its}")
+
+    # Return solver statistics as a dictionary for further use
+    solver_stats = {
+        "snes_iterations": snes_its,
+        "snes_convergence_reason": snes_reason,
+        "snes_final_residual_norm": snes_residual_norm,
+        "snes_function_evaluations": snes_function_evals,
+        "ksp_iterations_last": ksp_its,
+        "ksp_convergence_reason": ksp_reason,
+        "ksp_final_residual_norm": ksp_residual_norm,
+        "ksp_type": ksp_type,
+    }
+    return solver_stats

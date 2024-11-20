@@ -147,4 +147,8 @@ def compute_norms(v, w, mesh):
     norms["v_H2"] = mesh.comm.allreduce(np.sqrt(v_H2), op=MPI.SUM)
     norms["w_H2"] = mesh.comm.allreduce(np.sqrt(w_H2), op=MPI.SUM)
 
+    # Log the max values
+    # _logger.info(f"Global max value of w: {global_max_w:.6e}")
+    # _logger.info(f"Global max value of v: {global_max_v:.6e}")
+
     return norms
