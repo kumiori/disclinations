@@ -274,7 +274,8 @@ def load_parameters(file_path):
 
     parameters["geometry"]["radius"] = 1
     parameters["geometry"]["geom_type"] = "circle"
-    parameters["geometry"]["mesh_size"] = 0.03
+    # parameters["geometry"]["mesh_size"] = 0.03
+    parameters["geometry"]["mesh_size"] = 0.02
     # parameters["solvers"]["elasticity"] = {
     #     "snes_type": "newtonls",      # Solver type: NGMRES (Nonlinear GMRES)
     #     "snes_max_it": 100,           # Maximum number of iterations
@@ -312,7 +313,7 @@ if __name__ == "__main__":
     series = base_signature[0::6]
     experiment_dir = os.path.join(prefix, series)
     max_memory = 0
-    num_runs = 3
+    num_runs = 2
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
 
