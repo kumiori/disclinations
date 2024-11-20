@@ -4,7 +4,7 @@ loading:
 #  === Geometry === #
 geometry:
     geometric_dimension: 2
-    geom_type: "circle"
+    geom_type: 'circle'
     radius: 1.
     mesh_size: 0.05
 
@@ -14,10 +14,10 @@ model:
     thickness: .001
     nu: 0.15
     model_dimension: 2
-    model_type: "2D"
+    model_type: '2D'
     # could be "2D"/ "3D" / "plane_stress" / "plane_strain"
     order: 3
-    alpha_penalty: 2000
+    alpha_penalty: 300
     higher_regularity: False
 # === Solver === #
 solvers:
@@ -30,8 +30,7 @@ solvers:
             snes_rtol: 1e-6
             snes_max_it: 200
             # snes_divergence_tolerance: -1.0
-            snes_monitor: ""
+            snes_monitor: ''
         ksp:
             ksp_type: preonly
             pc_type: lu
-

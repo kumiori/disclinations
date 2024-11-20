@@ -75,7 +75,7 @@ def test_model_computation(variant):
     Parametric unit test for testing three different models:
     variational, brenner, and carstensen.
     """
-
+    _logger.critical(f"Running test for {variant.title()} model")
     # 1. Load parameters from YML file
     params, signature = load_parameters(f"parameters.yaml")
 
@@ -333,8 +333,8 @@ if __name__ == "__main__":
 
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
         test_model_computation("variational")
-        # test_model_computation("brenner")
-        # test_model_computation("carstensen")
+        test_model_computation("brenner")
+        test_model_computation("carstensen")
 
     # mem_after = memory_usage()
     # max_memory = max(max_memory, mem_after)
