@@ -79,22 +79,47 @@ def compute_energy_errors(energy_terms, exact_energy_dipole):
     return error, error / exact_energy_dipole
 
 
+from disclinations.models import assemble_penalisation_terms
+
+from disclinations.utils.la import compute_norms
+from disclinations.utils import _logger, snes_solver_stats
+
+
 def postprocess(state, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-        energy_components = {
-            "bending": model.energy(state)[1],
-            "membrane": model.energy(state)[2],
-            "coupling": model.energy(state)[3],
-            "external_work": -model.W_ext,
-            "penalisation": model.penalisation(state),
-        }
 
-        energy_terms = compute_energy_terms(energy_components, mesh.comm)
+        fem_energies = {}
+        exact_energies = {}
+
+        _logger.info("\nEnergy Analysis:")
 
         if exact_solution is not None:
             _v_exact, _w_exact = exact_solution
         else:
             _v_exact, _w_exact = None, None
+
+        for i, energy_name in enumerate(
+            ["total", "bending", "membrane", "coupling", "external_work"]
+        ):
+            if exact_solution is not None:
+                exact_energy = dolfinx.fem.assemble_scalar(
+                    dolfinx.fem.form(model.energy(exact_solution)[i])
+                )
+                _exact_energy = mesh.comm.allreduce(exact_energy, op=MPI.SUM)
+                exact_energies[energy_name] = _exact_energy
+
+            if energy_name != "external_work":
+                fem_energy = dolfinx.fem.assemble_scalar(
+                    dolfinx.fem.form(model.energy(state)[i])
+                )
+            else:
+                fem_energy = dolfinx.fem.assemble_scalar(dolfinx.fem.form(model.W_ext))
+
+            _fem_energy = mesh.comm.allreduce(fem_energy, op=MPI.SUM)
+            fem_energies[energy_name] = _fem_energy
+
+        penalisation_terms = assemble_penalisation_terms(model)
+        norms = compute_norms(state["v"], state["w"], mesh)
 
         extra_fields = [
             {"field": _v_exact, "name": "v_exact"},
@@ -116,11 +141,15 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
             },
         ]
         # write_to_output(prefix, q, extra_fields)
-        return energy_terms
+        return fem_energies, norms, None, None, penalisation_terms
 
 
 def run_experiment(
-    mesh, parameters, experiment_dir, variant="variational", initial_guess=None
+    # mesh, parameters, experiment_dir, variant="variational", initial_guess=None
+    variant,
+    mesh,
+    parameters,
+    experiment_folder,
 ):
     _logger.info(
         f"Running experiment of the series {series} with parameter: {parameters['model']['β_adim']}"
@@ -225,7 +254,7 @@ def run_experiment(
     )
 
     solver.solve()
-    # solver_stats = snes_solver_stats(solver.solver)
+    solver_stats = snes_solver_stats(solver.solver)
 
     # energies, norms, abs_error, rel_error, penalisation = postprocess(
     #     state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
@@ -237,30 +266,15 @@ def run_experiment(
 
     # return energies, norms, abs_error, rel_error, penalisation, solver_stats
 
-    energy_terms = postprocess(
+    # energy_terms = postprocess(
+    #     state, model, mesh, params=parameters, exact_solution=None, prefix=prefix
+    # )
+
+    energies, norms, abs_error, rel_error, penalisation = postprocess(
         state, model, mesh, params=parameters, exact_solution=None, prefix=prefix
     )
 
-    convergence_reason = solver.solver.getConvergedReason()
-    num_iterations = solver.solver.getIterationNumber()
-    residual_norm = solver.solver.getFunctionNorm()
-    num_function_evals = solver.solver.getFunctionEvaluations()
-
-    _simulation_data = {
-        "signature": signature,
-        "series": series,
-        "parameter": parameters["model"]["β_adim"],
-        "bending_energy": energy_terms["bending"],
-        "membrane_energy": energy_terms["membrane"],
-        "coupling_energy": energy_terms["coupling"],
-        "external_work": energy_terms["external_work"],
-        "convergence_reason": convergence_reason,
-        "iterations": num_iterations,
-        "residual_norm": residual_norm,
-        "function_evaluations": num_function_evals,
-    }
-
-    return energy_terms, q, _simulation_data
+    return energies, norms, abs_error, rel_error, penalisation, solver_stats
 
 
 def load_parameters(file_path):
@@ -280,6 +294,7 @@ def load_parameters(file_path):
 
     parameters["model"]["β_adim"] = np.nan
     parameters["model"]["γ_adim"] = 1.0
+    parameters["model"]["higher_regularity"] = True
 
     # Remove thickness from the parameters, to compute the parametric series signature
     if "model" in parameters and "thickness" in parameters["model"]:
@@ -308,7 +323,7 @@ if __name__ == "__main__":
 
     series = base_signature[0::6]
     experiment_dir = os.path.join(prefix, series)
-    num_runs = 3
+    num_runs = 100
 
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
@@ -331,49 +346,62 @@ if __name__ == "__main__":
             if changed := update_parameters(parameters, "β_adim", float(a)):
                 parameters["model"]["thickness"] = parameters["geometry"]["radius"] / a
                 signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
-
-                energy_terms, initial_guess, simulation_data = run_experiment(
-                    mesh, parameters, experiment_dir, initial_guess=None
-                )
             else:
-                abs_error, rel_error = None, None
                 raise ValueError("Failed to update parameters")
 
-            _data = {
-                "β_adim": a,
+            energies, norms, _, _, penalisation, solver_stats = run_experiment(
+                "variational", mesh, parameters, prefix
+            )
+            run_data = {
                 "signature": signature,
+                "param_value": a,
+                **energies,
+                **norms,
+                # "abs_error_membrane": abs_errors[0],
+                # "abs_error_bending": abs_errors[1],
+                # "abs_error_coupling": abs_errors[2],
+                # "rel_error_membrane": rel_errors[0],
+                # "rel_error_bending": rel_errors[1],
+                # "rel_error_coupling": rel_errors[2],
+                **penalisation,  # Unpack penalization terms into individual columns
+                **solver_stats,  # Unpack solver statistics into individual columns
             }
-
-            _experimental_data.append(_data)
+            _experimental_data.append(run_data)
 
     experimental_data = pd.DataFrame(_experimental_data)
 
     _logger.info(f"Saving experimental data to {experiment_dir}")
     print(experimental_data)
 
+    if mesh.comm.rank == 0:
+        experimental_data.to_pickle(f"{experiment_dir}/experimental_data.pkl")
+
+        with open(f"{experiment_dir}/experimental_data.json", "w") as file:
+            json.dump(_experimental_data, file)
+
     import matplotlib.pyplot as plt
 
     plt.figure(figsize=(10, 6))
     plt.plot(
-        experimental_data["parameter"],
-        experimental_data["bending_energy"],
+        experimental_data["param_value"],
+        experimental_data["bending"],
         label="Bending Energy",
         marker="o",
     )
     plt.plot(
-        experimental_data["parameter"],
-        experimental_data["membrane_energy"],
+        experimental_data["param_value"],
+        experimental_data["membrane"],
         label="Membrane Energy",
         marker="o",
     )
     plt.plot(
-        experimental_data["parameter"],
-        experimental_data["coupling_energy"],
+        experimental_data["param_value"],
+        experimental_data["coupling"],
         label="Coupling Energy",
         marker="o",
     )
     plt.plot(
-        experimental_data["parameter"],
+        experimental_data["param_value"],
         experimental_data["external_work"],
         label="External Work",
         marker="o",
@@ -393,11 +421,9 @@ if __name__ == "__main__":
 
     plt.figure(figsize=(10, 6))
     plt.plot(
-        experimental_data["parameter"],
-        experimental_data["residual_norm"],
+        experimental_data["param_value"],
+        experimental_data["snes_final_residual_norm"],
         label="Residual norm",
         marker="o",
     )
     plt.savefig(f"{experiment_dir}/residuals.png")
-
-    pdb.set_trace()
