@@ -59,7 +59,11 @@ class ToyPlateFVK:
         # J = ufl.as_matrix([[0, -1], [1, 0]])
         # return inner(grad(grad(v)), J.T * grad(grad(v)) * J)
         return div(grad(v)) * ufl.Identity(2) - grad(grad(v))
-
+    
+    def strain(self, f, g):
+    # 1/2 grad w outer grad w 
+        return
+    
     def bracket(self, f, g):
         J = ufl.as_matrix([[0, -1], [1, 0]])
         return inner(grad(grad(f)), J.T * grad(grad(g)) * J)
@@ -169,13 +173,11 @@ class NonlinearPlateFVK(ToyPlateFVK):
         dg1 = lambda u: -1 / 2 * dot(jump(grad(u)), avg(grad(grad(u)) * n)) * dS
         dg2 = lambda u: +1 / 2 * α / avg(h) * inner(jump(grad(u)), jump(grad(u))) * dS
         dgc = lambda w, g: avg(inner(W(w), outer(n, n))) * jump(grad(g), n) * dS
+        
+        # Higher regularity term
         dg3 = (
-            lambda w: 1
-            / 2
-            * α
-            / avg(h)
-            * inner(jump(hessian(w), n), jump(hessian(w), n))
-            * dS
+            lambda w: 1 / 2 * α / avg(h) * 
+            inner(jump(hessian(w), n), jump(hessian(w), n)) * dS
         )
         # bc1 = lambda u: - 1/2 * inner(grad(u), n) * inner(M(u), outer(n, n)) * ds
         bc1 = (
@@ -207,18 +209,18 @@ class NonlinearPlateFVK(ToyPlateFVK):
         penalisation = (
             (c1 * dg1(w) + c1 * dg2(w))
             - c2 * dg1(v)
-            - c2 * dg2(v)
+            - 1. * dg2(v)
             + c2 * bc1(w)
             - c2 * bc2(v)
-            + c1 * bc3(w)
-            - c1 * bc3(v)
+            + 1. * bc3(w)
+            - 1. * bc3(v)
             + dgc(w, v)
         )
 
         if self.higher_regularity:
             print("Higher regularity")
-            penalisation += c1 * dg3(w)
-            self._dgw += c1 * dg3(w)
+            penalisation += dg3(w)
+            self._dgw += dg3(w)
 
         return penalisation
 
@@ -502,6 +504,7 @@ def calculate_rescaling_factors(params):
 
 def _transverse_load_exact_solution(x, params, adimensional=False):
     f_scale = params["model"]["f_scale"]
+    
     if adimensional:
         f_scale = 1
 
