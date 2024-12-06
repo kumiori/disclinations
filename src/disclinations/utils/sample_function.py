@@ -30,7 +30,7 @@ def sample_function(v, radius):
     Return values: list, list, list
     Description: The function takes in input a Function object and samples it on the ball of radius radius
     """
-    num_points0 = 51
+    num_points0 = 1001
     x_list = []
     y_list = []
     z_list = []

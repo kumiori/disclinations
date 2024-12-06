@@ -67,7 +67,7 @@ COMM = MPI.COMM_WORLD
 if COMM.rank == 0: Path(OUTDIR).mkdir(parents=True, exist_ok=True)
 
 DISCLINATION_COORD_LIST = [[0.0, 0.0, 0.0]]
-DISCLINATION_POWER_LIST = [-1]
+DISCLINATION_POWER_LIST = [1]
 LOAD_SIGN = -1
 
 AIRY               = 0
@@ -283,13 +283,13 @@ if __name__ == "__main__":
     NUM_RUNS = 15
 
     #a_list = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
-    #a_list = [10]
-    a_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
+    a_list = [10, 40, 70, 100]
+    #a_list = [10, 15, 20, 25, 30, 35, 40, 45, 50, 55, 60, 65, 70, 75, 80, 85, 90, 95, 100]
     #a_list = [10, 20, 100]
     a_range = []
 
     #x_range_plot = [10, 100, 200, 300, 400, 500, 600, 700, 800, 900, 1000]
-    x_range_plot = [10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
+    x_range_plot = a_list #[10, 20, 30, 40, 50, 60, 70, 80, 90, 100]
     p_range = [1/el for el in a_list] # CFe: thickness
 
     # CFe: boolean, set it to true to plot with a logscale on the xaxis, False to plot with a linear scale on the xaxis
@@ -621,6 +621,34 @@ if __name__ == "__main__":
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_BendEng_{info_experiment}.png', dpi=300)
+
+    # LOG-PLOT BENDING ENERGY
+    #(np.log(experimental_data["Bending Erg (Var)"][-1]) - np.log(experimental_data["Bending Erg (Var)"][0]))/(np.log(100) - np.log(10))
+    plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
+    plt.plot(a_range, experimental_data["Bending Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    bendingPowerLawList = [100*(a**(-4)) for a in a_range]
+    plt.plot(a_range, bendingPowerLawList, marker='.', linestyle='--', color='r', label='1/a^4', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(a_range, [10*(a**(-3)) for a in a_range], marker='^', linestyle='--', color='g', label='1/a^3', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(a_range, [1*(a**(-2)) for a in a_range], marker='v', linestyle='--', color='m', label='1/a^2', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if steps_memEng == 0: steps_memEng = NUM_STEPS
+    plt.xscale('log')
+    plt.yscale('log')
+    plt.axhline(y=0, color='black', linewidth=2)
+    max_bendEng = max(experimental_data["Bending Erg (Var)"])
+    min_bendEng = min(experimental_data["Bending Erg (Var)"])
+    steps_bendEng = (max_bendEng - min_bendEng)/NUM_STEPS
+    if steps_bendEng == 0: steps_bendEng = NUM_STEPS
+    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+    plt.xticks(a_range, [str(tick) if tick in x_values else '' for tick in a_range])
+    #if max_bendEng != min_bendEng: plt.yticks(np.arange(min_bendEng, max_bendEng, steps_bendEng))
+    plt.xlabel("a := R/h", fontsize=FONTSIZE)
+    plt.ylabel('Bending Energy', fontsize=FONTSIZE)
+    plt.title(f'Bending Energy. Mesh size = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+    plt.legend(fontsize=FONTSIZE)
+    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+    plt.grid(True)
+    plt.savefig(EXPERIMENT_DIR+f'/varying_a_BendEng__log_{info_experiment}.png', dpi=300)
 
     # PLOT COUPLING ENERGY
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))

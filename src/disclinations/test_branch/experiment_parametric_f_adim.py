@@ -303,7 +303,8 @@ if __name__ == "__main__":
             del base_parameters[PARAMETER_CATEGORY][PARAMETER_NAME]
 
         base_signature = hashlib.md5(str(base_parameters).encode('utf-8')).hexdigest()
-
+    #parameters["geometry"]["mesh_size"] = 0.02
+    print("mesh size: ", parameters["geometry"]["mesh_size"])
     #series = base_signature[0::6]
 
     info_experiment = f"mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]:.2e}_smth_{SMOOTHING}_tol = {SOL_TOLLERANCE}_load={LOAD_SIGN}_s={DISCLINATION_POWER_LIST}"
@@ -556,11 +557,13 @@ if __name__ == "__main__":
     # PLOT MEMBRANE ENERGY
     plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
     plt.plot(f_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.axhline(0, color='black', linewidth=2, label="zero value")
+    plt.axhline(9.94747e5, color='red', linewidth=2, label="Kirchhoff-Love prediction")
     if COMPARISON: plt.plot(f_range, experimental_data["Membrane Erg (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
     if COMPARISON: plt.plot(f_range, experimental_data["Membrane Erg (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
-    max_memEng = max(max(experimental_data["Membrane Erg (Var)"]), max(experimental_data["Membrane Erg (Brn)"]), max(experimental_data["Membrane Erg (Car)"]) )
-    min_memEng = min( min(experimental_data["Membrane Erg (Var)"]), min(experimental_data["Membrane Erg (Brn)"]), min(experimental_data["Membrane Erg (Car)"]) )
+    max_memEng = max(max(experimental_data["Membrane Erg (Var)"]), max(experimental_data["Membrane Erg (Brn)"]), max(experimental_data["Membrane Erg (Car)"]), 0, 9.94747e5 )
+    min_memEng = min( min(experimental_data["Membrane Erg (Var)"]), min(experimental_data["Membrane Erg (Brn)"]), min(experimental_data["Membrane Erg (Car)"]), 0, 9.94747e5 )
 
     steps_memEng = abs( (max_memEng - min_memEng)/NUM_STEPS )
     if steps_memEng == 0: steps_memEng = NUM_STEPS
