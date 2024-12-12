@@ -56,11 +56,71 @@ from disclinations.models import (
     assemble_penalisation_terms,
     initialise_exact_solution_compatible_transverse,
 )
+import matplotlib.pyplot as plt
 
 logging.basicConfig(level=logging.INFO)
 comm = MPI.COMM_WORLD
 AIRY = 0
 TRANSVERSE = 1
+
+import pyvista as pv
+
+
+def plot_curvature_contour(κ, mesh, parameters, plotter=None):
+    """
+    Plot the 0-contour line of the Gaussian curvature.
+
+    Args:
+        model: The computational model providing Gaussian curvature computation.
+        w: The transverse displacement field.
+        parameters: Dictionary containing model parameters.
+        plotter: PyVista plotter object (optional).
+
+    Returns:
+        plotter: Updated PyVista plotter object.
+    """
+    # Step 1: Compute Gaussian curvature
+
+    # Interpolate Gaussian curvature onto a lower-order space for visualization
+    degree = parameters["model"]["order"] - 2
+    CG1 = dolfinx.fem.functionspace(mesh, ("CG", degree))  # Linear Lagrange
+    curvature = dolfinx.fem.Function(CG1)
+
+    # Interpolate to CG1
+    curvature.interpolate(κ)
+
+    # Step 2: Convert to PyVista grid
+    topology, cell_types, x = dolfinx.plot.vtk_mesh(CG1)
+    grid = pv.UnstructuredGrid(topology, cell_types, x)
+
+    # Assign the curvature values to grid point data
+    curvature_values = curvature.vector.array.real.reshape(
+        CG1.dofmap.index_map.size_local, CG1.dofmap.index_map_bs
+    )
+    grid.point_data["Curvature"] = curvature_values
+    # grid.set_active_scalars("Curvature")
+
+    # Step 3: Extract 0-contour line using PyVista
+    contour = grid.contour(isosurfaces=[0.0], scalars="Curvature")
+
+    # Step 4: Plot
+    if plotter is None:
+        plotter = pv.Plotter()
+
+    # Add the curvature as a color map
+    # plotter.add_mesh(grid, cmap="coolwarm", scalar_bar_args={"title": "Curvature"})
+
+    # Add the contour line
+    plotter.add_mesh(contour, color="red", line_width=2, label="0-Contour")
+
+    # Customize the view
+    plotter.view_xy()
+    plotter.set_background("white")
+    # plotter.show_grid()
+    # plotter.add_legend()
+    plotter.show()
+
+    return plotter
 
 
 def postprocess(state, q, model, mesh, params, exact_solution, prefix):
@@ -131,6 +191,113 @@ def postprocess(state, q, model, mesh, params, exact_solution, prefix):
         rel_error_array = np.array(list(rel_errors.values()))
 
         # Optionally, return the computed values for further use
+
+        Q = q.function_space
+
+        import pyvista
+        from pyvista.plotting.utilities import xvfb
+        from dolfinx import plot
+
+        xvfb.start_xvfb(wait=0.05)
+        pyvista.OFF_SCREEN = True
+
+        plotter = pyvista.Plotter(
+            title="Displacement",
+            window_size=[1600, 600],
+            shape=(1, 3),
+        )
+
+        v, w = q.split()
+        v.name = "Airy"
+        w.name = "deflection"
+
+        V_v, dofs_v = Q.sub(0).collapse()
+        V_w, dofs_w = Q.sub(1).collapse()
+
+        scalar_plot = plot_scalar(
+            w,
+            plotter,
+            subplot=(0, 0),
+            V_sub=V_w,
+            dofs=dofs_w,
+            lineproperties={"clim": [min(w.vector[:]), max(w.vector[:])]},
+        )
+
+        scalar_plot = plot_scalar(
+            v,
+            plotter,
+            subplot=(0, 1),
+            V_sub=V_v,
+            dofs=dofs_v,
+            lineproperties={"clim": [min(v.vector[:]), max(v.vector[:])]},
+        )
+
+        plotter.subplot(0, 2)
+        cells, types, x = plot.vtk_mesh(V_v)
+        grid = pyvista.UnstructuredGrid(cells, types, x)
+        grid.point_data["v"] = v.x.array.real[dofs_v]
+        grid.set_active_scalars("v")
+
+        warped = grid.warp_by_scalar("v", scale_factor=1)
+        plotter.add_mesh(warped, show_edges=False)
+
+        scalar_plot.screenshot(f"{prefix}/transverse.png")
+        print("plotted scalar")
+
+        npoints = 1001
+        tol = 1e-3
+        xs = np.linspace(
+            -parameters["geometry"]["radius"] + tol,
+            parameters["geometry"]["radius"] - tol,
+            npoints,
+        )
+        points = np.zeros((3, npoints))
+        points[0] = xs
+
+        fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+
+        _plt, data = plot_profile(
+            w,
+            points,
+            None,
+            subplot=(1, 2),
+            lineproperties={"c": "k", "label": f"$w(x)$"},
+            fig=fig,
+            subplotnumber=1,
+        )
+        _plt, data = plot_profile(
+            _w_exact,
+            points,
+            None,
+            subplot=(1, 2),
+            lineproperties={"c": "r", "label": f"$w_e(x)$", "ls": "--"},
+            fig=fig,
+            subplotnumber=1,
+        )
+        _plt, data = plot_profile(
+            v,
+            points,
+            None,
+            subplot=(1, 2),
+            lineproperties={"c": "k", "label": f"$v(x)$"},
+            fig=fig,
+            subplotnumber=2,
+        )
+
+        _plt, data = plot_profile(
+            _v_exact,
+            points,
+            None,
+            subplot=(1, 2),
+            lineproperties={"c": "r", "label": f"$v_e(x)$", "ls": "--"},
+            fig=fig,
+            subplotnumber=2,
+        )
+
+        _plt.legend()
+
+        _plt.savefig(f"{prefix}/transverse-profiles.png")
+
     return fem_energies, norms, abs_error_array, rel_error_array, penalisation_terms
 
 
@@ -177,17 +344,6 @@ def run_experiment(variant, mesh, parameters, experiment_folder):
         * parameters["model"]["thickness"] ** 4
         / parameters["geometry"]["radius"] ** 4
     )
-    # W_ext = parameters["model"]["β_adim"]**4 * parameters["model"]["γ_adim"] * f * w * dx
-    # W_ext = parameters["model"]["β_adim"]**4 * Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
-
-    # W_ext = (
-    #     parameters["model"]["β_adim"] ** 4
-    #     * parameters["model"]["γ_adim"]
-    #     * f_scale
-    #     * f
-    #     * w
-    #     * dx
-    # )
 
     W_ext = np.sqrt(2 * c_nu**3) * parameters["model"]["γ_adim"] * f * w * dx
 
@@ -245,13 +401,15 @@ def run_experiment(variant, mesh, parameters, experiment_folder):
             window_size=[600, 600],
             shape=(1, 1),
         )
-        scalar_plot = plot_scalar(κ, plotter, subplot=(0, 0))
-        plotter.add_title("Gaussian curvature", font_size=12)
+        plotter = plot_scalar(κ, plotter, subplot=(0, 0))
         plotter.remove_scalar_bar()
-
+        plotter.add_title("Gaussian curvature", font_size=12)
         scalar_bar = plotter.add_scalar_bar("k", title_font_size=18, label_font_size=14)
+        plotter = plot_curvature_contour(κ, mesh, parameters, plotter)
+        # plot the 0-level set of the curvature
+        # plotter.add_mesh(κ, contours=[0], color="red", opacity=0.5)
 
-        scalar_plot.screenshot(f"{prefix}/gaussian_curvature.png")
+        plotter.screenshot(f"{prefix}/gaussian_curvature.png")
         print("plotted curvature")
 
     return energies, norms, abs_error, rel_error, penalisation, solver_stats
@@ -275,7 +433,7 @@ def load_parameters(file_path):
     parameters["geometry"]["radius"] = 1
     parameters["geometry"]["geom_type"] = "circle"
     # parameters["geometry"]["mesh_size"] = 0.03
-    parameters["geometry"]["mesh_size"] = 0.02
+    parameters["geometry"]["mesh_size"] = 0.05
     # parameters["solvers"]["elasticity"] = {
     #     "snes_type": "newtonls",      # Solver type: NGMRES (Nonlinear GMRES)
     #     "snes_max_it": 100,           # Maximum number of iterations

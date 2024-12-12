@@ -48,8 +48,8 @@ from disclinations.utils import (
     save_params_to_yaml,
 )
 
+
 def load_parameters(filename):
-    
     with open(filename, "r") as f:
         params = yaml.safe_load(f)
 
@@ -57,22 +57,23 @@ def load_parameters(filename):
     params["model"]["E"] = 1
     # params["model"]["alpha_penalty"] = 300
 
-    signature = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()
-        # "points": [np.array([[0., 0.0, 0.]]).tolist(),],
-        # "signs": [-1]
+    # "points": [np.array([[0., 0.0, 0.]]).tolist(),],
+    # "signs": [-1]
     params["loading"] = {
-        "points" : [
+        "points": [
             np.array([[-0.2, 0.0, 0]]).tolist(),
             np.array([[0.2, -0.0, 0]]).tolist(),
         ],
-        "signs" : [-1, 1]
-        }
-    
-        # points = [
-        #     np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
-        #     np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
-        # ]
-        # disclination_power_list = [0, 0]
+        "signs": [-1, 1],
+    }
+
+    # points = [
+    #     np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+    #     np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+    # ]
+    # disclination_power_list = [0, 0]
+
+    signature = hashlib.md5(json.dumps(params, sort_keys=True).encode()).hexdigest()
 
     return params, signature
 
@@ -148,11 +149,9 @@ def run_experiment(variant, mesh, params, experiment_folder):
     #     V_sub_to_V_dofs=Q_v_to_Q_dofs,
     #     V_sub=Q_v,
     # )
-    
-    disclinations, params = create_disclinations(
-        mesh, params
-    )
-    
+
+    disclinations, params = create_disclinations(mesh, params)
+
     b = compute_disclination_loads(
         disclinations,
         params["loading"]["signs"],
@@ -160,7 +159,7 @@ def run_experiment(variant, mesh, params, experiment_folder):
         V_sub_to_V_dofs=Q_v_to_Q_dofs,
         V_sub=Q_v,
     )
-    
+
     # α_adim = params["geometry"]["radius"] / params["model"]["thickness"]
     α_adim = params["model"]["α_adim"]
 
@@ -293,7 +292,6 @@ def sanity_check(abs_errors, rel_errors, penalization_terms, params):
 
 def postprocess(state, q, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-
         fem_energies = {}
         exact_energies = {}
         abs_errors = {}
@@ -301,7 +299,7 @@ def postprocess(state, q, model, mesh, params, exact_solution, prefix):
         _logger.info("\nEnergy Analysis:")
 
         if exact_solution is not None:
-            _v_exact, _w_exact = exact_solution['v'], exact_solution['w']
+            _v_exact, _w_exact = exact_solution["v"], exact_solution["w"]
         else:
             _v_exact, _w_exact = None, None
 
@@ -315,9 +313,11 @@ def postprocess(state, q, model, mesh, params, exact_solution, prefix):
                 )
                 _exact_energy = mesh.comm.allreduce(exact_energy, op=MPI.SUM)
                 exact_energies[energy_name] = _exact_energy
-                
+
             elif exact_solution is not None and energy_name == "external_work":
-                exact_energies[energy_name] = dolfinx.fem.assemble_scalar(dolfinx.fem.form(model.W_ext))
+                exact_energies[energy_name] = dolfinx.fem.assemble_scalar(
+                    dolfinx.fem.form(model.W_ext)
+                )
 
             if energy_name != "external_work":
                 fem_energy = dolfinx.fem.assemble_scalar(
@@ -328,7 +328,7 @@ def postprocess(state, q, model, mesh, params, exact_solution, prefix):
 
             _fem_energy = mesh.comm.allreduce(fem_energy, op=MPI.SUM)
             fem_energies[energy_name] = _fem_energy
-            
+
             # Compute absolute and relative errors
             abs_error = abs(fem_energies[energy_name] - exact_energies[energy_name])
             rel_error = (
@@ -476,7 +476,7 @@ def postprocess(state, q, model, mesh, params, exact_solution, prefix):
         points[0] = xs
 
         fig, axes = plt.subplots(1, 2, figsize=(18, 6))
-        
+
         _plt, data = plot_profile(
             w,
             points,
@@ -544,11 +544,13 @@ if __name__ == "__main__":
     series = base_signature[0::6]
     experiment_dir = os.path.join(prefix, series)
     num_runs = 3
-    
+
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
 
-    save_params_to_yaml(base_parameters, os.path.join(experiment_dir, "parameters.yaml"))
+    save_params_to_yaml(
+        base_parameters, os.path.join(experiment_dir, "parameters.yaml")
+    )
 
     mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
 
@@ -565,10 +567,10 @@ if __name__ == "__main__":
             energies, norms, abs_errors, rel_errors, penalisation, solver_stats = (
                 run_experiment("variational", mesh, parameters, prefix)
             )
-            
+
             run_data = {
                 "signature": signature,
-                # "variant": 
+                # "variant":
                 "param_value": a,
                 **energies,
                 **norms,
@@ -601,6 +603,6 @@ if __name__ == "__main__":
 
             with open(f"{experiment_dir}/experimental_data.json", "w") as file:
                 json.dump(_experimental_data, file)
-                
+
     timings = table_timing_data()
     list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])

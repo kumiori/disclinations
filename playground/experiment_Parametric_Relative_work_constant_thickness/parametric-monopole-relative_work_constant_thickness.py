@@ -209,7 +209,9 @@ def postprocess(state, q, model, mesh, params, exact_solution, prefix):
         grid.point_data["v"] = v.x.array.real[dofs_v]
         grid.set_active_scalars("v")
 
-        warped = grid.warp_by_scalar("v", scale_factor=1)
+        _scale = 1/max(abs(v.x.array.real))
+        warped = grid.warp_by_scalar("v", scale_factor=_scale)
+        
         plotter.add_mesh(warped, show_edges=False)
         plotter.add_points(
             _pv_points,

@@ -630,6 +630,48 @@ def initialise_exact_solution_dipole(Q, params, adimensional=False):
     return exact
 
 
+
+def initialise_exact_solution_monopole(Q, params, adimensional=False):
+    """
+    Initialize the exact solutions for v and w using the provided parameters.
+
+    Args:
+    - Q: The function space.
+    - params: A dictionary of parameters containing geometric properties (e.g., radius).
+
+    Returns:
+    - v_exact: Exact solution for v.
+    - w_exact: Exact solution for w.
+    """
+    v_scale = params["model"]["E"] * params["model"]["thickness"]
+    radius = params["geometry"]["radius"]
+    
+    if adimensional:
+        v_scale /= params["model"]["v_scale"]
+        # w_scale /= params["model"]["w_scale"]
+
+    q_exact = dolfinx.fem.Function(Q)
+    v_exact, w_exact = q_exact.split()
+
+    def _v_exact(x):
+        rq = x[0] ** 2 + x[1] ** 2
+        
+        _v = 1/(16.0*np.pi)*(rq*np.log(rq/radius**2) - rq + radius**2)
+
+        return _v * v_scale
+
+    def _w_exact(x):
+        _w = np.zeros_like(x[0])
+        return _w
+
+    v_exact.interpolate(_v_exact)
+    w_exact.interpolate(_w_exact)
+
+    exact = {"v": v_exact, "w": w_exact}
+
+    return exact
+
+
 def exact_energy_dipole(parameters):
     # it should depend on the signs as well
     distance = np.linalg.norm(
