@@ -32,8 +32,6 @@ from disclinations.utils import (
     table_timing_data,
     write_to_output,
     homogeneous_dirichlet_bc_H20,
-    # initialise_exact_solution_dipole,
-    # exact_energy_dipole,
 )
 from disclinations.utils.la import compute_disclination_loads
 from dolfinx import fem
@@ -67,27 +65,17 @@ import importlib.resources as pkg_resources  # Python 3.7+ for accessing package
 import copy
 
 
-def compute_energy_errors(energy_terms, exact_energy_dipole):
-    computed_membrane_energy = energy_terms["membrane"]
-    error = np.abs(exact_energy_dipole - computed_membrane_energy)
-
-    print(f"Exact energy: {exact_energy_dipole:.3e}")
-    print(f"Computed energy: {computed_membrane_energy:.3e}")
-    print(f"Abs error: {error:.3%}")
-    print(f"Rel error: {error/exact_energy_dipole:.3%}")
-
-    return error, error / exact_energy_dipole
-
-
 from disclinations.models import assemble_penalisation_terms
 
 from disclinations.utils.la import compute_norms
 from disclinations.utils import _logger, snes_solver_stats
 
+from disclinations.utils.viz import plot_scalar, plot_profile
+import matplotlib.pyplot as plt
 
-def postprocess(state, model, mesh, params, exact_solution, prefix):
+
+def postprocess(state, q, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-
         fem_energies = {}
         exact_energies = {}
 
@@ -121,6 +109,21 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
         penalisation_terms = assemble_penalisation_terms(model)
         norms = compute_norms(state["v"], state["w"], mesh)
 
+        w, v = q.split()
+
+        v = q.sub(0).collapse()
+        w = q.sub(1).collapse()
+
+        # Compute max values locally
+        local_max_w = np.max(w.x.array)
+        local_max_v = np.max(v.x.array)
+
+        global_max_w = mesh.comm.allreduce(local_max_w, op=MPI.MAX)
+        global_max_v = mesh.comm.allreduce(local_max_v, op=MPI.MAX)
+
+        norms["v_max"] = global_max_v
+        norms["w_max"] = global_max_w
+
         extra_fields = [
             {"field": _v_exact, "name": "v_exact"},
             {"field": _w_exact, "name": "w_exact"},
@@ -140,7 +143,141 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
                 "components": "tensor",
             },
         ]
-        # write_to_output(prefix, q, extra_fields)
+
+        disclinations = params["loading"]["points"]
+        disclination_power_list = params["loading"]["signs"]
+        Q = q.function_space
+
+        import pyvista
+        from pyvista.plotting.utilities import xvfb
+        from dolfinx import plot
+
+        xvfb.start_xvfb(wait=0.05)
+        pyvista.OFF_SCREEN = True
+
+        plotter = pyvista.Plotter(
+            title="Displacement",
+            window_size=[1600, 600],
+            shape=(1, 3),
+        )
+
+        v, w = q.split()
+        v.name = "Airy"
+        w.name = "deflection"
+
+        V_v, dofs_v = Q.sub(0).collapse()
+        V_w, dofs_w = Q.sub(1).collapse()
+
+        _pv_points = np.array([p[0] for p in disclinations])
+        _pv_colours = np.array(-np.array(disclination_power_list))
+
+        scalar_plot = plot_scalar(
+            w,
+            plotter,
+            subplot=(0, 0),
+            V_sub=V_w,
+            dofs=dofs_w,
+            lineproperties={"clim": [min(w.vector[:]), max(w.vector[:])]},
+        )
+        plotter.add_points(
+            _pv_points,
+            scalars=_pv_colours,
+            style="points",
+            render_points_as_spheres=True,
+            point_size=15.0,
+        )
+
+        scalar_plot = plot_scalar(
+            v,
+            plotter,
+            subplot=(0, 1),
+            V_sub=V_v,
+            dofs=dofs_v,
+            lineproperties={"clim": [min(v.vector[:]), max(v.vector[:])]},
+        )
+        plotter.add_points(
+            _pv_points,
+            scalars=_pv_colours,
+            style="points",
+            render_points_as_spheres=True,
+            point_size=15.0,
+        )
+
+        plotter.subplot(0, 2)
+        cells, types, x = plot.vtk_mesh(V_v)
+        grid = pyvista.UnstructuredGrid(cells, types, x)
+        grid.point_data["v"] = v.x.array.real[dofs_v]
+        grid.set_active_scalars("v")
+
+        _scale = 1/max(abs(v.x.array.real))
+        warped = grid.warp_by_scalar("v", scale_factor=_scale)
+        
+        plotter.add_mesh(warped, show_edges=False)
+        plotter.add_points(
+            _pv_points,
+            scalars=_pv_colours,
+            style="points",
+            render_points_as_spheres=True,
+            point_size=15.0,
+        )
+
+        scalar_plot.screenshot(f"{prefix}/state.png")
+        print("plotted scalar")
+
+        npoints = 1001
+        tol = 1e-3
+        xs = np.linspace(
+            -parameters["geometry"]["radius"] + tol,
+            parameters["geometry"]["radius"] - tol,
+            npoints,
+        )
+        points = np.zeros((3, npoints))
+        points[0] = xs
+
+        fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+
+        _plt, data = plot_profile(
+            w,
+            points,
+            None,
+            subplot=(1, 2),
+            lineproperties={"c": "k", "label": f"$w(x)$"},
+            fig=fig,
+            subplotnumber=1,
+        )
+        _plt, data = plot_profile(
+            v,
+            points,
+            None,
+            subplot=(1, 2),
+            lineproperties={"c": "k", "label": f"$v(x)$"},
+            fig=fig,
+            subplotnumber=2,
+        )
+        _plt.legend()
+        _plt.title(
+            f"State ($w, v$) profiles $\\gamma = {parameters['model']['γ_adim']:.2f}$"
+        )
+        _plt.savefig(f"{prefix}/state-profiles.png")
+
+        w = state["w"]
+
+        κ = model.gaussian_curvature(w, order=parameters["model"]["order"] - 2)
+
+        plotter = pyvista.Plotter(
+            title="Curvature",
+            window_size=[600, 600],
+            shape=(1, 1),
+        )
+        scalar_plot = plot_scalar(κ, plotter, subplot=(0, 0))
+        plotter.add_title("Gaussian curvature", font_size=12)
+        plotter.remove_scalar_bar()
+
+        scalar_bar = plotter.add_scalar_bar("k", title_font_size=18, label_font_size=14)
+
+        scalar_plot.screenshot(f"{prefix}/gaussian_curvature.png")
+        print("plotted curvature")
+
         return fem_energies, norms, None, None, penalisation_terms
 
 
@@ -167,15 +304,6 @@ def run_experiment(
     Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
     V_P1 = dolfinx.fem.functionspace(mesh, ("CG", 1))
-
-    DG_e = basix.ufl.element(
-        "DG", str(mesh.ufl_cell()), parameters["model"]["order"] - 2
-    )
-    DG = dolfinx.fem.functionspace(mesh, DG_e)
-
-    T_e = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"] - 2)
-    T = dolfinx.fem.functionspace(mesh, T_e)
-
     boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
 
     # Point sources
@@ -198,18 +326,22 @@ def run_experiment(
         q = initial_guess
 
     v, w = ufl.split(q)
-    f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
+    # f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 
-    def transverse_load(x):
-        return _transverse_load_exact_solution(x, parameters, adimensional=True)
+    # def transverse_load(x):
+    #     return _transverse_load_exact_solution(x, parameters, adimensional=True)
 
-    f.interpolate(transverse_load)
-    
+    # f.interpolate(transverse_load)
+
     state = {"v": v, "w": w}
-    assert parameters["model"]["γ_adim"] == 1
 
-    W_ext = parameters["model"]["γ_adim"] * f * w * dx
-    # W_ext = Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType)) * w * dx
+    # W_ext = parameters["model"]["γ_adim"] * f * w * dx
+    W_ext = (
+        parameters["model"]["γ_adim"]
+        * Constant(mesh, np.array(-1.0, dtype=PETSc.ScalarType))
+        * w
+        * dx
+    )
 
     # Define the variational problem
     Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
@@ -256,22 +388,8 @@ def run_experiment(
     solver.solve()
     solver_stats = snes_solver_stats(solver.solver)
 
-    # energies, norms, abs_error, rel_error, penalisation = postprocess(
-    #     state, model, mesh, params=params, exact_solution=exact_solution, prefix=prefix
-    # )
-    # # # 11. Display error results
-
-    # # 12. Assert that the relative error is within an acceptable range
-    # sanity_check(abs_error, rel_error, penalisation, params)
-
-    # return energies, norms, abs_error, rel_error, penalisation, solver_stats
-
-    # energy_terms = postprocess(
-    #     state, model, mesh, params=parameters, exact_solution=None, prefix=prefix
-    # )
-
     energies, norms, abs_error, rel_error, penalisation = postprocess(
-        state, model, mesh, params=parameters, exact_solution=None, prefix=prefix
+        state, q, model, mesh, params=parameters, exact_solution=None, prefix=prefix
     )
 
     return energies, norms, abs_error, rel_error, penalisation, solver_stats
@@ -292,15 +410,25 @@ def load_parameters(file_path):
     with open(file_path) as f:
         parameters = yaml.load(f, Loader=yaml.FullLoader)
 
-    parameters["model"]["β_adim"] = np.nan
-    parameters["model"]["γ_adim"] = 1.0
-    parameters["model"]["higher_regularity"] = True
+    parameters["model"]["β_adim"] = 100.0
+    parameters["model"]["γ_adim"] = np.nan
+    # parameters["model"]["higher_regularity"] = True
 
     # Remove thickness from the parameters, to compute the parametric series signature
-    if "model" in parameters and "thickness" in parameters["model"]:
-        del parameters["model"]["thickness"]
+    # if "model" in parameters and "thickness" in parameters["model"]:
+    parameters["model"]["thickness"] = (
+        parameters["geometry"]["radius"] / parameters["model"]["β_adim"]
+    )
 
-    # parameters["model"]["alpha_penalty"] = 200
+    parameters["model"]["alpha_penalty"] = 10
+    # parameters["geometry"]["mesh_size"] = 0.08
+
+    parameters["loading"] = {
+        "points": [
+            np.array([[0.0, 0.0, 0.0]]).tolist(),
+        ],
+        "signs": [1],
+    }
 
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
     _logger.info(yaml.dump(parameters, default_flow_style=False))
@@ -323,28 +451,27 @@ if __name__ == "__main__":
 
     series = base_signature[0::6]
     experiment_dir = os.path.join(prefix, series)
-    num_runs = 100
+    num_runs = 10
 
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
+
+    save_params_to_yaml(base_parameters, os.path.join(experiment_dir, "parameters.yml"))
+
     _logger.info(f"Running series {series} with {num_runs} runs")
     _logger.info(f"===================- {experiment_dir} -=================")
 
     mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
 
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
-
         initial_guess = None
 
         # for i, a in enumerate(np.linspace(10, 1000, num_runs)):
-        for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=num_runs)):
-            parameters["model"]["β_adim"] = None
-            parameters["model"]["γ_adim"] = 1
+        for i, a in enumerate(np.logspace(np.log10(0.1), np.log10(1000), num=num_runs)):
+            _logger.info(f"===================- {experiment_dir} -=================")
+            _logger.critical(f"===================- γ_adim = {a} -=================")
 
-            _logger.critical(f"===================- β_adim = {a} -=================")
-
-            if changed := update_parameters(parameters, "β_adim", float(a)):
-                parameters["model"]["thickness"] = parameters["geometry"]["radius"] / a
+            if changed := update_parameters(parameters, "γ_adim", float(a)):
                 signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
             else:
                 raise ValueError("Failed to update parameters")
@@ -357,27 +484,21 @@ if __name__ == "__main__":
                 "param_value": a,
                 **energies,
                 **norms,
-                # "abs_error_membrane": abs_errors[0],
-                # "abs_error_bending": abs_errors[1],
-                # "abs_error_coupling": abs_errors[2],
-                # "rel_error_membrane": rel_errors[0],
-                # "rel_error_bending": rel_errors[1],
-                # "rel_error_coupling": rel_errors[2],
                 **penalisation,  # Unpack penalization terms into individual columns
                 **solver_stats,  # Unpack solver statistics into individual columns
             }
             _experimental_data.append(run_data)
 
-    experimental_data = pd.DataFrame(_experimental_data)
+        experimental_data = pd.DataFrame(_experimental_data)
 
-    _logger.info(f"Saving experimental data to {experiment_dir}")
-    print(experimental_data)
+        _logger.info(f"Saving experimental data to {experiment_dir}")
+        print(experimental_data)
 
-    if mesh.comm.rank == 0:
-        experimental_data.to_pickle(f"{experiment_dir}/experimental_data.pkl")
+        if mesh.comm.rank == 0:
+            experimental_data.to_pickle(f"{experiment_dir}/experimental_data.pkl")
 
-        with open(f"{experiment_dir}/experimental_data.json", "w") as file:
-            json.dump(_experimental_data, file)
+            with open(f"{experiment_dir}/experimental_data.json", "w") as file:
+                json.dump(_experimental_data, file)
 
     import matplotlib.pyplot as plt
 

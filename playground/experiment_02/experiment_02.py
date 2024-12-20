@@ -33,6 +33,7 @@ from dolfinx import log
 from dolfinx.io import XDMFFile
 from mpi4py import MPI
 from petsc4py import PETSc
+from dolfinx import plot
 
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 from disclinations.models import (
@@ -57,7 +58,7 @@ comm = MPI.COMM_WORLD
 AIRY = 0
 TRANSVERSE = 1
 
-def postprocess(state, model, mesh, params, exact_solution, prefix):
+def postprocess(state, q, model, mesh, params, exact_solution, prefix):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
 
         fem_energies = {}
@@ -113,7 +114,120 @@ def postprocess(state, model, mesh, params, exact_solution, prefix):
             },
         ]
         # write_to_output(prefix, q, extra_fields)
-        return fem_energies, norms, None, None, penalisation_terms
+        
+        
+        import pyvista
+        from pyvista.plotting.utilities import xvfb
+
+        xvfb.start_xvfb(wait=0.05)
+        pyvista.OFF_SCREEN = True
+
+        w = state["w"]
+        
+        κ = model.gaussian_curvature(w, order = parameters["model"]["order"]-2)
+        # heatmap of bracket(w, w) = det Hessian = k_1 * k_2 = kappa (gaussian curvature)
+        
+        plotter = pyvista.Plotter(
+                title="Curvature",
+                window_size=[600, 600],
+                shape=(1, 1),
+            )
+        scalar_plot = plot_scalar(κ, plotter, subplot=(0, 0))
+        plotter.add_title("Gaussian curvature", font_size=12)
+        plotter.remove_scalar_bar()
+
+        scalar_bar = plotter.add_scalar_bar("k", title_font_size=18, label_font_size=14)
+
+        scalar_plot.screenshot(f"{prefix}/gaussian_curvature.png")
+        
+        _logger.info("Plotted curvature κ")
+
+        plotter = pyvista.Plotter(
+            title="Displacement",
+            window_size=[1600, 600],
+            shape=(1, 2),
+        )
+        points = parameters["loading"]["points"]
+        signs = parameters["loading"]["signs"]
+
+        w, v = q.split()
+        w = q.sub(1).collapse()
+        v = q.sub(0).collapse()
+        
+        plotter = plot_scalar(w, plotter, subplot=(0, 0), 
+                                  lineproperties={"show_edges": False})
+        # plotter.subplot(0, 1)
+        _pv_points = np.array([p[0] for p in points])
+        _pv_colours = np.array(signs)
+        plotter.add_points(
+                _pv_points,
+                scalars = _pv_colours,
+                style = 'points', 
+                render_points_as_spheres=True, 
+                point_size=15.0
+        )
+        plotter.subplot(0, 1)
+
+        V, _ = q.function_space.sub(1).collapse()
+        cells, types, x = plot.vtk_mesh(V)
+        grid = pyvista.UnstructuredGrid(cells, types, x)
+        grid.point_data["u"] = w.x.array.real
+        grid.set_active_scalars("u")
+        # plotter = pyvista.Plotter()
+        # plotter.add_mesh(grid, show_edges=True)
+        _scale = 1/max(abs(w.x.array.real))/10
+        warped = grid.warp_by_scalar("u", scale_factor=_scale)
+        plotter.add_mesh(warped, show_edges=False)
+        plotter.add_title(
+            f'Displacements param {parameters["model"]["γ_adim"]:.2e}', font='courier', color='k', font_size=12
+        )
+        
+        plotter.screenshot(f"{prefix}/displacement.png")
+        plotter.export_html(f"{prefix}/displacement.html")
+        _logger.info("Plotted displacement w")
+
+        tol = 1e-3
+        xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, 101)
+        points = np.zeros((3, 101))
+        points[0] = xs
+
+        fig, axes = plt.subplots(1, 2, figsize=(18, 6))
+
+        _plt, data = plot_profile(
+            w,
+            points,
+            None,
+            subplot=(1, 2),
+            lineproperties={
+                "c": "k",
+                "label": f"$w(x)$"
+            },
+            fig=fig,
+            subplotnumber=1
+        )
+
+        ax = _plt.gca()
+        axw = ax.twinx()
+
+        _plt, data = plot_profile(
+            v,
+            points,
+            None,
+            subplot=(1, 2),
+            lineproperties={
+                "c": "k",
+                "label": f"$v(x)$"
+            },
+            fig=fig,
+            subplotnumber=2
+        )
+
+        _plt.legend()
+
+        _plt.savefig(f"{prefix}/field-profiles.png")
+        _logger.info("Plotted profiles v, w")
+
+    return fem_energies, norms, None, None, penalisation_terms
 
 
 def run_experiment(mesh: None, parameters: dict, series: str):
@@ -179,14 +293,13 @@ def run_experiment(mesh: None, parameters: dict, series: str):
     )
     b.vector.scale(parameters["model"]["β_adim"] ** 2.0)
     
-    W_ext = parameters["model"]["γ_adim"] * dolfinx.fem.Constant(mesh, -1.) * w * dx
+    W_ext = parameters["model"]["γ_adim"] * parameters["model"]["β_adim"] ** 4.0 * dolfinx.fem.Constant(mesh, -1.) * w * dx
 
     model = NonlinearPlateFVK(mesh, parameters["model"], adimensional=True)
     energy = model.energy(state)[0]
     # Dead load (transverse)
     model.W_ext = W_ext
     penalisation = model.penalisation(state)
-
 
     # Define the functional
     L = energy - W_ext + penalisation
@@ -207,35 +320,10 @@ def run_experiment(mesh: None, parameters: dict, series: str):
     solver_stats = snes_solver_stats(solver.solver)
     del solver
     
-    
     # Postprocessing and viz
-    with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-        energies, norms, abs_error, rel_error, penalisation = postprocess(
-            state, model, mesh, params=parameters, exact_solution=None, prefix=prefix
+    energies, norms, abs_error, rel_error, penalisation = postprocess(
+            state, q, model, mesh, params=parameters, exact_solution=None, prefix=prefix
         )
-        import pyvista
-        from pyvista.plotting.utilities import xvfb
-
-        xvfb.start_xvfb(wait=0.05)
-        pyvista.OFF_SCREEN = True
-
-
-        κ = model.gaussian_curvature(w, order = parameters["model"]["order"]-2)
-        # heatmap of bracket(w, w) = det Hessian = k_1 * k_2 = kappa (gaussian curvature)
-        
-        plotter = pyvista.Plotter(
-                title="Curvature",
-                window_size=[600, 600],
-                shape=(1, 1),
-            )
-        scalar_plot = plot_scalar(κ, plotter, subplot=(0, 0))
-        plotter.add_title("Gaussian curvature", font_size=12)
-        plotter.remove_scalar_bar()
-
-        scalar_bar = plotter.add_scalar_bar("k", title_font_size=18, label_font_size=14)
-
-        scalar_plot.screenshot(f"{prefix}/gaussian_curvature.png")
-        print("plotted curvature")
 
     return energies, norms, abs_error, rel_error, penalisation, solver_stats
 
@@ -266,14 +354,20 @@ def load_parameters(file_path):
         "snes_linesearch_type": "basic",  # Type of line search
     }
     parameters["model"]["γ_adim"] = 1.0
-    parameters["model"]["β_adim"] = 1.
+    parameters["model"]["β_adim"] = 20
+    parameters["model"]["thickness"] = parameters["geometry"]["radius"] / parameters["model"]["β_adim"] 
 
+    _rho = 0.5
+    # parameters["loading"] = {
+    #     "points": [np.array([[-_rho, 0.0, 0]]).tolist(),
+    #             np.array([[_rho, 0.0, 0]]).tolist(),
+    #             np.array([[0.0, _rho, 0]]).tolist(),
+    #             np.array([[0.0, -_rho, 0]]).tolist(),],
+    #     "signs": [1, 1, 1, 1]
+    #             }
     parameters["loading"] = {
-        "points": [np.array([[-0.2, 0.0, 0]]),
-                np.array([[0.2, 0.0, 0]]),
-                np.array([[0.0, 0.2, 0]]),
-                np.array([[0.0, -.2, 0]])],
-        "signs": [1, 1, 1, 1]
+        "points": [np.array([[0., 0.0, 0.]]).tolist(),],
+        "signs": [-1]
                 }
     
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
@@ -326,7 +420,7 @@ if __name__ == "__main__":
 
         fig.savefig(f"{experiment_dir}/mesh.png")
             
-        for i, gamma in enumerate(np.linspace(0.1, 100, num_runs)):
+        for i, gamma in enumerate(np.logspace(np.log10(1e-9), np.log10(1e-8), num=num_runs)):
             # Check memory usage before computation
             mem_before = memory_usage()
             _logger.critical(f"===================- γ_adim = {gamma} -=================")
@@ -345,12 +439,6 @@ if __name__ == "__main__":
                 "param_value": gamma,
                 **energies,
                 **norms,
-                # "abs_error_membrane": abs_errors[0],
-                # "abs_error_bending": abs_errors[1],
-                # "abs_error_coupling": abs_errors[2],
-                # "rel_error_membrane": rel_errors[0],
-                # "rel_error_bending": rel_errors[1],
-                # "rel_error_coupling": rel_errors[2],
                 **penalisation,  # Unpack penalization terms into individual columns
                 **solver_stats,  # Unpack solver statistics into individual columns
             }
@@ -369,7 +457,6 @@ if __name__ == "__main__":
     print(experimental_data)
     
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-
         if mesh.comm.rank == 0:
             experimental_data.to_pickle(f"{experiment_dir}/experimental_data.pkl")
 
@@ -423,30 +510,6 @@ if __name__ == "__main__":
             marker="o",
         )
         plt.savefig(f"{experiment_dir}/residuals.png")
-
-    # import matplotlib.pyplot as plt
-    
-    # # Plot energy terms versus thickness
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(experimental_data["thickness"], experimental_data["membrane_energy"], label="Membrane Energy")
-    # plt.plot(experimental_data["thickness"], experimental_data["bending_energy"], label="Bending Energy")
-    # plt.plot(experimental_data["thickness"], experimental_data["coupling_energy"], label="Coupling Energy")
-    # plt.xlabel("Thickness")
-    # plt.ylabel("Energy")
-    # plt.title("Energy Terms vs Thickness")
-    # plt.legend()
-    # plt.savefig(f"{experiment_dir}/energy_terms.png")
-
-    # # Plot L2 norm terms versus thickness
-    # plt.figure(figsize=(10, 6))
-    # plt.plot(experimental_data["thickness"], experimental_data["w_L2"], label=r"$w_{L^2}$")
-    # plt.plot(experimental_data["thickness"], experimental_data["v_L2"], label=r"$v_{L^2}$")
-    # plt.xlabel("Thickness")
-    # plt.ylabel("L2 Norms")
-    # plt.title("L2 Norm Terms vs Thickness")
-    # plt.legend()
-
-    # plt.savefig(f"{experiment_dir}/norms_fields.png")
 
 
     timings = table_timing_data()

@@ -36,22 +36,40 @@ from petsc4py import PETSc
 
 from disclinations.meshes.primitives import mesh_circle_gmshapi
 
-from disclinations.models import (NonlinearPlateFVK, NonlinearPlateFVK_brenner,
-                                  NonlinearPlateFVK_carstensen,
-                                  calculate_rescaling_factors,
-                                  compute_energy_terms,
-                                  initialise_exact_solution_compatible_transverse,
-                                  _transverse_load_exact_solution)
+from disclinations.models import (
+    NonlinearPlateFVK,
+    NonlinearPlateFVK_brenner,
+    NonlinearPlateFVK_carstensen,
+    calculate_rescaling_factors,
+    compute_energy_terms,
+    create_disclinations,
+    _transverse_load_exact_solution,
+)
 
 from disclinations.solvers import SNESSolver
 from disclinations.utils.la import compute_disclination_loads
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
-from disclinations.utils import update_parameters, memory_usage, save_parameters, save_params_to_yaml
-from disclinations.utils import create_or_load_circle_mesh, basic_postprocess
+from disclinations.utils import (
+    update_parameters,
+    memory_usage,
+    save_parameters,
+    save_params_to_yaml,
+)
+from disclinations.utils import (
+    create_or_load_circle_mesh,
+    basic_postprocess,
+    homogeneous_dirichlet_bc_H20,
+)
 import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import copy
-from disclinations.utils import _logger, print_energy_analysis
+from disclinations.utils import _logger, snes_solver_stats
 import pytest
+
+from disclinations.models import (
+    assemble_penalisation_terms,
+    initialise_exact_solution_monopole,
+)
+from disclinations.utils.la import compute_norms
 
 models = ["variational", "brenner", "carstensen"]
 
@@ -59,64 +77,84 @@ logging.basicConfig(level=logging.INFO)
 comm = MPI.COMM_WORLD
 
 
+def postprocess(state, q, model, mesh, params, exact_solution, prefix):
+    with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
+        # Compute energies for the exact solution
+        exact_energies = {}
+        fem_energies = {}
+        abs_errors = {}
+        rel_errors = {}
+        # the exact solution is adimensional, to perform energy comparison
+
+        _logger.info("\nEnergy Analysis:")
+        for i, energy_name in enumerate(["total", "bending", "membrane", "coupling"]):
+            exact_energy = dolfinx.fem.assemble_scalar(
+                dolfinx.fem.form(model.energy(exact_solution)[i])
+            )
+            _exact_energy = mesh.comm.allreduce(exact_energy, op=MPI.SUM)
+            exact_energies[energy_name] = _exact_energy
+
+            fem_energy = dolfinx.fem.assemble_scalar(
+                dolfinx.fem.form(model.energy(state)[i])
+            )
+            _fem_energy = mesh.comm.allreduce(fem_energy, op=MPI.SUM)
+            fem_energies[energy_name] = _fem_energy
+
+            # Compute absolute and relative errors
+            abs_error = abs(fem_energies[energy_name] - exact_energies[energy_name])
+            rel_error = (
+                abs_error / abs(exact_energies[energy_name])
+                if exact_energies[energy_name] != 0
+                else float("inf")
+            )
+            abs_errors[energy_name] = abs_error
+            rel_errors[energy_name] = rel_error
+
+            # Log detailed energy information
+            _logger.info(f"{energy_name.capitalize()} Energy Analysis:")
+            _logger.info(f"  Exact Energy: {_exact_energy:.5e}")
+            _logger.info(f"  FEM Energy: {_fem_energy:.5e}")
+            _logger.info(f"  Absolute Error: {abs_error:.0e}")
+            _logger.info(f"  Relative Error: {rel_error:.2%}\n")
+
+        penalization_terms = assemble_penalisation_terms(model)
+        norms = compute_norms(state["v"], state["w"], mesh)
+
+        _v_exact, _w_exact = exact_solution["v"], exact_solution["w"]
+
+        extra_fields = [
+            {"field": _v_exact, "name": "v_exact"},
+            {"field": _w_exact, "name": "w_exact"},
+            {
+                "field": model.M(state["w"]),  # Tensor expression
+                "name": "M",
+                "components": "tensor",
+            },
+            {
+                "field": model.P(state["v"]),  # Tensor expression
+                "name": "P",
+                "components": "tensor",
+            },
+        ]
+
+        # write_to_output(prefix, q, extra_fields)
+
+        # Convert errors to numpy arrays for easy handling
+        abs_error_array = np.array(list(abs_errors.values()))
+        rel_error_array = np.array(list(rel_errors.values()))
+
+        # Optionally, return the computed values for further use
+        return fem_energies, norms, abs_error_array, rel_error_array, penalization_terms
+
+
 def postprocess_and_visualize(model, state, exact_solution, data, prefix, parameters):
     with dolfinx.common.Timer(f"~Postprocessing and Vis") as timer:
-        v, w = state["v"], state["w"]
-        
-        energy_components = {
-            "bending": model.energy(state)[1],
-            "membrane": -model.energy(state)[2],
-            "coupling": model.energy(state)[3]
-        }
-        penalisation_components = {
-            "dgv": model._dgv,
-            "dgw": model._dgw,
-            "dgc": model._dgc,
-            "bcv": model._bcv,
-            "bcw": model._bcw
-        }
-        computed_energy_terms = {
-            label: comm.allreduce(
-                dolfinx.fem.assemble_scalar(dolfinx.fem.form(energy_term)),
-                op=MPI.SUM,
-            ) for label, energy_term in energy_components.items()
-        }
-
-        computed_penalisation_terms = {
-            label: comm.allreduce(
-                dolfinx.fem.assemble_scalar(dolfinx.fem.form(penalisation_term)),
-                op=MPI.SUM,
-            ) for label, penalisation_term in penalisation_components.items()
-        }
-        
-        exact_energy_transverse_load = comm.allreduce(
-            dolfinx.fem.assemble_scalar(
-                dolfinx.fem.form(model.energy(exact_solution)[0])),
-            op=MPI.SUM)
-        
-        abs_error, rel_error = print_energy_analysis(
-            computed_energy_terms, exact_energy_transverse_load
-        )
-
-        data["membrane_energy"] = computed_energy_terms["membrane"]
-        data["bending_energy"] = computed_energy_terms["bending"]
-        data["coupling_energy"] = computed_energy_terms["coupling"]
-        
-        data["v_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
-            dolfinx.fem.form(ufl.inner(v, v) * dx)), op=MPI.SUM)
-        data["w_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
-            dolfinx.fem.form(ufl.inner(w, w) * dx)), op=MPI.SUM)
-
-        data["∇²v_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
-            dolfinx.fem.form(ufl.inner(v, v) * dx)), op=MPI.SUM)
-        data["∇²w_L2"] = comm.allreduce(dolfinx.fem.assemble_scalar(
-            dolfinx.fem.form(ufl.inner(w, w) * dx)), op=MPI.SUM)
-
         import pyvista
         from pyvista.plotting.utilities import xvfb
 
         xvfb.start_xvfb(wait=0.05)
         pyvista.OFF_SCREEN = True
+        w = state["w"]
 
         κ = model.gaussian_curvature(w, order=parameters["model"]["order"] - 2)
 
@@ -137,22 +175,25 @@ def postprocess_and_visualize(model, state, exact_solution, data, prefix, parame
 
 # def run_experiment(mesh: None, parameters: dict, series: str):
 @pytest.mark.parametrize("variant", models)
-def run_experiment(mesh, parameters, experiment_dir, variant = "variational", initial_guess=None):
-
+def run_experiment(
+    mesh, parameters, experiment_dir, variant="variational", initial_guess=None
+):
     # Setup, output and file handling
-    _logger.info(f"Running experiment of the series {series} with parameter: {parameters['model']['a_adim']}")
+    _logger.info(
+        f"Running experiment of the series {series} with parameter: {parameters['model']['β_adim']}"
+    )
     parameters = calculate_rescaling_factors(parameters)
 
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()[0:6]
     data = {
-        'membrane_energy': [],
-        'bending_energy': [],
-        'coupling_energy': [],
-        'w_L2': [],
-        'v_L2': [],
-        'thickness': []
+        "membrane_energy": [],
+        "bending_energy": [],
+        "coupling_energy": [],
+        "w_L2": [],
+        "v_L2": [],
+        "thickness": [],
     }
-    
+
     outdir = "output"
     prefix = os.path.join(outdir, series, signature)
 
@@ -160,24 +201,27 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
         Path(prefix).mkdir(parents=True, exist_ok=True)
 
     # MPI communicator and global variables
-    
+
     AIRY = 0
     TRANSVERSE = 1
 
     # Parameters
-    
+
     mesh_size = parameters["geometry"]["mesh_size"]
     nu = parameters["model"]["nu"]
     thickness = parameters["model"]["thickness"]
     radius = parameters["geometry"]["radius"]
     E = parameters["model"]["E"]
-    
+
     _D = E * thickness**3 / (12 * (1 - nu**2))
     w_scale = np.sqrt(2 * _D / (E * thickness))
     v_scale = _D
     f_scale = np.sqrt(2 * _D**3 / (E * thickness))
-    f0 = parameters["model"]["E"] * (parameters["model"]["thickness"] / parameters["geometry"]["radius"])**4 
-    b_scale = (radius / thickness)**2
+    f0 = (
+        parameters["model"]["E"]
+        * (parameters["model"]["thickness"] / parameters["geometry"]["radius"]) ** 4
+    )
+    b_scale = parameters["model"]["β_adim"] ** 2
 
     # Mesh
     model_rank = 0
@@ -194,53 +238,74 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
 
     # Functional setting
 
-    X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"]) 
+    X = basix.ufl.element("P", str(mesh.ufl_cell()), parameters["model"]["order"])
     Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
     q = dolfinx.fem.Function(Q)
     q_exact = dolfinx.fem.Function(Q)
     f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
-    
+
     v, w = ufl.split(q)
     v_exact, w_exact = q_exact.split()
     state = {"v": v, "w": w}
 
     # Loading
-    # Disclinations
-    if mesh.comm.rank == 0:
-        points = np.array([[0.0, 0.0, 0]], dtype=mesh.geometry.x.dtype)
-        signs = [1]
-    else:
-        points = np.zeros((0, 3), dtype=mesh.geometry.x.dtype)
-        
-    Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
+    # Point sources
+    # if mesh.comm.rank == 0:
+    #     points = [
+    #         np.array([[-0.3, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+    #         np.array([[0.3, 0.0, 0]], dtype=mesh.geometry.x.dtype),
+    #     ]
+    #     disclination_power_list = [-1, 1]
+    # else:
+    #     points = [
+    #         np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+    #         np.zeros((0, 3), dtype=mesh.geometry.x.dtype),
+    #     ]
+    #     disclination_power_list = [0, 0]
 
-    b = compute_disclination_loads(points, signs, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)
-    
+    Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
+    # disclinations, parameters = create_disclinations(
+    #     mesh, parameters, points=points, signs=disclination_power_list
+    # )
+    # b = compute_disclination_loads(
+    #     disclinations,
+    #     disclination_power_list,
+    #     Q,
+    #     V_sub_to_V_dofs=Q_v_to_Q_dofs,
+    #     V_sub=Q_v,
+    # )
+    disclinations, parameters = create_disclinations(mesh, parameters)
+    b = compute_disclination_loads(
+        disclinations,
+        parameters["loading"]["signs"],
+        Q,
+        V_sub_to_V_dofs=Q_v_to_Q_dofs,
+        V_sub=Q_v,
+    )
+
+    b.vector.scale(parameters["model"]["β_adim"] ** 2.0)
+
     # Transverse load (analytical solution)
-    _transverse_load = lambda x: _transverse_load_exact_solution(x, parameters, adimensional=False)
-    
-    exact_solution = initialise_exact_solution_compatible_transverse(Q, parameters)
+    _transverse_load = lambda x: _transverse_load_exact_solution(
+        x, parameters, adimensional=False
+    )
+
+    exact_solution = initialise_exact_solution_monopole(Q, parameters, adimensional=True)
 
     f.interpolate(_transverse_load)
 
-    # Boundary conditions 
-    bndry_facets = dolfinx.mesh.exterior_facet_indices(mesh.topology)
-    dofs_v = dolfinx.fem.locate_dofs_topological(V=Q.sub(AIRY), entity_dim=1, entities=bndry_facets)
-    dofs_w = dolfinx.fem.locate_dofs_topological(V=Q.sub(TRANSVERSE), entity_dim=1, entities=bndry_facets)
-        
-    bcs_w = dirichletbc(
-        np.array(0, dtype=PETSc.ScalarType),
-        dofs_w, Q.sub(TRANSVERSE)
-    )
-    bcs_v = dirichletbc(
-        np.array(0, dtype=PETSc.ScalarType),
-        dofs_v, Q.sub(AIRY)
-    )
-    bcs = list({AIRY: bcs_v, TRANSVERSE: bcs_w}.values())
+    boundary_conditions = homogeneous_dirichlet_bc_H20(mesh, Q)
 
-    W_ext = parameters["model"]["a_adim"]**4 * f * w * dx
-    
+    W_ext = (
+        dolfinx.fem.Constant(mesh, np.array(0.0, dtype=PETSc.ScalarType))
+        * parameters["model"]["γ_adim"]
+        * parameters["model"]["β_adim"] ** 4
+        * f
+        * w
+        * dx
+    )
+
     model = NonlinearPlateFVK(mesh, parameters["model"], adimensional=True)
     energy = model.energy(state)[0]
     model.W_ext = W_ext
@@ -249,8 +314,8 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     # Define the functional
     L = energy - W_ext + penalisation
     F = ufl.derivative(L, q, ufl.TestFunction(Q))
-    
-    save_params_to_yaml(parameters, os.path.join(prefix, "parameters.yml"))
+
+    save_params_to_yaml(parameters, os.path.join(prefix, "parameters.yaml"))
     if MPI.COMM_WORLD.rank == 0:
         with open(f"{prefix}/signature.md5", "w") as f:
             f.write(signature)
@@ -258,73 +323,63 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
     solver = SNESSolver(
         F_form=F,
         u=q,
-        bcs=bcs,
+        bcs=boundary_conditions,
         bounds=None,
-        petsc_options=parameters["solvers"]["elasticity"],
-        prefix='plate_fvk',
-        b0=b_scale*b.vector,
+        petsc_options=parameters["solvers"]["nonlinear"],
+        prefix="plate_fvk",
+        b0=b.vector,
     )
     solver.solve()
 
-    energy_terms = basic_postprocess(
-        state, model, mesh, params=parameters,
-        exact_solution=None, 
-        prefix=prefix
+    solver_stats = snes_solver_stats(solver.solver)
+
+    del solver
+
+    # Postprocessing and viz
+    energies, norms, abs_error, rel_error, penalisation = postprocess(
+        state,
+        q,
+        model,
+        mesh,
+        params=parameters,
+        exact_solution=exact_solution,
+        prefix=prefix,
     )
+    V_P1 = dolfinx.fem.functionspace(mesh, ("CG", 1))
+    V_P1 = dolfinx.fem.functionspace(
+        mesh, ("CG", 1)
+    )  # "CG" stands for continuous Galerkin (Lagrange)
 
-    convergence_reason = solver.solver.getConvergedReason()
-    num_iterations = solver.solver.getIterationNumber()
-    residual_norm = solver.solver.getFunctionNorm()
-    num_function_evals = solver.solver.getFunctionEvaluations()
-
-    v_L2 = comm.allreduce(dolfinx.fem.assemble_scalar(
-        dolfinx.fem.form(ufl.inner(v, v) * dx)), op=MPI.SUM)
-    w_L2 = comm.allreduce(dolfinx.fem.assemble_scalar(
-        dolfinx.fem.form(ufl.inner(w, w) * dx)), op=MPI.SUM)
-
-    _simulation_data = {
-        "signature": signature,
-        "series": series,
-        "parameter": parameters["model"]["a_adim"],
-        "bending_energy": energy_terms['bending'],
-        "membrane_energy": energy_terms['membrane'],
-        "coupling_energy": energy_terms['coupling'],
-        "external_work": energy_terms['external_work'],
-        "v_L2": v_L2,
-        "w_L2": w_L2,
-        "convergence_reason": convergence_reason,
-        "iterations": num_iterations,
-        "residual_norm": residual_norm,
-        "function_evaluations": num_function_evals,
-    }
-
-    V_P1 = dolfinx.fem.functionspace(mesh, ("CG", 1))  # "CG" stands for continuous Galerkin (Lagrange)
-    
-    with XDMFFile(comm, os.path.join(outdir, series, "fields-vs-thickness.xdmf"), "a",
-                    encoding=XDMFFile.Encoding.HDF5) as file:
-        
+    with XDMFFile(
+        comm,
+        os.path.join(outdir, series, "fields-vs-thickness.xdmf"),
+        "a",
+        encoding=XDMFFile.Encoding.HDF5,
+    ) as file:
         _v, _w = q.split()
         _v.name = "potential"
         _w.name = "displacement"
-        
+
         interpolation = dolfinx.fem.Function(V_P1)
-        print(f"saving interpolation, {parameters['model']['a_adim']}")
+        _logger.info(f"saving interpolation, {parameters['model']['β_adim']}")
 
         interpolation.interpolate(_v)
-        interpolation.name = 'v'
-        
-        file.write_function(interpolation, parameters['model']['a_adim'])  # Specify unique mesh_xpath for velocity
+        interpolation.name = "v"
+
+        file.write_function(
+            interpolation, parameters["model"]["β_adim"]
+        )  # Specify unique mesh_xpath for velocity
 
         interpolation.interpolate(_w)
-        interpolation.name = 'w'
-        file.write_function(interpolation, parameters['model']['a_adim'])  # Specify unique mesh_xpath for velocity
-    
-    del solver
+        interpolation.name = "w"
+        file.write_function(
+            interpolation, parameters["model"]["β_adim"]
+        )  # Specify unique mesh_xpath for velocity
 
-    # Call the new function in the main code
     postprocess_and_visualize(model, state, exact_solution, data, prefix, parameters)
 
-    return energy_terms, q, _simulation_data
+    return energies, norms, abs_error, rel_error, penalisation, solver_stats
+
 
 def load_parameters(file_path):
     """
@@ -343,31 +398,30 @@ def load_parameters(file_path):
 
     parameters["geometry"]["radius"] = 1
     parameters["geometry"]["geom_type"] = "circle"
-    parameters["solvers"]["elasticity"] = {
-        "snes_type": "newtonls",      # Solver type: NGMRES (Nonlinear GMRES)
-        "snes_max_it": 30,           # Maximum number of iterations
-        "snes_rtol": 1e-6,            # Relative tolerance for convergence
-        "snes_atol": 1e-6,           # Absolute tolerance for convergence
-        "snes_stol": 1e-5,           # Tolerance for the change in solution norm
-        "snes_monitor": None,         # Function for monitoring convergence (optional)
-        "snes_linesearch_type": "basic",  # Type of line search
-    }
+    parameters["model"]["higher_regularity"] = False
 
-    parameters["model"]["higher_regularity"] = True
+    parameters["loading"] = {
+        "points": [
+            np.array([[0.0, 0.0, 0]]).tolist(),
+        ],
+        "signs": [1],
+    }
 
     signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
     print(yaml.dump(parameters, default_flow_style=False))
 
     return parameters, signature
 
+
 if __name__ == "__main__":
     from disclinations.utils import table_timing_data, Visualisation
+
     _experimental_data = []
     outdir = "output"
     prefix = outdir
     _simulation_data = []
-    
-    with pkg_resources.path('disclinations.test', 'parameters.yml') as f:
+
+    with pkg_resources.path("disclinations.test", "parameters.yml") as f:
         # parameters = yaml.load(f, Loader=yaml.FullLoader)
         parameters, _ = load_parameters(f)
 
@@ -375,88 +429,128 @@ if __name__ == "__main__":
         # Remove thickness from the parameters, to compute the parametric series signature
         if "model" in base_parameters and "thickness" in base_parameters["model"]:
             del base_parameters["model"]["thickness"]
-        
-        base_signature = hashlib.md5(str(base_parameters).encode('utf-8')).hexdigest()
+
+        base_signature = hashlib.md5(str(base_parameters).encode("utf-8")).hexdigest()
 
     series = base_signature[0::6]
 
     experiment_dir = os.path.join(outdir, series)
     num_runs = 11
-    
+
     if comm.rank == 0:
         Path(experiment_dir).mkdir(parents=True, exist_ok=True)
-            
-    logging.info(
-        f"===================- {experiment_dir} -=================")
+
+    logging.info(f"===================- {experiment_dir} -=================")
     _logger.info(f"Running {num_runs} experiments for series {series}")
     mesh, mts, fts = create_or_load_circle_mesh(parameters, prefix=prefix)
 
-
     with dolfinx.common.Timer("~Computation Experiment") as timer:
-    
         # Mesh is fixed for all runs
         model_rank = 0
         initial_guess = None
-        
-        with XDMFFile(comm, os.path.join(outdir, series, "fields-vs-thickness.xdmf"), "w",
-                    encoding=XDMFFile.Encoding.HDF5) as file:
+
+        with XDMFFile(
+            comm,
+            os.path.join(outdir, series, "fields-vs-thickness.xdmf"),
+            "w",
+            encoding=XDMFFile.Encoding.HDF5,
+        ) as file:
             file.write_mesh(mesh)
-        
+
         for i, a in enumerate(np.logspace(np.log10(10), np.log10(1000), num=15)):
-            parameters['model']['a_adim'] = None
-            parameters['model']['c_adim'] = 1
+            parameters["model"]["β_adim"] = None
+            parameters["model"]["γ_adim"] = 1
 
             # Check memory usage before computation
             mem_before = memory_usage()
-            
-            if changed := update_parameters(parameters, "a_adim", float(a)):
-                signature = hashlib.md5(str(parameters).encode('utf-8')).hexdigest()
-                energy_terms, initial_guess, simulation_data = run_experiment(mesh, parameters, experiment_dir,
-                                                             initial_guess=None)
-            else: 
+
+            if changed := update_parameters(parameters, "β_adim", float(a)):
+                signature = hashlib.md5(str(parameters).encode("utf-8")).hexdigest()
+                energies, norms, abs_errors, rel_errors, penalisation, solver_stats = (
+                    run_experiment(mesh, parameters, experiment_dir, initial_guess=None)
+                )
+            else:
                 abs_error, rel_error = None, None
                 raise ValueError("Failed to update parameters")
-            
-            _data = {
-                "a_adim": a,
-                "signature": signature,
-            }
 
-            _experimental_data.append(_data)
-            _simulation_data.append(simulation_data)
-            
+            run_data = {
+                "signature": signature,
+                "param_value": a,
+                **energies,
+                **norms,
+                "abs_error_membrane": abs_errors[0],
+                "abs_error_bending": abs_errors[1],
+                "abs_error_coupling": abs_errors[2],
+                "rel_error_membrane": rel_errors[0],
+                "rel_error_bending": rel_errors[1],
+                "rel_error_coupling": rel_errors[2],
+                **penalisation,  # Unpack penalization terms into individual columns
+                **solver_stats,  # Unpack solver statistics into individual columns
+            }
+            _experimental_data.append(run_data)
+
             # Check memory usage after computation
             mem_after = memory_usage()
-            
+
             # Log memory usage
-            _logger.info(f"Run {i}/{num_runs}: Memory Usage (MB) - Before: {mem_before}, After: {mem_after}")
+            _logger.info(
+                f"Run {i}/{num_runs}: Memory Usage (MB) - Before: {mem_before}, After: {mem_after}"
+            )
             # Perform garbage collection
             gc.collect()
-    
-    experimental_data = pd.DataFrame(_simulation_data)
+
+    experimental_data = pd.DataFrame(_experimental_data)
     timings = table_timing_data()
     _logger.info(f"Saving experimental data to {experiment_dir}")
 
-
     import matplotlib.pyplot as plt
-    
+
+    __import__("pdb").set_trace()
     # Plot energy terms versus thickness
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(experimental_data["parameter"], experimental_data["membrane_energy"], label="Membrane Energy", marker='o')
+    ax.plot(
+        experimental_data["param_value"],
+        experimental_data["membrane"],
+        label="Membrane Energy",
+        marker="o",
+    )
     ax2 = ax.twinx()
-    ax2.plot(experimental_data["parameter"], experimental_data["bending_energy"], label="Bending Energy", marker='o')
-    ax2.plot(experimental_data["parameter"], experimental_data["coupling_energy"], label="Coupling Energy", marker='o')
+    ax2.plot(
+        experimental_data["param_value"],
+        experimental_data["bending"],
+        label="Bending Energy",
+        marker="o",
+    )
+    ax2.plot(
+        experimental_data["param_value"],
+        experimental_data["coupling"],
+        label="Coupling Energy",
+        marker="o",
+    )
     ax.set_xlabel("a")
     ax.set_ylabel("Energy")
+    ax.loglog()
     plt.title("Energy Terms vs a")
+
     plt.legend()
+
     plt.savefig(f"{experiment_dir}/energy_terms.png")
 
     # Plot L2 norm terms versus thickness
     fig, ax = plt.subplots(figsize=(10, 6))
-    ax.plot(experimental_data["parameter"], experimental_data["w_L2"], label=r"$w_{L^2}$", marker='o')
+    ax.plot(
+        experimental_data["param_value"],
+        experimental_data["w_L2"],
+        label=r"$w_{L^2}$",
+        marker="o",
+    )
     ax2 = ax.twinx()
-    ax2.plot(experimental_data["parameter"], experimental_data["v_L2"], label=r"$v_{L^2}$", marker='o')
+    ax2.plot(
+        experimental_data["param_value"],
+        experimental_data["v_L2"],
+        label=r"$v_{L^2}$",
+        marker="o",
+    )
     ax.set_xlabel("Thickness")
     ax.set_ylabel("L2 Norms w")
     ax2.set_ylabel("L2 Norm v")
@@ -467,9 +561,7 @@ if __name__ == "__main__":
     plt.savefig(f"{experiment_dir}/norms_fields.png")
 
     list_timings(MPI.COMM_WORLD, [dolfinx.common.TimingType.wall])
-    
+
     Visualisation(experiment_dir).visualise_results(experimental_data)
     Visualisation(experiment_dir).save_table(timings, "timing_data")
     Visualisation(experiment_dir).save_table(experimental_data, "postprocessing_data")
-    
-    
