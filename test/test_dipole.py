@@ -207,7 +207,38 @@ def test_model_computation(variant):
 
     # 12. Assert that the relative error is within an acceptable range
     sanity_check(abs_error, rel_error, penalisation, params)
+    
+    from disclinations.utils import postprocess as pp
 
+    fields_data = {
+        "mesh": [],
+        "point_values": {
+            # 'x_values': [],
+        },
+        "global_values": {
+        },
+    }
+    
+    tol = 1e-3
+    npoints = 301
+    xs = np.linspace(-1 + tol, 1 - tol, npoints)
+    points = np.zeros((3, npoints))
+    points[0] = xs
+    _v, _w = q.split()
+    
+    data_field_v = pp.get_datapoints(_v, points)
+    data_field_w = pp.get_datapoints(_w, points)
+    
+    fields_data["point_values"]["v"] = data_field_v[1]
+    fields_data["point_values"]["w"] = data_field_w[1]
+    fields_data["mesh"] = points[:, 0]
+    
+    np.savez(f"{prefix}/fields_data.npz", **fields_data)
+    pdb.set_trace()
+    filepath = f"{prefix}/fields_data.npz"
+
+    # Load field data
+    _field_data = pp.load_field_data(filepath)
 
 from disclinations.models import assemble_penalisation_terms
 
@@ -333,8 +364,8 @@ if __name__ == "__main__":
 
     with dolfinx.common.Timer(f"~Computation Experiment") as timer:
         test_model_computation("variational")
-        test_model_computation("brenner")
-        test_model_computation("carstensen")
+        # test_model_computation("brenner")
+        # test_model_computation("carstensen")
 
     # mem_after = memory_usage()
     # max_memory = max(max_memory, mem_after)
