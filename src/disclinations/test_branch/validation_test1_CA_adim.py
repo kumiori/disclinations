@@ -246,8 +246,8 @@ V_w, dofs_w = Q.sub(1).collapse()
 
 pyvista.OFF_SCREEN = True
 
-vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
-wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
+#vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
+#wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
 
 plotter = pyvista.Plotter(title="Displacement", window_size=[1200, 600], shape=(2, 2) )
 

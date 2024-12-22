@@ -277,9 +277,9 @@ wpp.name = "deflection"
 
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
-
-vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
-wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
+print("sup norm w_car: ", max(abs(wpp.vector.array.real[dofs_w])) )
+#vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
+#wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
 
 _pv_points = np.array([p[0] for p in disclinations])
 _pv_colours = np.array(-np.array(DISCLINATION_POWER_LIST))

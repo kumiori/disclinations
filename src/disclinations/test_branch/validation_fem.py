@@ -11,6 +11,7 @@ import importlib.resources as pkg_resources  # Python 3.7+ for accessing package
 import yaml
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter, MaxNLocator
 import pdb
 import os
 import pandas as pd
@@ -18,10 +19,6 @@ import argparse
 
 from disclinations.utils import load_parameters
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
-
-# parser = argparse.ArgumentParser(description="Which comparison would you like to run?")
-# parser.add_argument("test type", help="Either disclination or transverse")
-# parser.add_argument("dimensional / adimensional model", help="Either disclination or transverse")
 
 SCRIPT_VAR = "validation_test1_adim"
 SCRIPT_BRN = "validation_test1_BR_adim"
@@ -56,12 +53,12 @@ V_w = script_var["V_w"]
 dofs_v = script_var["dofs_v"]
 dofs_w = script_var["dofs_w"]
 
-v_exact = script_var["v_exact"]
+v_exact = script_var["v_exact_adim"]
 v_var = script_var["vpp"]
 v_brn = script_brn["vpp"]
 v_car = script_car["vpp"]
 
-w_exact = script_var["w_exact"]
+w_exact = script_var["w_exact_adim"]
 w_var = script_var["wpp"]
 w_brn = script_brn["wpp"]
 w_car = script_car["wpp"]
@@ -185,34 +182,47 @@ xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]
 points = np.zeros((3, 101))
 points[0] = xs
 
-fig, axes = plt.subplots(1, 1, figsize=(24, 18))
+FIGWIDTH = 17
+FIGHEIGHT = 12
+
+fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
 _plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":7, "label": "VAR"}, fig=fig, subplotnumber=1)
 _plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1)
 _plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1)
 _plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1)
 
-_plt.xlabel("x [m]", fontsize=35)
-_plt.ylabel("Transverse displacement [m]", fontsize=35)
+_plt.xlabel(r"$\xi_1$", fontsize=35)
+_plt.ylabel(r"$\tilde{w}$", fontsize=35)
 _plt.xticks(fontsize=35)
 _plt.yticks(fontsize=35)
 _plt.title(f"Comparison between FE models. Transverse displacement. {info_experiment}", size = 30)
-_plt.grid(True)
+#_plt.grid(True)
 _plt.legend(fontsize=30)
+ax = _plt.gca() # use scientific notation for y axis
+ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+ax.yaxis.get_offset_text().set_fontsize(30)
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
 _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
 
-fig, axes = plt.subplots(1, 1, figsize=(24, 18))
+fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
 _plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1)
 _plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":7, "label": "VAR"}, fig=fig, subplotnumber=1)
 _plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1)
 _plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1)
 
-_plt.xlabel("x [m]", fontsize=35)
-_plt.ylabel("Airy's function [Nm]", fontsize=35)
+_plt.xlabel(r"$\xi_1$", fontsize=35)
+_plt.ylabel(r"$\tilde{v}$", fontsize=35)
 _plt.xticks(fontsize=35)
 _plt.yticks(fontsize=35)
 _plt.title(f"Comparison between FE models. Airy's function. {info_experiment}", size = 30)
-_plt.grid(True)
+#_plt.grid(True)
 _plt.legend(fontsize=30)
+ax = _plt.gca() # use scientific notation for y axis
+ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+ax.yaxis.get_offset_text().set_fontsize(30)
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
 _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-v-profiles.png")

@@ -6,7 +6,7 @@ geometry:
     geometric_dimension: 2
     geom_type: "circle"
     radius: 1.
-    mesh_size: 0.03 # Leght of an element
+    mesh_size: 0.1 # Leght of an element
 
 #  === Material === #
 model:

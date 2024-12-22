@@ -68,6 +68,17 @@ import numpy as np
 #     return x
 
 
+# Count zero entries
+def counts_zero_entries(A):
+    nz_count = 0
+    row_start, row_end = A.getOwnershipRange()  # Get local row range
+    for row in range(row_start, row_end):
+        cols, vals = A.getRow(row)  # Access columns and values for the row
+        nz_count += sum(1 for v in vals if v != 0)  # Count zero entries in this row
+    print(f"Number of non-zero entries: {nz_count}")
+    return nz_count
+
+
 def calculate_condition_number_1(A):
     """
     Purpose: computing the conditioning number of the matrix A using eigenvalues
@@ -351,7 +362,8 @@ class SNESSolver:
         A.zeroEntries()
         assemble_matrix(A, self.J_form, self.bcs)
         A.assemble()
-
+        #pdb.set_trace()
+        #counts_zero_entries(A)
 
         # CFe: added Apply diagonal scaling
         # D = P.getDiagonal()

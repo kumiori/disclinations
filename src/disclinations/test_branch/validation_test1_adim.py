@@ -126,15 +126,17 @@ Q = dolfinx.fem.functionspace(mesh, basix.ufl.mixed_element([X, X]))
 
 # DEFINE FUNCTIONS
 q = dolfinx.fem.Function(Q)
-v, w = ufl.split(q)
 q_exact = dolfinx.fem.Function(Q)
+q_exact_adim = dolfinx.fem.Function(Q)
+v, w = ufl.split(q)
 v_exact, w_exact = q_exact.split()
-v_dim = E*(thickness**3)*v
-w_dim = thickness*w
+v_exact_adim, w_exact_adim = q_exact_adim.split()
+#v_dim = E*(thickness**3)*v
+#w_dim = thickness*w
 f = dolfinx.fem.Function(Q.sub(TRANSVERSE).collapse()[0])
 state = {"v": v, "w": w}
 state_exact = {"v": v_exact, "w": w_exact}
-state_dimensional = {"v": v_dim, "w": w_dim}
+#state_dimensional = {"v": v_dim, "w": w_dim}
 
 # SET BOUDNARY CONDITIONS
 mesh.topology.create_connectivity(mesh.topology.dim - 1, mesh.topology.dim)
@@ -159,8 +161,14 @@ def v_exact_function(x):
 
 def w_exact_function(x): return np.sqrt(2*D/(E*thickness)) * (1 - x[0]**2 - x[1]**2)**2
 
+V_v, dofs_v = Q.sub(0).collapse()
+V_w, dofs_w = Q.sub(1).collapse()
+
 v_exact.interpolate(v_exact_function)
 w_exact.interpolate(w_exact_function)
+v_exact_adim.vector.array.real[dofs_v] = v_exact.vector.array.real[dofs_v] / (E*(thickness**3))
+w_exact_adim.vector.array.real[dofs_w] = w_exact.vector.array.real[dofs_w] / thickness
+
 exact_energy = model.energy(state_exact)[0]
 ex_bending_energy = exact_bending_energy(v_exact, w_exact)
 ex_membrane_energy = exact_membrane_energy(v_exact, w_exact)
@@ -261,12 +269,10 @@ fig = ax.get_figure()
 fig.savefig(f"{OUTDIR}/mesh.png")
 
 # Plot the profiles
-V_v, dofs_v = Q.sub(0).collapse()
-V_w, dofs_w = Q.sub(1).collapse()
 pyvista.OFF_SCREEN = True
 
-vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
-wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
+#vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
+#wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
 
 plotter = pyvista.Plotter(title="Displacement", window_size=[1200, 600], shape=(2, 2) )
 

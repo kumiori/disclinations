@@ -137,8 +137,10 @@ bcs = list(_bcs.values())
 # DEFINE FUNCTIONS
 q = dolfinx.fem.Function(Q)
 q_exact = dolfinx.fem.Function(Q)
+q_exact_adim = dolfinx.fem.Function(Q)
 v, w = ufl.split(q)
 v_exact, w_exact = q_exact.split()
+v_exact_adim, w_exact_adim = q_exact_adim.split()
 state = {"v": v, "w": w}
 
 # DISCLINATION DISTRIBUTION
@@ -162,8 +164,16 @@ def function_w_exact(x):
     _w = 0.0*_w
     return _w
 
+
+V_v, dofs_v = Q.sub(0).collapse()
+V_w, dofs_w = Q.sub(1).collapse()
+
+
 v_exact.interpolate(function_v_exact)
 w_exact.interpolate(function_w_exact)
+
+v_exact_adim.vector.array.real[dofs_v] = v_exact.vector.array.real[dofs_v] / (E*(thickness**3))
+w_exact_adim.vector.array.real[dofs_w] = w_exact.vector.array.real[dofs_w] / thickness
 
 def compute_exact_energy_dipole(v_exact):
     energy = 0.0
@@ -280,9 +290,9 @@ wpp.name = "deflection"
 
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
-
-vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
-wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
+print("sup norm w_var: ", max(abs(wpp.vector.array.real[dofs_w])) )
+#vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
+#wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
 
 _pv_points = np.array([p[0] for p in disclinations])
 _pv_colours = np.array(-np.array(DISCLINATION_POWER_LIST))
