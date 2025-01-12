@@ -3,8 +3,9 @@ PURPOSE OF THE SCRIPT
 Analyze configuration of interest
 Using the Veriational FE formulationin its NON-dimensional formulation (see "models/adimensional.py").
 Dimensionless parameters:
-a := R/h >> 1
-b := p0/E << 1
+beta := R/h >> 1
+gamma := p0/E << 1
+f := gamma beta**4
 
 ARTICLE RELATED SECTION
 """
@@ -146,13 +147,15 @@ def compute_fourier_coefficients(x_values, function_values):
 #                             [0, 0, 0]] #
 #disclination_power_list = [-1, -1, -1, -1, +0.5, 0.5, 0.5, 0.5, 0]
 
-disclination_points_list = [[-0.5, 0.0, 0], [0.0, 0.5, 0], [0.5, 0.0, 0], [0.0, -0.5, 0]]
+eps = 0.0
+#disclination_points_list = [[-eps, 0.0, 0], [0.0, eps, 0], [eps, 0.0, 0], [0.0, -eps, 0]]
+#disclination_points_list = [[-eps, 0.0, 0], [eps, 0.0, 0]]
 #disclination_power_list = [0, 0, 0, 0]
 #disclination_power_list = [-0.5, -0.5, -0.5, -0.5]
-disclination_power_list = [0.5, 0.5, 0.5, 0.5]
+#disclination_power_list = [0.1, 0.1]
 
-#disclination_points_list = [[0.0, 0.0, 0]]
-#disclination_power_list = [0]
+disclination_points_list = [[0.0, 0.0, 0]]
+disclination_power_list = [1.0]
 
 # READ PARAMETERS FILE
 #with pkg_resources.path(PATH_TO_PARAMETERS_FILE, 'parameters.yml') as f:
@@ -170,21 +173,23 @@ mesh_size = parameters["geometry"]["mesh_size"]
 IP = parameters["model"]["alpha_penalty"]
 
 # UPDATE OUTDIR
-info_experiment = f"mesh_{mesh_size}_IP_{IP}_E_{Eyoung:.2e}_h_{thickness:.2e}_s_{disclination_power_list}_eps_{disclination_points_list[0][0]}"
+info_experiment = f"mesh_{mesh_size}_IP_{IP}_E_{Eyoung:.2e}_h_{thickness:.2e}_s_{disclination_power_list}_eps_{eps}"
 OUTDIR = os.path.join(OUTDIR, info_experiment)
 if not os.path.exists(OUTDIR): os.makedirs(OUTDIR)
 
 # COMPUTE DIMENSIONLESS PARAMETERS
-a = R / thickness
+#a -> beta
+beta = R / thickness
 rho_g = 2e4 # Density of the material times g-accelleration
-N = 1
+N = 1 # N-times plate's own weight
 p0 = rho_g * thickness
-f0 = N * a**4 * p0 / Eyoung
+gamma = N * p0 / Eyoung
+f0 = (beta**4) * gamma
 
 print(10*"*")
 print("Dimensionless parameters: ")
-print("a := R/h = ", a)
-print("f := a^4 * p0/E = ", f0)
+print("beta := R/h = ", beta)
+print("f := beta^4 * gamma = ", f0)
 print(10*"*")
 
 # LOAD MESH
@@ -245,7 +250,7 @@ F = ufl.derivative(L, q, ufl.TestFunction(Q))
 
 Q_v, Q_v_to_Q_dofs = Q.sub(AIRY).collapse()
 
-dp_list = [element*(a**2) for element in disclination_power_list]
+dp_list = [element*(beta**2) for element in disclination_power_list]
 
 b = compute_disclination_loads(disclinations, dp_list, Q, V_sub_to_V_dofs=Q_v_to_Q_dofs, V_sub=Q_v)
 
@@ -274,7 +279,7 @@ solver.solve() # CFe: solve FEM problem
 #print("convergence: ", convergence)
 
 # DISPLAY COMPUTED ENERGY VALUES
-energy_scale = Eyoung * (thickness**3) / (a**2)
+energy_scale = Eyoung * (thickness**3) / (beta**2)
 energy_components = {
     "bending": energy_scale*model.energy(state)[1],
     "membrane": energy_scale*model.energy(state)[2],
@@ -303,15 +308,6 @@ V_w, dofs_w = Q.sub(TRANSVERSE).collapse()
 sigma_xx = dolfinx.fem.Function(V_v)
 sigma_xy = dolfinx.fem.Function(V_v)
 sigma_yy = dolfinx.fem.Function(V_v)
-
-# Contribute to the total membranale stress due to the transverse displacement
-#sigmaxx_w = ( Eyoung / (1-nu**2) ) * (1/2) * ( ufl.grad( w_pp )[0]**2 + nu * ufl.grad( w_pp )[1]**2 )
-#sigmayy_w = ( Eyoung / (1-nu**2) ) * (1/2) * ( ufl.grad( w_pp )[1]**2 + nu * ufl.grad( w_pp )[0]**2 )
-#sigmaxy_w = ( Eyoung / (1-nu**2) ) * (1/2) * ( ufl.grad( w_pp )[0]  * ufl.grad( w_pp )[1] )
-
-#sigma_xx_expr = dolfinx.fem.Expression( hessian(v_pp)[Y_COORD, Y_COORD] + sigmaxx_w, V_v.element.interpolation_points() )
-#sigma_xy_expr = dolfinx.fem.Expression( - hessian(v_pp)[X_COORD, Y_COORD] + sigmaxy_w, V_v.element.interpolation_points() )
-#sigma_yy_expr = dolfinx.fem.Expression( hessian(v_pp)[X_COORD, X_COORD] + sigmayy_w, V_v.element.interpolation_points() )
 
 sigma_xx_expr = dolfinx.fem.Expression( hessian(v_pp)[Y_COORD, Y_COORD], V_v.element.interpolation_points() )
 sigma_xy_expr = dolfinx.fem.Expression( - hessian(v_pp)[X_COORD, Y_COORD], V_v.element.interpolation_points() )
@@ -453,6 +449,8 @@ subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_w_{info_experiment}.png", scale = PNG_SCALE)
 subplotter.export_html(f"{OUTDIR}/visualization_w_{info_experiment}.html")
 
+#pdb.set_trace()
+
 # Cauchy stresses
 subplotter = pyvista.Plotter(shape=(1, 3))
 grid.point_data["sigma_xx"] = sigma_xx.x.array.real
@@ -507,30 +505,41 @@ subplotter.export_html(f"{OUTDIR}/visualization_CauchyStresses_{info_experiment}
 
 # PLOT SIGMA N MAGINUTE
 subplotter = pyvista.Plotter(shape=(1, 1))
-scalar_bar_args["title"] = "sigma_n"
+scalar_bar_args["title"] = "sigma_r"
 subplotter.subplot(0, 0)
 grid["sigma_n"] = np.linalg.norm(sigma_n, axis=1)
 grid.set_active_scalars("sigma_n")
-subplotter.add_text("magnitude sigma_n", position="upper_edge", font_size=14, color="black")
+subplotter.add_text("magnitude sigma_r", position="upper_edge", font_size=14, color="black")
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.linalg.norm(sigma_n, axis=1)) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
-subplotter.screenshot(f"{OUTDIR}/visualization_sigma_n_abs_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_sigma_n_abs_{info_experiment}.html")
+subplotter.screenshot(f"{OUTDIR}/visualization_sigma_r_abs_{info_experiment}.png", scale = PNG_SCALE)
+subplotter.export_html(f"{OUTDIR}/visualization_sigma_r_abs_{info_experiment}.html")
 
 # PLOT SIGMA N VECTOR PLOT
+subplotter = pyvista.Plotter(shape=(1, 1))
+subplotter.subplot(0, 0)
 normalized_sigma_n = sigma_n /  (10*np.max(sigma_n)) #np.linalg.norm(sigma_n, axis=1)[:, None]
 grid["normalized_sigma_n"] = normalized_sigma_n
 grid["sigma_n_magnitude"] = np.linalg.norm(sigma_n, axis=1)
 grid.set_active_vectors("normalized_sigma_n")
 glyphs = grid.glyph(orient="normalized_sigma_n", factor=0.5, geom=pyvista.Arrow(), scale=False, tolerance=0.1)
-subplotter = pyvista.Plotter(shape=(1, 1))
-subplotter.subplot(0, 0)
-scalar_bar_args["title"] = "Magnitude sigma_n"
+scalar_bar_args["title"] = "Magnitude sigma_r"
 subplotter.add_mesh(glyphs, scalars="sigma_n_magnitude", lighting=False, cmap="coolwarm", scalar_bar_args=scalar_bar_args )
 subplotter.add_mesh(grid, color="lightgray", opacity=0.5, show_edges=True, edge_color="black")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_sigma_n_vec_{info_experiment}.png", scale = PNG_SCALE)
 subplotter.export_html(f"{OUTDIR}/visualization_sigma_n_vec_{info_experiment}.html")
+
+plotter = pyvista.Plotter()
+# Set the disk geometry and vector field if not already part of the grid
+# For example, if grid is a pyvista.StructuredGrid or UnstructuredGrid
+# Make sure sigma_n is set as a vector array on the grid
+grid.set_active_vectors("normalized_sigma_n")  # Set 'sigma_n' as the active vector field
+plotter.add_arrows(grid.points, grid["normalized_sigma_n"], mag=0.2, cmap="coolwarm", scalar_bar_args={"title": "Vector Magnitude"}) # Add the vector field arrows
+plotter.add_mesh(grid, show_edges=True, edge_color="blue", color="lightgray", opacity=0.5) # Add the disk boundary
+plotter.add_text("s = 1, σn", font_size=14, color="black", position="upper_edge")
+subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
+subplotter.export_html(f"{OUTDIR}/visualization_sigma_n_vec2_{info_experiment}.html")
 
 # PLOT SIGMA NN
 subplotter = pyvista.Plotter(shape=(1, 2))
@@ -549,12 +558,12 @@ subplotter.add_mesh(
 contours = grid.contour(isosurfaces=10)
 subplotter.add_mesh(contours, color="black",line_width=2, show_scalar_bar=False)
 subplotter.subplot(0, 1)
-scalar_bar_args["title"] = "sigma_nn"
-subplotter.add_text("sigma_nn", position="upper_edge", font_size=14, color="black")
+scalar_bar_args["title"] = "sigma_rr"
+subplotter.add_text("sigma_rr", position="upper_edge", font_size=14, color="black")
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(sigma_nn.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
-subplotter.screenshot(f"{OUTDIR}/visualization_sigma_nn_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_sigma_nn_{info_experiment}.html")
+subplotter.screenshot(f"{OUTDIR}/visualization_sigma_rr_{info_experiment}.png", scale = PNG_SCALE)
+subplotter.export_html(f"{OUTDIR}/visualization_sigma_rr_{info_experiment}.html")
 
 subplotter = pyvista.Plotter(shape=(1, 2))
 grid["sigma_nt"] = sigma_nt.x.array.real
@@ -623,19 +632,19 @@ subplotter.add_text("ma_w", position="upper_edge", font_size=14, color="black")
 scalar_bar_args["title"] = "[w, w]"
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(ma_w.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
-subplotter.screenshot(f"{OUTDIR}/visualization_ma_w_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_ma_w_{info_experiment}.html")
+subplotter.screenshot(f"{OUTDIR}/viz_[w,w]_{info_experiment}.png", scale = PNG_SCALE)
+subplotter.export_html(f"{OUTDIR}/viz_[w,w]_{info_experiment}.html")
 
-#subplotter = pyvista.Plotter(shape=(1, 1))
-subplotter.subplot(0, 0)
+subplotter = pyvista.Plotter(shape=(1, 1))
 grid["ma_vw"] = ma_vw.x.array.real
 grid.set_active_scalars("ma_vw")
+subplotter.subplot(0, 0)
 subplotter.add_text("ma_vw", position="upper_edge", font_size=14, color="black")
 scalar_bar_args["title"] = "[v,w]"
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(ma_vw.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
-subplotter.screenshot(f"{OUTDIR}/visualization_ma_vw_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_ma_vw_{info_experiment}.html")
+#subplotter.screenshot(f"{OUTDIR}/viz_[v,w]_{info_experiment}.png", scale = PNG_SCALE)
+subplotter.export_html(f"{OUTDIR}/viz_[v,w]_{info_experiment}.html")
 
 
 # PYVISTA PROFILE PLOTS
@@ -654,14 +663,14 @@ plt.plot(x_sorted, w_sliceSorted, label=f'w', color='blue', linestyle='solid', l
 plt.xticks(fontsize=FONTSIZE)
 plt.yticks(fontsize=FONTSIZE)
 plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
-plt.ylabel(r"$\tilde{w}$", fontsize=FONTSIZE)
-plt.title(f"Profile of w at y = {y0}", fontsize=FONTSIZE)
+plt.ylabel(r"$w$", fontsize=FONTSIZE)
+plt.title(rf"Profile of w at $\xi_2$ = {y0}", fontsize=FONTSIZE)
 ax = plt.gca() # use scientific notation for y axis
 ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
-plt.legend(fontsize=FONTSIZE)
+#plt.legend(fontsize=FONTSIZE)
 #plt.grid(True)
 plt.savefig(f"{OUTDIR}/profile_w_y_{y0}_{info_experiment}.png", dpi=300)
 
@@ -675,16 +684,58 @@ plt.plot(x_sorted, v_sliceSorted, label=f'v', color='red', linestyle='solid', li
 plt.xticks(fontsize=FONTSIZE)
 plt.yticks(fontsize=FONTSIZE)
 plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
-plt.ylabel(r"$\tilde{v}$", fontsize=FONTSIZE)
-plt.title(f"Profile of v at y = {y0}", fontsize=FONTSIZE)
+plt.ylabel(r"$v$", fontsize=FONTSIZE)
+plt.title(fr"Profile of v at $\xi_2$ = {y0}", fontsize=FONTSIZE)
 ax = plt.gca() # use scientific notation for y axis
 ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
-plt.legend(fontsize=FONTSIZE)
+#plt.legend(fontsize=FONTSIZE)
 #plt.grid(True)
 plt.savefig(f"{OUTDIR}/profile_v_y_{y0}_{info_experiment}.png", dpi=300)
+
+grid.set_active_scalars("w")
+points = grid.points
+x0 = 0
+y_values = points[np.abs(points[:, 0] - x0) < tolerance, 1]  # Select y-coordinates at x = 0
+w_slice_2 = grid['w'][np.abs(points[:, 0] - x0) < tolerance]
+y_sorted_indices = np.argsort(y_values) # Sort data for plotting
+y_values = y_values[y_sorted_indices]
+w_sliceSorted_2 = w_slice_2[y_sorted_indices]
+scale_w_slice = f"{np.max(np.abs(w_sliceSorted_2)):.1e}"
+plt.figure(figsize=(15, 11))
+plt.plot(y_values, w_sliceSorted_2, label=f'w', color='blue', linestyle='solid', linewidth=LINEWIDTH)
+plt.xticks(fontsize=FONTSIZE)
+plt.yticks(fontsize=FONTSIZE)
+plt.xlabel(r"$\xi_2$", fontsize=FONTSIZE)
+plt.ylabel(r"$w$", fontsize=FONTSIZE)
+plt.title(rf"Profile of w at $\xi_1$ = {x0}", fontsize=FONTSIZE)
+ax = plt.gca() # use scientific notation for y axis
+ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+plt.savefig(f"{OUTDIR}/profile_w_x_{x0}_{info_experiment}.png", dpi=300)
+
+grid.set_active_scalars("v")
+points = grid.points
+v_slice_2 = grid['v'][np.abs(points[:, 0] - x0) < tolerance]
+v_sliceSorted_2 = v_slice_2[y_sorted_indices]
+scale_v_slice = f"{np.max(np.abs(v_sliceSorted_2)):.1e}"
+plt.figure(figsize=(15, 11))
+plt.plot(y_values, v_sliceSorted_2, label=f'v', color='red', linestyle='solid', linewidth=LINEWIDTH)
+plt.xticks(fontsize=FONTSIZE)
+plt.yticks(fontsize=FONTSIZE)
+plt.xlabel(r"$\xi_2$", fontsize=FONTSIZE)
+plt.ylabel(r"$v$", fontsize=FONTSIZE)
+plt.title(fr"Profile of v at $\xi_1$ = {x0}", fontsize=FONTSIZE)
+ax = plt.gca() # use scientific notation for y axis
+ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+plt.savefig(f"{OUTDIR}/profile_v_x_{x0}_{info_experiment}.png", dpi=300)
 
 # COMPUTE FOURIER COEFFICIENTS, FREQUENCIES
 from scipy.interpolate import interp1d
@@ -699,7 +750,7 @@ plt.figure(figsize=(10, 6))
 plt.plot(x_values, function_values, 'o', label='Original Data', markersize=5)
 plt.plot(uniform_grid, resampled_values, '-', label='Interpolated Data', linewidth=2)
 plt.xlabel(r'$\xi_1$', fontsize=14)
-plt.ylabel(r'$\tilde{w}$', fontsize=14)
+plt.ylabel(r'$w$', fontsize=14)
 plt.title('Interpolation and Resampling on Uniform Grid', fontsize=16)
 plt.legend(fontsize=12)
 plt.grid(True)
@@ -729,7 +780,7 @@ plt.tick_params(axis='both', which='major', labelsize=30)
 plt.gca().xaxis.set_major_locator(plt.MaxNLocator(10))  # Approx. 10 major ticks
 plt.gca().xaxis.set_minor_locator(plt.MultipleLocator(1))  # 2 minor ticks between major ones
 plt.grid(True, which='both', linestyle='--', linewidth=0.5)
-plt.xlabel("Frequency [1/m]", fontsize=30)
+plt.xlabel("Frequency", fontsize=30)
 plt.ylabel(f"ABS Fourier Coefficients", fontsize=30)
 plt.title(f"Abs Fourier Coefficients vs Frequency. eps={disclination_points_list[0][0]}, s={disclination_power_list[0]}", fontsize=30)
 plt.grid(True)

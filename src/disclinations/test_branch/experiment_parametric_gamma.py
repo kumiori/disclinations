@@ -58,7 +58,7 @@ from disclinations.utils import table_timing_data, Visualisation
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 
 # OUTPUT DIRECTORY
-OUTDIR = os.path.join("output", "experiment_parametric_f_adim") # CFe: output directory
+OUTDIR = os.path.join("output", "experiment_parametric_gamma") # CFe: output directory
 PATH_TO_PARAMETERS_YML_FILE = 'disclinations.test'
 
 # NON LINEAR SEARCH TOLLERANCES
@@ -384,7 +384,7 @@ if __name__ == "__main__":
     # LOOP THROUGH ALL C VALUES
     #f_value replaced for gamma_value
     for i, gamma_value in enumerate(gamma_list):
-        print("Running experiment with gmma = ", gamma_value)
+        print("Running experiment with gamma = ", gamma_value)
         #q_ig.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
         data_var = run_experiment(VARIATIONAL, costantData, parameters, q_ig, gamma_value, beta)
         if COMPARISON:
@@ -755,7 +755,7 @@ if __name__ == "__main__":
     plt.axhline(y=0, color='black', linewidth=2)
     plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
     plt.ylabel('Dimensionless energy', fontsize=FONTSIZE)
-    plt.title(f'Log-log plot energies. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+    #plt.title(f'Log-log plot energies. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     #ax = plt.gca()  # Get the current axis
@@ -1031,7 +1031,7 @@ if __name__ == "__main__":
         plt, data = plot_profile(w_varModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "VAR", "ls": "solid"}, fig=fig, subplotnumber=1)
         if COMPARISON: plt, data = plot_profile(w_brnModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "BNRS17", "ls": "-"}, fig=fig, subplotnumber=1)
         plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
-        plt.ylabel(r"$\tilde{w}$", fontsize=FONTSIZE)
+        plt.ylabel("w", fontsize=FONTSIZE)
         plt.xticks(fontsize=FONTSIZE)
         plt.yticks(fontsize=FONTSIZE)
         ax = plt.gca() # use scientific notation for y axis
@@ -1047,7 +1047,7 @@ if __name__ == "__main__":
         plt, data = plot_profile(v_varModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "label": "VAR", "ls": "solid"}, fig=fig, subplotnumber=1)
         if COMPARISON: plt, data = plot_profile(v_brnModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "BNRS17", "ls": "-"}, fig=fig, subplotnumber=1)
         plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
-        plt.ylabel(r"$\tilde{v}$", fontsize=FONTSIZE)
+        plt.ylabel("v", fontsize=FONTSIZE)
         plt.xticks(fontsize=FONTSIZE)
         plt.yticks(fontsize=FONTSIZE)
         plt.title(fr"Airy. $\gamma$ = {gamma_range[i]}. Mesh = {mesh_size}. IP = {IP}. E = {E:.2e}. tol = {SOL_TOLLERANCE}", size = FONTSIZE)
@@ -1087,7 +1087,7 @@ if __name__ == "__main__":
     y0 = 0
     tolerance = 1e-2
     points = grid.points
-    x_values = points[np.abs(points[:, 1] - y0) < tolerance, 0]  # Select x-coordinates at y = 0
+    x_values = points[np.abs(points[:, 1] - y0) < tolerance, 0]  # Select x-coordinates at xi2 = 0
     w_0 = grid['w_0.1'][np.abs(points[:, 1] - y0) < tolerance]
     w_6 = grid['w_100'][np.abs(points[:, 1] - y0) < tolerance]
     w_9 = grid['w_3000'][np.abs(points[:, 1] - y0) < tolerance]
@@ -1103,20 +1103,20 @@ if __name__ == "__main__":
     scale_w6 = f"{np.max(np.abs(w_6sorted)):.2e}"
     scale_w9 = f"{np.max(np.abs(w_9sorted)):.2e}"
     plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(x_sorted, w_0normalized, label=fr'$\gamma$ = {gamma_list[0]}. Scale: {scale_w0}', color='blue', linestyle='solid', linewidth=LINEWIDTH)
-    plt.plot(x_sorted, w_6normalized, label=fr'$\gamma$ = {gamma_list[6]}. Scale: {scale_w6}', color='red', linestyle='dotted', linewidth=LINEWIDTH)
-    plt.plot(x_sorted, w_9normalized, label=fr'$\gamma$ = {gamma_list[9]}. Scale: {scale_w9}', color='black', linestyle='dashed', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, w_0normalized, label=fr'$\gamma$: {gamma_list[0]:.2e}, max(|w|): {scale_w0}', color='blue', linestyle='solid', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, w_6normalized, label=fr'$\gamma$: {gamma_list[6]:.2e}, max(|w|): {scale_w6}', color='red', linestyle='dotted', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, w_9normalized, label=fr'$\gamma$: {gamma_list[9]:.2e}, max(|w|): {scale_w9}', color='black', linestyle='dashed', linewidth=LINEWIDTH)
     plt.xticks(fontsize=FONTSIZE)
     plt.yticks(fontsize=FONTSIZE)
     plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
-    plt.ylabel(r"$ \frac{\tilde{w}}{\max(|\tilde{w}|)}$", fontsize=FONTSIZE)
-    plt.title(f"Profile of w at y = {y0}", fontsize=FONTSIZE)
+    plt.ylabel(r"$ \frac{w}{\max(|w|)}$", fontsize=FONTSIZE)
+    plt.title(fr"Profile of w at $\xi_2$ = {y0}", fontsize=FONTSIZE)
     ax = plt.gca() # use scientific notation for y axis
     ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
     ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.legend(fontsize=0.9*FONTSIZE)
+    plt.legend(fontsize=0.8*FONTSIZE)
     #plt.grid(True)
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_w_comparison_y_{y0}_{info_experiment}.png", dpi=300)
 
@@ -1124,7 +1124,7 @@ if __name__ == "__main__":
     grid.point_data["v_100"] = v_varModel_list[4].vector.array[dofs2_v]
     grid.point_data["v_3000"] = v_varModel_list[-1].vector.array[dofs2_v]
     points = grid.points
-    x_values = points[np.abs(points[:, 1] - y0) < tolerance, 0]  # Select x-coordinates at y = 0
+    x_values = points[np.abs(points[:, 1] - y0) < tolerance, 0]  # Select x-coordinates at xi2 = 0
     v_0 = grid['v_0.1'][np.abs(points[:, 1] - y0) < tolerance]
     v_6 = grid['v_100'][np.abs(points[:, 1] - y0) < tolerance]
     v_9 = grid['v_3000'][np.abs(points[:, 1] - y0) < tolerance]
@@ -1140,19 +1140,19 @@ if __name__ == "__main__":
     scale_v6 = f"{np.max(np.abs(v_6sorted)):.1e}"
     scale_v9 = f"{np.max(np.abs(v_9sorted)):.1e}"
     plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(x_sorted, v_0normalized, label=fr'$\gamma$: {gamma_list[0]}. Scale: {scale_v0}', color='blue', linestyle='solid', linewidth=LINEWIDTH)
-    plt.plot(x_sorted, v_6normalized, label=fr'$\gamma$: {gamma_list[6]}. Scale: {scale_v6}', color='red', linestyle='dotted', linewidth=LINEWIDTH)
-    plt.plot(x_sorted, v_9normalized, label=fr'$\gamma$: {gamma_list[9]}. Scale: {scale_v9}', color='black', linestyle='dashed', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, v_0normalized, label=fr'$\gamma$: {gamma_list[0]:.2e}, max(|v|): {scale_v0}', color='blue', linestyle='solid', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, v_6normalized, label=fr'$\gamma$: {gamma_list[6]:.2e}, max(|v|): {scale_v6}', color='red', linestyle='dotted', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, v_9normalized, label=fr'$\gamma$: {gamma_list[9]:.2e}, max(|v|): {scale_v9}', color='black', linestyle='dashed', linewidth=LINEWIDTH)
     plt.xticks(fontsize=FONTSIZE)
     plt.yticks(fontsize=FONTSIZE)
     plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
-    plt.ylabel(r"$ \frac{\tilde{v}}{\max(|\tilde{v}|)}$", fontsize=FONTSIZE)
-    plt.title(f"Profile of v at y = {y0}", fontsize=FONTSIZE)
+    plt.ylabel(r"$ \frac{v}{\max(|v|)}$", fontsize=FONTSIZE)
+    plt.title(fr"Profile of v at $\xi_2$ = {y0}", fontsize=FONTSIZE)
     ax = plt.gca() # use scientific notation for y axis
     ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
     ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
     ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
     ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.legend(fontsize=0.9*FONTSIZE)
+    plt.legend(fontsize=0.8*FONTSIZE)
     #plt.grid(True)
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_v_comparison_y_{y0}_{info_experiment}.png", dpi=300)
