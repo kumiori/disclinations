@@ -55,6 +55,9 @@ from disclinations.utils.la import compute_cell_contributions, compute_disclinat
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 from disclinations.utils.sample_function import sample_function, interpolate_sample
 from disclinations.solvers import SNESSolver, SNESProblem
+from visuals import visuals
+
+visuals.matplotlibdefaults(useTex=False)
 
 PATH_TO_PARAMETERS_FILE = 'disclinations.test'
 
@@ -83,7 +86,7 @@ OUTDIR = os.path.join("output", "configuration")
 if comm.rank == 0:
     Path(OUTDIR).mkdir(parents=True, exist_ok=True)
 
-
+print("OUTDIR: ", OUTDIR)
 X_COORD = 0
 Y_COORD = 1
 AIRY = 0
@@ -170,6 +173,7 @@ nu = parameters["model"]["nu"]
 thickness = parameters["model"]["thickness"]
 R = parameters["geometry"]["radius"]
 mesh_size = parameters["geometry"]["mesh_size"]
+# mesh_size = 0.03
 IP = parameters["model"]["alpha_penalty"]
 
 # UPDATE OUTDIR
@@ -377,12 +381,12 @@ figsize = 800
 
 scalar_bar_args = {
     "vertical": True,
-    "title_font_size": 30,  # Increase the title font size
-    "label_font_size": 30,  # Increase the label font size
-    "width": 0.18,          # Adjust the width of the scalar bar
-    "height": 0.8,          # Adjust the height of the scalar bar
-    "position_x": 0.9,      # X position (between 0 and 1, relative to the viewport)
-    "position_y": 0.1       # Y position (between 0 and 1, relative to the viewport)
+    "title_font_size": 18,  # Increase the title font size
+    "label_font_size": 18,  # Increase the label font size
+    "width": 0.15,          # Adjust the width of the scalar bar
+    "height": 0.3,          # Adjust the height of the scalar bar
+    "position_x": 0.87,      # X position (between 0 and 1, relative to the viewport)
+    "position_y": 0.35       # Y position (between 0 and 1, relative to the viewport)
 }
 
 topology, cells, geometry = dolfinx.plot.vtk_mesh(Q_v)
@@ -415,7 +419,8 @@ scalar_bar_args["title"] = "v"
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1/max(np.abs(w_pp.x.array.real[dofs_v] )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="viridis")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_Airy_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_Airy_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/visualization_Airy_{info_experiment}.html")
+pdb.set_trace()
 
 # Transverse displacement, countour
 subplotter = pyvista.Plotter(shape=(1, 2))
@@ -447,7 +452,7 @@ subplotter.add_mesh(
 #subplotter.show_grid(xlabel="X-axis", ylabel="Y-axis", zlabel="Height (u)")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_w_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_w_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/visualization_w_{info_experiment}.html")
 
 #pdb.set_trace()
 
@@ -500,7 +505,7 @@ subplotter.add_text("sigma_xy", position="upper_edge", font_size=14, color="blac
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(sigma_xy.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="viridis")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_CauchyStresses_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_CauchyStresses_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/visualization_CauchyStresses_{info_experiment}.html")
 #pdb.set_trace()
 
 # PLOT SIGMA N MAGINUTE
@@ -513,7 +518,7 @@ subplotter.add_text("magnitude sigma_r", position="upper_edge", font_size=14, co
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.linalg.norm(sigma_n, axis=1)) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_sigma_r_abs_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_sigma_r_abs_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/visualization_sigma_r_abs_{info_experiment}.html")
 
 # PLOT SIGMA N VECTOR PLOT
 subplotter = pyvista.Plotter(shape=(1, 1))
@@ -528,7 +533,7 @@ subplotter.add_mesh(glyphs, scalars="sigma_n_magnitude", lighting=False, cmap="c
 subplotter.add_mesh(grid, color="lightgray", opacity=0.5, show_edges=True, edge_color="black")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_sigma_n_vec_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_sigma_n_vec_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/visualization_sigma_n_vec_{info_experiment}.html")
 
 plotter = pyvista.Plotter()
 # Set the disk geometry and vector field if not already part of the grid
@@ -539,7 +544,7 @@ plotter.add_arrows(grid.points, grid["normalized_sigma_n"], mag=0.2, cmap="coolw
 plotter.add_mesh(grid, show_edges=True, edge_color="blue", color="lightgray", opacity=0.5) # Add the disk boundary
 plotter.add_text("s = 1, σn", font_size=14, color="black", position="upper_edge")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
-subplotter.export_html(f"{OUTDIR}/visualization_sigma_n_vec2_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/visualization_sigma_n_vec2_{info_experiment}.html")
 
 # PLOT SIGMA NN
 subplotter = pyvista.Plotter(shape=(1, 2))
@@ -563,7 +568,7 @@ subplotter.add_text("sigma_rr", position="upper_edge", font_size=14, color="blac
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(sigma_nn.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_sigma_rr_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_sigma_rr_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/visualization_sigma_rr_{info_experiment}.html")
 
 subplotter = pyvista.Plotter(shape=(1, 2))
 grid["sigma_nt"] = sigma_nt.x.array.real
@@ -586,7 +591,7 @@ scalar_bar_args["title"] = "sigma_nt"
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(sigma_nt.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_sigma_nt_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_sigma_nt_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/visualization_sigma_nt_{info_experiment}.html")
 
 subplotter = pyvista.Plotter(shape=(1, 2))
 grid["sigma_tt"] = sigma_tt.x.array.real
@@ -609,7 +614,7 @@ scalar_bar_args["title"] = "sigma_tt"
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(sigma_tt.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_sigma_tt_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/visualization_sigma_tt_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/visualization_sigma_tt_{info_experiment}.html")
 
 # PLOT MONGE-AMPERE W
 subplotter = pyvista.Plotter(shape=(1, 2))
@@ -633,7 +638,7 @@ scalar_bar_args["title"] = "[w, w]"
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(ma_w.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/viz_[w,w]_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/viz_[w,w]_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/viz_[w,w]_{info_experiment}.html")
 
 subplotter = pyvista.Plotter(shape=(1, 1))
 grid["ma_vw"] = ma_vw.x.array.real
@@ -644,7 +649,7 @@ scalar_bar_args["title"] = "[v,w]"
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(ma_vw.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 #subplotter.screenshot(f"{OUTDIR}/viz_[v,w]_{info_experiment}.png", scale = PNG_SCALE)
-subplotter.export_html(f"{OUTDIR}/viz_[v,w]_{info_experiment}.html")
+# subplotter.export_html(f"{OUTDIR}/viz_[v,w]_{info_experiment}.html")
 
 
 # PYVISTA PROFILE PLOTS

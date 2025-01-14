@@ -54,6 +54,8 @@ from disclinations.utils import update_parameters, save_parameters
 from disclinations.utils import create_or_load_circle_mesh
 from disclinations.utils import table_timing_data, Visualisation
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
+from visuals import visuals
+visuals.matplotlibdefaults(useTex=False)
 
 # OUTPUT DIRECTORY
 OUTDIR = os.path.join("output", "experiment_parametric_beta_adim") # CFe: output directory
@@ -337,9 +339,11 @@ if __name__ == "__main__":
     h = CellDiameter(mesh)
     n = FacetNormal(mesh)
 
+
     # PLOT THE MESH
     plt.figure()
     ax = plot_mesh(mesh)
+    visuals.setspines()
     fig = ax.get_figure()
     fig.savefig(f"{EXPERIMENT_DIR}/mesh.png")
 
@@ -524,7 +528,7 @@ if __name__ == "__main__":
     experimental_data["Power law membrane eng"] = powerLaw_memEng
     experimental_data["Power law bending eng"] = powerLaw_bendEng
     experimental_data["Power law coupling eng"] = powerLaw_couplingEng
-    experimental_data.to_excel(f'{EXPERIMENT_DIR}/varying_a.xlsx', index=False)
+    # experimental_data.to_excel(f'{EXPERIMENT_DIR}/varying_a.xlsx', index=False)
 
     # PRINT OUT RESULTS
     print(10*"*")
@@ -550,9 +554,9 @@ if __name__ == "__main__":
 
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
     plt.xticks(beta_range, [str(tick) if tick in x_values else '' for tick in beta_range])
-    plt.plot(beta_range, experimental_data["L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(beta_range, experimental_data["L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(beta_range, experimental_data["L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["L2norm v (Variational)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(beta_range, experimental_data["L2norm v (Brenner)"], marker='v', linestyle='dotted', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(beta_range, experimental_data["L2norm v (Carstensen)"], marker='^', linestyle='dashed', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_v = max([max(experimental_data["L2norm v (Variational)"]), max(experimental_data["L2norm v (Brenner)"]), max(experimental_data["L2norm v (Carstensen)"])])
     min_v = min([min(experimental_data["L2norm v (Variational)"]), min(experimental_data["L2norm v (Brenner)"]), min(experimental_data["L2norm v (Carstensen)"])])
@@ -571,13 +575,15 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.grid(True)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_V_{info_experiment}.png', dpi=300)
+    plt.savefig(EXPERIMENT_DIR+f'/varying_a_V_{info_experiment}.pdf', dpi=300)
     #plt.show()
 
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(beta_range, experimental_data["L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(beta_range, experimental_data["L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["L2norm w (Variational)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(beta_range, experimental_data["L2norm w (Brenner)"], marker='v', linestyle='dotted', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(beta_range, experimental_data["L2norm w (Carstensen)"], marker='^', linestyle='dashed', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_w = max([max(experimental_data["L2norm w (Variational)"]), max(experimental_data["L2norm w (Brenner)"]), max(experimental_data["L2norm w (Carstensen)"])])
     min_w = min([min(experimental_data["L2norm w (Variational)"]), min(experimental_data["L2norm w (Brenner)"]), min(experimental_data["L2norm w (Carstensen)"])])
@@ -594,14 +600,16 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_W_{info_experiment}.png', dpi=300)
+    plt.savefig(EXPERIMENT_DIR+f'/varying_a_W_{info_experiment}.pdf', dpi=300)
     #plt.show()
 
     # PLOTS HESSIAN L2 NORM
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Hessian L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(beta_range, experimental_data["Hessian L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(beta_range, experimental_data["Hessian L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Hessian L2norm v (Variational)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(beta_range, experimental_data["Hessian L2norm v (Brenner)"], marker='v', linestyle='dotted', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(beta_range, experimental_data["Hessian L2norm v (Carstensen)"], marker='^', linestyle='dashed', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_v = max([max(experimental_data["Hessian L2norm v (Variational)"]), max(experimental_data["Hessian L2norm v (Brenner)"]), max(experimental_data["Hessian L2norm v (Carstensen)"])])
     min_v = min([min(experimental_data["Hessian L2norm v (Variational)"]), min(experimental_data["Hessian L2norm v (Brenner)"]), min(experimental_data["Hessian L2norm v (Carstensen)"])])
@@ -619,13 +627,14 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_HessV_{info_experiment}.png', dpi=300)
     #plt.show()
 
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Hessian L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(beta_range, experimental_data["Hessian L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(beta_range, experimental_data["Hessian L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Hessian L2norm w (Variational)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(beta_range, experimental_data["Hessian L2norm w (Brenner)"], marker='v', linestyle='dotted', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if COMPARISON: plt.plot(beta_range, experimental_data["Hessian L2norm w (Carstensen)"], marker='^', linestyle='dashed', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_w = max([max(experimental_data["Hessian L2norm w (Variational)"]), max(experimental_data["Hessian L2norm w (Brenner)"]), max(experimental_data["Hessian L2norm w (Carstensen)"])])
     min_w = min([min(experimental_data["Hessian L2norm w (Variational)"]), min(experimental_data["Hessian L2norm w (Brenner)"]), min(experimental_data["Hessian L2norm w (Carstensen)"])])
@@ -643,12 +652,13 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_HessW_{info_experiment}.png', dpi=300)
     #plt.show()
 
     # PLOT MEMBRANE ENERGY
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     steps_memEng = abs( (max_memEng - min_memEng)/NUM_STEPS )
     if steps_memEng == 0: steps_memEng = NUM_STEPS
@@ -661,13 +671,14 @@ if __name__ == "__main__":
     plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+    visuals.setspines()
     plt.grid(True)
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_MembEng_{info_experiment}.png', dpi=300)
 
     # LOG-PLOT MEMBRANE ENERGY
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(beta_range, kMembraneEngList, marker='.', linestyle='--', color='r', label='KL model', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, kMembraneEngList, marker='.', linestyle='--', label='KL model', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     steps_memEng = abs( (max_memEng - min_memEng)/NUM_STEPS )
     if steps_memEng == 0: steps_memEng = NUM_STEPS
@@ -682,12 +693,13 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_MembEng_log_{info_experiment}.png', dpi=300)
 
     # PLOT BENDING ENERGY
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Bending Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.axhline(y=0, color='black', linewidth=2)
+    plt.plot(beta_range, experimental_data["Bending Erg (Var)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.axhline(y=0, linewidth=2)
     steps_bendEng = (max_bendEng - min_bendEng)/NUM_STEPS
     if steps_bendEng == 0: steps_bendEng = NUM_STEPS
     if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
@@ -700,16 +712,17 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_BendEng_{info_experiment}.png', dpi=300)
 
     # LOG-PLOT BENDING ENERGY
     #(np.log(experimental_data["Bending Erg (Var)"][-1]) - np.log(experimental_data["Bending Erg (Var)"][0]))/(np.log(100) - np.log(10))
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Bending Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Bending Erg (Var)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
     if steps_memEng == 0: steps_memEng = NUM_STEPS
     plt.xscale('log')
     plt.yscale('log')
-    plt.axhline(y=0, color='black', linewidth=2)
+    plt.axhline(y=0,c='k', linewidth=2)
     max_bendEng = max(experimental_data["Bending Erg (Var)"])
     min_bendEng = min(experimental_data["Bending Erg (Var)"])
     steps_bendEng = (max_bendEng - min_bendEng)/NUM_STEPS
@@ -723,12 +736,13 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_BendEng_log_{info_experiment}.png', dpi=300)
 
     # PLOT COUPLING ENERGY
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Coupling Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.axhline(y=0, color='black', linewidth=2)
+    plt.plot(beta_range, experimental_data["Coupling Erg (Var)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.axhline(y=0,c='k', linewidth=2)
 
     steps_couplingEng = (max_couplingEng - min_couplingEng)/NUM_STEPS
     if steps_couplingEng == 0: steps_couplingEng = NUM_STEPS
@@ -743,16 +757,17 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_CouplEng_{info_experiment}.png', dpi=300)
     #plt.show()
 
     # PLOT COUPLING ENERGY LOG-LOG
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Coupling Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Coupling Erg (Var)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
     if steps_memEng == 0: steps_memEng = NUM_STEPS
     plt.xscale('log')
     plt.yscale('log')
-    plt.axhline(y=0, color='black', linewidth=2)
+    plt.axhline(y=0,c='k', linewidth=2)
     plt.xticks(beta_range, [str(tick) if tick in x_range_plot_log else '' for tick in beta_range])
     plt.xlabel(r"$\beta$ = $\frac{R}{h}$", fontsize=FONTSIZE)
     plt.ylabel('Coupling Energy', fontsize=FONTSIZE)
@@ -761,20 +776,21 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_CouplEng_log_{info_experiment}.png', dpi=300)
 
 
 
     # PLOT LOG-LOG ENERGIES
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='none', color='b', label='Membrane', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(beta_range, experimental_data["Bending Erg (Var)"], marker='^', linestyle='none', color='r', label='Bending', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(beta_range, experimental_data["Coupling Erg (Var)"], marker='v', linestyle='none', color='k', label='Coupling', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(beta_range, kMembraneEngList, marker='.', linestyle='--', color='g', label='KL model: membrane', linewidth=LINEWIDTH, markersize=0*MARKERSIZE)
-    plt.plot(beta_range, kBendingEngList, marker='.', linestyle='--', color='y', label='KL model: bending', linewidth=LINEWIDTH, markersize=0*MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='none', label='Membrane', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Bending Erg (Var)"], marker='^', linestyle='none', label='Bending', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Coupling Erg (Var)"], marker='v', linestyle='none', label='Coupling', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, kMembraneEngList, marker='.', linestyle='--', label='KL model: membrane', linewidth=LINEWIDTH, markersize=0*MARKERSIZE)
+    plt.plot(beta_range, kBendingEngList, marker='.', linestyle='--', label='KL model: bending', linewidth=LINEWIDTH, markersize=0*MARKERSIZE)
     plt.xscale('log')
     plt.yscale('log')
-    plt.axhline(y=0, color='black', linewidth=2)
+    plt.axhline(y=0,c='k', linewidth=2)
     plt.xticks(beta_range, [str(tick) if tick in x_range_plot_log else '' for tick in beta_range])
     plt.xlabel(r"$\beta$ = $\frac{R}{h}$", fontsize=FONTSIZE)
     plt.ylabel('Dimensionless energy', fontsize=FONTSIZE)
@@ -783,6 +799,7 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_loglog_energies_{info_experiment}.png', dpi=300)
 
     # PLOT SIGMA NN
@@ -790,21 +807,23 @@ if __name__ == "__main__":
     subplotter.subplot(0, 0)
     grid["sigma_nn"] = sigma_nn.x.array.real
     grid.set_active_scalars("sigma_nn")
-    subplotter.add_text("sigma_rr", position="upper_edge", font_size=14, color="black")
+    subplotter.add_text("sigma_rr", position="upper_edge", font_size=14,color="k")
     scalar_bar_args["title"] = "sigma_rr"
-    subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(sigma_nn.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
+    subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(sigma_nn.x.array.real )) ), 
+                        show_edges=False, show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
     IMG_WIDTH = 1600
     IMG_HEIGHT = 1200
     PNG_SCALE = 2
     subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
     subplotter.screenshot(f"{EXPERIMENT_DIR}/visualization_sigma_nn_{index_solution}_{info_experiment}.png", scale = PNG_SCALE)
-    subplotter.export_html(f"{EXPERIMENT_DIR}/visualization_sigma_nn_{index_solution}_{info_experiment}.html")
+    # subplotter.screenshot(f"{EXPERIMENT_DIR}/visualization_sigma_nn_{index_solution}_{info_experiment}.pdf]", scale = PNG_SCALE)
+    # subplotter.export_html(f"{EXPERIMENT_DIR}/visualization_sigma_nn_{index_solution}_{info_experiment}.html")
 
     # PLOT PENALIZATION ENERGY
 
     # Penalization energy of Transverse Displacement w
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Penalization W Eng (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Penalization W Eng (Var)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_penalizWEng = max(experimental_data["Penalization W Eng (Var)"])
     min_penalizWEng = min(experimental_data["Penalization W Eng (Var)"])
@@ -822,11 +841,12 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_PenEngW_{info_experiment}.png', dpi=300)
 
     # Penalization energy of the Jump of the Hessian of the Transverse Displacement w
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Penalization W Hess Jump (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Penalization W Hess Jump (Var)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_penalizWEng = max(experimental_data["Penalization W Hess Jump (Var)"])
     min_penalizWEng = min(experimental_data["Penalization W Hess Jump (Var)"])
@@ -844,11 +864,13 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_PenHessJumpW_{info_experiment}.png', dpi=300)
+    plt.savefig(EXPERIMENT_DIR+f'/varying_a_PenHessJumpW_{info_experiment}.pdf', dpi=300)
 
     # Penalization energy of Airy's function v
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(beta_range, experimental_data["Penalization V Eng (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(beta_range, experimental_data["Penalization V Eng (Var)"], marker='o', linestyle='solid', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
     max_penalizVEng = max(experimental_data["Penalization V Eng (Var)"])
     min_penalizVEng = min(experimental_data["Penalization V Eng (Var)"])
@@ -865,7 +887,9 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_PenEngV_{info_experiment}.png', dpi=300)
+    plt.savefig(EXPERIMENT_DIR+f'/varying_a_PenEngV_{info_experiment}.pdf', dpi=300)
 
     # PLOT DIFFERENCES BETWEEN ENERGIES AND PENALTY ENERGIES
 
@@ -876,29 +900,31 @@ if __name__ == "__main__":
     w_dg3_var_list = experimental_data["Penalization W Hess Jump (Var)"]
 
     fig, ax = plt.subplots(2, 2, figsize=(FIGWIDTH, FIGHEIGHT))
-    ax[0,0].plot(beta_range, w_dg1_var_list, marker='o', linestyle='solid', color='b', label="w_dg1", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    ax[0,0].plot(beta_range, w_dg1_var_list, marker='o', linestyle='solid', label="w_dg1", linewidth=LINEWIDTH, markersize=MARKERSIZE)
     ax[0,0].legend(fontsize=FONTSIZE)
     ax[0,0].grid(True)
     ax[0,0].set_xlabel(r"$\beta$ = $\frac{R}{h}$", fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    ax[0,1].plot(beta_range, w_dg2_var_list, marker='v', linestyle='solid', color='r', label="w_dg2", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    ax[0,1].plot(beta_range, w_dg2_var_list, marker='v', linestyle='solid', label="w_dg2", linewidth=LINEWIDTH, markersize=MARKERSIZE)
     ax[0,1].legend(fontsize=FONTSIZE)
     ax[0,1].grid(True)
     ax[0,1].set_xlabel(r"$\beta$ = $\frac{R}{h}$", fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    ax[1,0].plot(beta_range, w_bc1_var_list, marker='P', linestyle='solid', color='k', label="w_bc1", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    ax[1,0].plot(beta_range, w_bc1_var_list, marker='P', linestyle='solid', label="w_bc1", linewidth=LINEWIDTH, markersize=MARKERSIZE)
     ax[1,0].legend(fontsize=FONTSIZE)
     ax[1,0].grid(True)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
     ax[1,0].set_xlabel(r"$\beta$ = $\frac{R}{h}$", fontsize=FONTSIZE)
-    ax[1,1].plot(beta_range, w_bc3_var_list, marker='*', linestyle='solid', color='g', label="w_bc3", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    ax[1,1].plot(beta_range, w_bc3_var_list, marker='*', linestyle='solid', label="w_bc3", linewidth=LINEWIDTH, markersize=MARKERSIZE)
     ax[1,1].legend(fontsize=FONTSIZE)
     ax[1,1].grid(True)
     ax[1,1].set_xlabel(r"$\beta$ = $\frac{R}{h}$", fontsize=FONTSIZE)
     plt.xticks(beta_range, [str(tick) if tick in x_values else '' for tick in beta_range])
     fig.suptitle(f'Penalization Energy v. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
     plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/varying_a_PenEngsW_{info_experiment}.png', dpi=300)
+    plt.savefig(EXPERIMENT_DIR+f'/varying_a_PenEngsW_{info_experiment}.pdf', dpi=300)
 
     # PLOT PROFILES
 
@@ -923,7 +949,9 @@ if __name__ == "__main__":
         plt.title(fr"Transverse displacement. $\beta$ = {beta_range[i]}; Mesh = {mesh_size}. IP = {IP}. E = {E:.2e} tol = {SOL_TOLLERANCE}", size = FONTSIZE)
         plt.grid(True)
         plt.legend(fontsize=FONTSIZE)
+        visuals.setspines()
         plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-w-profiles_{info_experiment}.png")
+        plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-w-profiles_{info_experiment}.pdf")
 
         # fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
         # sol_w.vector.array = sol_w.vector.array / beta_range[i]
@@ -939,7 +967,7 @@ if __name__ == "__main__":
         # plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}b-w-profiles_{info_experiment}.png")
 
         fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
-        plt, data = plot_profile(sol_v_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
+        plt, data = plot_profile(sol_v_list[i], points, None, subplot=(1, 1), lineproperties={"lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
         plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
         plt.ylabel("v", fontsize=FONTSIZE)
         plt.xticks(fontsize=FONTSIZE)
@@ -952,10 +980,11 @@ if __name__ == "__main__":
         plt.grid(True)
         plt.legend(fontsize=FONTSIZE)
         plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-v-profiles_{info_experiment}.png")
+        plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-v-profiles_{info_experiment}.pdf")
 
         # Profiles of Monge-Ampere Bracket v, w
         fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
-        plt, data = plot_profile(bracket_vw_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
+        plt, data = plot_profile(bracket_vw_list[i], points, None, subplot=(1, 1), lineproperties={"lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
         plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
         plt.ylabel(r"$[v, w]$", fontsize=FONTSIZE)
         plt.xticks(fontsize=FONTSIZE)
@@ -968,10 +997,11 @@ if __name__ == "__main__":
         plt.grid(True)
         plt.legend(fontsize=FONTSIZE)
         plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-[v_w]-profiles_{info_experiment}.png")
+        plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-[v_w]-profiles_{info_experiment}.pdf")
 
         # Profiles of Monge-Ampere Bracket w, w
         fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
-        plt, data = plot_profile(bracket_ww_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
+        plt, data = plot_profile(bracket_ww_list[i], points, None, subplot=(1, 1), lineproperties={"lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
         plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
         plt.ylabel(r"$[w, w]$", fontsize=FONTSIZE)
         plt.xticks(fontsize=FONTSIZE)
@@ -984,10 +1014,12 @@ if __name__ == "__main__":
         plt.grid(True)
         plt.legend(fontsize=FONTSIZE)
         plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-[w_w]-profiles_{info_experiment}.png")
+        plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-[w_w]-profiles_{info_experiment}.pdf")
+
 
         # Profiles of Monge-Ampere Bracket v, v
         fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
-        plt, data = plot_profile(bracket_vv_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
+        plt, data = plot_profile(bracket_vv_list[i], points, None, subplot=(1, 1), lineproperties={"lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
         plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
         plt.ylabel(r"$[v, v]$", fontsize=FONTSIZE)
         plt.xticks(fontsize=FONTSIZE)
@@ -1000,6 +1032,7 @@ if __name__ == "__main__":
         plt.grid(True)
         plt.legend(fontsize=FONTSIZE)
         plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-[v_v]-profiles_{info_experiment}.png")
+        plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-[v_v]-profiles_{info_experiment}.pdf")
 
 
 
@@ -1026,8 +1059,8 @@ if __name__ == "__main__":
     scale_w1 = f"{np.max(np.abs(w_1sorted)):.2e}"
     scale_w2 = f"{np.max(np.abs(w_2sorted)):.2e}"
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(x_sorted, w_1normalized, label=fr'$\beta$: 10, max(|w|): {scale_w1}', color='red', linestyle='solid', linewidth=LINEWIDTH)
-    plt.plot(x_sorted, w_2normalized, label=fr'$\beta$: 100, max(|w|): {scale_w2}', color='black', linestyle='dashed', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, w_1normalized, label=fr'$\beta$: 10, max(|w|): {scale_w1}', linestyle='solid', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, w_2normalized, label=fr'$\beta$: 100, max(|w|): {scale_w2}',c='k', linestyle='dashed', linewidth=LINEWIDTH)
     plt.xticks(fontsize=FONTSIZE)
     plt.yticks(fontsize=FONTSIZE)
     plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
@@ -1042,6 +1075,7 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     #plt.grid(True)
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_w_comparison_y_{y0}_{info_experiment}.png", dpi=300)
+    plt.savefig(f"{EXPERIMENT_DIR}/profiles_w_comparison_y_{y0}_{info_experiment}.pdf", dpi=300)
 
     grid.point_data["v_1"] = sol_v_list[0].vector.array[dofs2_v]
     grid.point_data["v_2"] = sol_v_list[-1].vector.array[dofs2_v]
@@ -1058,8 +1092,8 @@ if __name__ == "__main__":
     scale_v1 = f"{np.max(np.abs(v_1sorted)):.1e}"
     scale_v2 = f"{np.max(np.abs(v_2sorted)):.1e}"
     plt.figure(figsize=(FIGWIDTH, FIGHEIGHT))
-    plt.plot(x_sorted, v_1normalized, label=fr'$\beta$: 10, max(|v|): {scale_v1}', color='red', linestyle='solid', linewidth=LINEWIDTH)
-    plt.plot(x_sorted, v_2normalized, label=fr'$\beta$: 100, max(|v|): {scale_v2}', color='black', linestyle='dashed', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, v_1normalized, label=fr'$\beta$: 10, max(|v|): {scale_v1}', linestyle='solid', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, v_2normalized, label=fr'$\beta$: 100, max(|v|): {scale_v2}',c='k', linestyle='dashed', linewidth=LINEWIDTH)
     plt.xticks(fontsize=FONTSIZE)
     plt.yticks(fontsize=FONTSIZE)
     plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
@@ -1073,3 +1107,5 @@ if __name__ == "__main__":
     plt.legend(fontsize=FONTSIZE)
     #plt.grid(True)
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_v_comparison_y_{y0}_{info_experiment}.png", dpi=300)
+    plt.savefig(f"{EXPERIMENT_DIR}/profiles_v_comparison_y_{y0}_{info_experiment}.pdf", dpi=300)
+    print(f"===================- {EXPERIMENT_DIR} -=================")
