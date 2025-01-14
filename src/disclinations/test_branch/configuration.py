@@ -394,7 +394,6 @@ grid = pyvista.UnstructuredGrid(topology, cells, geometry)
 
 # PLOT FEM AND ANALYTICAL SOLUTIONS
 
-
 # Airy, countour plot
 subplotter = pyvista.Plotter(shape=(1, 2))
 grid.point_data["v"] = v_pp.x.array.real[dofs_v]

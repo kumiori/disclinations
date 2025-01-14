@@ -57,6 +57,7 @@ from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 from visuals import visuals
 visuals.matplotlibdefaults(useTex=False)
 
+
 # OUTPUT DIRECTORY
 OUTDIR = os.path.join("output", "experiment_parametric_beta_adim") # CFe: output directory
 PATH_TO_PARAMETERS_YML_FILE = 'disclinations.test'
