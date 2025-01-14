@@ -234,11 +234,11 @@ def test_model_computation(variant):
     fields_data["mesh"] = points[:, 0]
     
     np.savez(f"{prefix}/fields_data.npz", **fields_data)
-    pdb.set_trace()
-    filepath = f"{prefix}/fields_data.npz"
+    # pdb.set_trace()
+    # filepath = f"{prefix}/fields_data.npz"
 
     # Load field data
-    _field_data = pp.load_field_data(filepath)
+    # _field_data = pp.load_field_data(filepath)
 
 from disclinations.models import assemble_penalisation_terms
 
