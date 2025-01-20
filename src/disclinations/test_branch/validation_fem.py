@@ -4,8 +4,8 @@ Compare the three FE formulations (Variational, Brenner, Carstensen) with a know
 The script can use both the dimensional or the NON-dimensional FE formulations (see respectivelly "models/__init__.py" and "models/adimensional.py")
 
 ARTICLE RELATED SECTION
-"Tests 1: kinematically compatible plate under volume forces"
-"Tests 2: kinematically incompatible plate"
+"Sovler verification. Test 1: kinematically compatible plate under volume forces"
+"Sovler verification. Test 2: kinematically incompatible plate"
 """
 import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import yaml
@@ -19,6 +19,9 @@ import argparse
 
 from disclinations.utils import load_parameters
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
+
+from visuals import visuals
+visuals.matplotlibdefaults(useTex=False)
 
 SCRIPT_VAR = "validation_test1_adim"
 SCRIPT_BRN = "validation_test1_BR_adim"
@@ -187,16 +190,16 @@ FIGHEIGHT = 12
 
 fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
-_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":7, "label": "VAR"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR"}, fig=fig, subplotnumber=1) #"c": "b",
+_plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1) #"c": "r",
+_plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1) #"c": "g",
+_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1) #"c": "k",
 
 _plt.xlabel(r"$\xi_1$", fontsize=35)
-_plt.ylabel(r"$\tilde{w}$", fontsize=35)
+_plt.ylabel(r"$w$", fontsize=35)
 _plt.xticks(fontsize=35)
 _plt.yticks(fontsize=35)
-_plt.title(f"Comparison between FE models. Transverse displacement. {info_experiment}", size = 30)
+#_plt.title(f"Comparison between FE models. Transverse displacement. {info_experiment}", size = 30)
 #_plt.grid(True)
 _plt.legend(fontsize=30)
 ax = _plt.gca() # use scientific notation for y axis
@@ -204,20 +207,21 @@ ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.yaxis.get_offset_text().set_fontsize(30)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+visuals.setspines()
 _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
 
 fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
-_plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":7, "label": "VAR"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1)
+_plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR"}, fig=fig, subplotnumber=1) #"c": "b",
+_plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1) #"c": "r",
+_plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1) #"c": "g",
+_plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1) #"c": "k",
 
 _plt.xlabel(r"$\xi_1$", fontsize=35)
-_plt.ylabel(r"$\tilde{v}$", fontsize=35)
+_plt.ylabel(r"$v$", fontsize=35)
 _plt.xticks(fontsize=35)
 _plt.yticks(fontsize=35)
-_plt.title(f"Comparison between FE models. Airy's function. {info_experiment}", size = 30)
+#_plt.title(f"Comparison between FE models. Airy's function. {info_experiment}", size = 30)
 #_plt.grid(True)
 _plt.legend(fontsize=30)
 ax = _plt.gca() # use scientific notation for y axis
@@ -225,4 +229,5 @@ ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.yaxis.get_offset_text().set_fontsize(30)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+visuals.setspines()
 _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-v-profiles.png")
