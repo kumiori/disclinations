@@ -21,7 +21,7 @@ from disclinations.utils import load_parameters
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 
 from visuals import visuals
-visuals.matplotlibdefaults(useTex=False)
+visuals.matplotlibdefaults(useTex=False) #palette="dark",
 
 SCRIPT_VAR = "validation_test1_adim"
 SCRIPT_BRN = "validation_test1_BR_adim"
@@ -188,12 +188,38 @@ points[0] = xs
 FIGWIDTH = 17
 FIGHEIGHT = 12
 
-fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
+fig, axes = plt.subplots(1, 2, figsize=(FIGWIDTH, FIGHEIGHT))
 
-_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR"}, fig=fig, subplotnumber=1) #"c": "b",
-_plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1) #"c": "r",
-_plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1) #"c": "g",
-_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1) #"c": "k",
+
+# # INSERT ANDRES: -------------------------
+# difference = np.abs(y_exact - y_numerical)
+#
+# # Main plot
+# #fig, ax = plt.subplots(figsize=(8, 6))
+# ax.plot(x, y_exact, label="Exact Solution", linestyle="-", color="blue", linewidth=2)
+# ax.plot(x, y_numerical, label="Numerical Solution", linestyle="--", color="red", linewidth=1.5, alpha=0.7)
+# ax.set_xlabel("x")
+# ax.set_ylabel("y")
+# ax.set_title("Superposed Curves with Difference Inset")
+# ax.legend()
+#
+# # Add inset plot
+# ax_inset = inset_axes(ax, width="40%", height="30%", loc="upper right")
+# ax_inset.plot(x, w_var-w_brn, color="green", linewidth=1.5)
+# ax_inset.set_yscale("log")
+# ax_inset.set_title("Difference (Log Scale)", fontsize=10)
+# ax_inset.set_xlabel("x", fontsize=8)
+# ax_inset.set_ylabel("|Exact - Numerical|", fontsize=8)
+# ax_inset.tick_params(axis='both', which='major', labelsize=8)
+# ax_inset.grid(True, linestyle="--", alpha=0.5)
+# Display the plot
+#plt.tight_layout()
+#plt.show()
+
+_plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":", "c": "C1"}, fig=fig, subplotnumber=1) #"c": "r",
+_plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--", "c": "C2"}, fig=fig, subplotnumber=1) #"c": "g",
+_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR", "c": "k"}, fig=fig, subplotnumber=1) #"c": "k",
+_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"lw":2, "label": "Analytical (white)", "ls": "solid", "c":"w"}, fig=fig, subplotnumber=1) #"c": "k",
 
 _plt.xlabel(r"$\xi_1$", fontsize=35)
 _plt.ylabel(r"$w$", fontsize=35)
@@ -212,10 +238,10 @@ _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
 
 fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
-_plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR"}, fig=fig, subplotnumber=1) #"c": "b",
-_plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1) #"c": "r",
-_plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1) #"c": "g",
-_plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1) #"c": "k",
+_plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":", "c": "C1"}, fig=fig, subplotnumber=1) #"c": "r",
+_plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--", "c": "C2"}, fig=fig, subplotnumber=1) #"c": "g",
+_plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR", "c": "k"}, fig=fig, subplotnumber=1) #"c": "b",
+_plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"lw":2, "label": "Analytical (white)", "ls": "solid", "c": "w"}, fig=fig, subplotnumber=1) #
 
 _plt.xlabel(r"$\xi_1$", fontsize=35)
 _plt.ylabel(r"$v$", fontsize=35)

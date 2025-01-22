@@ -58,7 +58,7 @@ from disclinations.utils import table_timing_data, Visualisation
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 
 from visuals import visuals
-visuals.matplotlibdefaults(useTex=False)
+visuals.matplotlibdefaults(useTex=False) #palette="dark",
 
 # OUTPUT DIRECTORY
 OUTDIR = os.path.join("output", "experiment_parametric_gamma") # CFe: output directory
@@ -320,6 +320,8 @@ if __name__ == "__main__":
 
     thickness = parameters["model"]["thickness"]
     mesh_size = parameters["geometry"]["mesh_size"]
+    mesh_size = 0.03
+    thickness = 0.05
     IP = parameters["model"]["alpha_penalty"]
     nu = parameters["model"]["nu"] # Poisson ratio
     c_nu =  1/(12*(1-nu**2))
@@ -749,12 +751,12 @@ if __name__ == "__main__":
 # PLOT LOG-LOG ENERGIES
     plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
     print("gamma range: ", gamma_range)
+    plt.plot(gamma_range, kMembraneEngList, marker='.', color='k', linestyle='solid', label='KL model: membrane', linewidth=LINEWIDTH, markersize=0*MARKERSIZE) #, color='g' '--'
+    plt.plot(gamma_range, kBendingEngList, marker='s', color='k', linestyle='solid', label='KL model: bending', linewidth=1.5*LINEWIDTH, markersize=0*MARKERSIZE) #
     #plt.xticks(gamma_range, [str(tick) if tick in x_range_plot_log else '' for tick in gamma_range])
     plt.plot(gamma_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='none', label='Membrane', linewidth=LINEWIDTH, markersize=MARKERSIZE) #, color='b'
     plt.plot(gamma_range, experimental_data["Bending Erg (Var)"], marker='^', linestyle='none', label='Bending', linewidth=LINEWIDTH, markersize=MARKERSIZE) #, color='r'
     plt.plot(gamma_range, experimental_data["Coupling Erg (Var)"], marker='v', linestyle='none', label='Coupling', linewidth=LINEWIDTH, markersize=MARKERSIZE) #, color='k'
-    plt.plot(gamma_range, kMembraneEngList, marker='.', linestyle='--', label='KL model: membrane', linewidth=LINEWIDTH, markersize=0*MARKERSIZE) #, color='g'
-    plt.plot(gamma_range, kBendingEngList, marker='s', linestyle='-.', label='KL model: bending', linewidth=LINEWIDTH, markersize=0*MARKERSIZE) #, color='y'
     plt.xscale('log')
     plt.yscale('log')
     plt.axhline(y=0, color='black', linewidth=2)
