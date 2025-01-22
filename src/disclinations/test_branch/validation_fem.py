@@ -18,7 +18,7 @@ import pandas as pd
 import argparse
 
 from disclinations.utils import load_parameters
-from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
+from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh, get_datapoints
 
 from visuals import visuals
 visuals.matplotlibdefaults(useTex=False) #palette="dark",
@@ -167,10 +167,10 @@ PARAMETERS_FILE_PATH = 'disclinations.test'
 with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
     parameters, _ = load_parameters(f)
 
-info_experiment = f"mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]:.2e}_smth_{smoothing}"
+info_experiment = f"mesh_{parameters['geometry']['mesh_size']}_IP_{parameters['model']['alpha_penalty']:.2e}_smth_{smoothing}"
 
 experimental_data = pd.DataFrame(exp_dict)
-experimental_data.to_excel(f'{OUTDIR}/Models_comparison.xlsx', index=False)
+# experimental_data.to_excel(f'{OUTDIR}/Models_comparison.xlsx', index=False)
 
 # Plot profiles:
 import pyvista
@@ -188,53 +188,45 @@ points[0] = xs
 FIGWIDTH = 17
 FIGHEIGHT = 12
 
-fig, axes = plt.subplots(1, 2, figsize=(FIGWIDTH, FIGHEIGHT))
-
-
-# # INSERT ANDRES: -------------------------
-# difference = np.abs(y_exact - y_numerical)
-#
-# # Main plot
-# #fig, ax = plt.subplots(figsize=(8, 6))
-# ax.plot(x, y_exact, label="Exact Solution", linestyle="-", color="blue", linewidth=2)
-# ax.plot(x, y_numerical, label="Numerical Solution", linestyle="--", color="red", linewidth=1.5, alpha=0.7)
-# ax.set_xlabel("x")
-# ax.set_ylabel("y")
-# ax.set_title("Superposed Curves with Difference Inset")
-# ax.legend()
-#
-# # Add inset plot
-# ax_inset = inset_axes(ax, width="40%", height="30%", loc="upper right")
-# ax_inset.plot(x, w_var-w_brn, color="green", linewidth=1.5)
-# ax_inset.set_yscale("log")
-# ax_inset.set_title("Difference (Log Scale)", fontsize=10)
-# ax_inset.set_xlabel("x", fontsize=8)
-# ax_inset.set_ylabel("|Exact - Numerical|", fontsize=8)
-# ax_inset.tick_params(axis='both', which='major', labelsize=8)
-# ax_inset.grid(True, linestyle="--", alpha=0.5)
-# Display the plot
-#plt.tight_layout()
-#plt.show()
+fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
 _plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":", "c": "C1"}, fig=fig, subplotnumber=1) #"c": "r",
 _plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--", "c": "C2"}, fig=fig, subplotnumber=1) #"c": "g",
 _plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR", "c": "k"}, fig=fig, subplotnumber=1) #"c": "k",
 _plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"lw":2, "label": "Analytical (white)", "ls": "solid", "c":"w"}, fig=fig, subplotnumber=1) #"c": "k",
 
+ax_inset = fig.add_axes([0.35, 0.15, 0.3, 0.3])  # Adjust position and size of inset
+points_on_proc, w_values_exact = get_datapoints(w_exact, points)
+
+# Loop through the fields and calculate differences
+for _w, label, color in zip([w_brn, w_car, w_var], ["BNRS17", "CMN18", "VAR"], ["C1", "C2", "k"]):
+    _, w_values_current = get_datapoints(_w, points)  # Get current field data
+    differences = np.abs(w_values_exact - w_values_current)
+    print(differences)
+    ax_inset.semilogy(points_on_proc[:, 0], differences, label=f"|Exact - {label}|", lw=2, c=color)
+
+ax = _plt.gca() #
 _plt.xlabel(r"$\xi_1$", fontsize=35)
 _plt.ylabel(r"$w$", fontsize=35)
 _plt.xticks(fontsize=35)
 _plt.yticks(fontsize=35)
 #_plt.title(f"Comparison between FE models. Transverse displacement. {info_experiment}", size = 30)
 #_plt.grid(True)
-_plt.legend(fontsize=30)
-ax = _plt.gca() # use scientific notation for y axis
+_plt.legend(fontsize=30, loc="upper right")
 ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.yaxis.get_offset_text().set_fontsize(30)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+
+ax_inset.set_xlabel(r"$\xi_1$", fontsize=8)
+ax_inset.set_ylabel("Difference", fontsize=8)
+ax_inset.tick_params(axis="both", which="major", labelsize=8)
+ax_inset.legend(fontsize=8, loc="upper right")
+ax_inset.xaxis.set_major_locator(MaxNLocator(nbins=3))  # Adjust the number of bins to choose the number of ticks
 visuals.setspines()
-_plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
+fig.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
+
+
 
 fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
@@ -257,3 +249,4 @@ ax.yaxis.get_offset_text().set_fontsize(30)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
 visuals.setspines()
 _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-v-profiles.png")
+plt.close("all")
