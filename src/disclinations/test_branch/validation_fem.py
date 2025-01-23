@@ -192,8 +192,8 @@ fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
 # _plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":", "c": "C1"}, fig=fig, subplotnumber=1) #"c": "r",
 # _plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--", "c": "C2"}, fig=fig, subplotnumber=1) #"c": "g",
-_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR", "c": "C0"}, fig=fig, subplotnumber=1) #"c": "k",
-_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"lw":2, "label": "Analytical", "ls": "solid", "c": "k"}, fig=fig, subplotnumber=1) #"c": "k",
+_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"lw":11, "label": "VAR", "c": "C0"}, fig=fig, subplotnumber=1) #"c": "k",
+_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"lw":3, "label": "Analytical", "ls": "solid", "c": "k"}, fig=fig, subplotnumber=1) #"c": "k",
 
 ax_inset = fig.add_axes([0.35, 0.15, 0.3, 0.3])  # Adjust position and size of inset
 points_on_proc, w_values_exact = get_datapoints(w_exact, points)
