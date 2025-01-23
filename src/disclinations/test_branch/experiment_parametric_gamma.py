@@ -57,6 +57,9 @@ from disclinations.utils import create_or_load_circle_mesh
 from disclinations.utils import table_timing_data, Visualisation
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 
+from visuals import visuals
+visuals.matplotlibdefaults(useTex=False) #palette="dark",
+
 # OUTPUT DIRECTORY
 OUTDIR = os.path.join("output", "experiment_parametric_gamma") # CFe: output directory
 PATH_TO_PARAMETERS_YML_FILE = 'disclinations.test'
@@ -317,6 +320,8 @@ if __name__ == "__main__":
 
     thickness = parameters["model"]["thickness"]
     mesh_size = parameters["geometry"]["mesh_size"]
+    mesh_size = 0.03
+    thickness = 0.05
     IP = parameters["model"]["alpha_penalty"]
     nu = parameters["model"]["nu"] # Poisson ratio
     c_nu =  1/(12*(1-nu**2))
@@ -543,213 +548,215 @@ if __name__ == "__main__":
     for element in x_range_plot:
         if element in gamma_range: x_values.append(element)
 
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.plot(gamma_range, experimental_data["L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    if False:
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.plot(gamma_range, experimental_data["L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
-    max_v = max([max(experimental_data["L2norm v (Variational)"]), max(experimental_data["L2norm v (Brenner)"]), max(experimental_data["L2norm v (Carstensen)"])])
-    min_v = min([min(experimental_data["L2norm v (Variational)"]), min(experimental_data["L2norm v (Brenner)"]), min(experimental_data["L2norm v (Carstensen)"])])
-    steps_v = (max_v - min_v)/NUM_STEPS
-    if steps_v == 0: steps_v = NUM_STEPS # CFe: v is constant
-    xrange_list = []
+        max_v = max([max(experimental_data["L2norm v (Variational)"]), max(experimental_data["L2norm v (Brenner)"]), max(experimental_data["L2norm v (Carstensen)"])])
+        min_v = min([min(experimental_data["L2norm v (Variational)"]), min(experimental_data["L2norm v (Brenner)"]), min(experimental_data["L2norm v (Carstensen)"])])
+        steps_v = (max_v - min_v)/NUM_STEPS
+        if steps_v == 0: steps_v = NUM_STEPS # CFe: v is constant
+        xrange_list = []
 
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_v, max_v, steps_v))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel(r'$| v |_{L^2(\Omega)} [Nm^2]$', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(r'$| v |_{L^2(\Omega)}'+f'. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.grid(True)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_V_{info_experiment}.png', dpi=300)
-    #plt.show()
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_v, max_v, steps_v))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel(r'$| v |_{L^2(\Omega)} [Nm^2]$', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(r'$| v |_{L^2(\Omega)}'+f'. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.grid(True)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_V_{info_experiment}.png', dpi=300)
+        #plt.show()
 
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, experimental_data["L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
-    max_w = max([max(experimental_data["L2norm w (Variational)"]), max(experimental_data["L2norm w (Brenner)"]), max(experimental_data["L2norm w (Carstensen)"])])
-    min_w = min([min(experimental_data["L2norm w (Variational)"]), min(experimental_data["L2norm w (Brenner)"]), min(experimental_data["L2norm w (Carstensen)"])])
-    steps_w = (max_w - min_w)/NUM_STEPS
-    if steps_w == 0: steps_w = NUM_STEPS # CFe: if the deflection is not activated
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, experimental_data["L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_w, max_w, steps_w))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel(r'$| w |_{L^2(\Omega)} [m^2]$', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(r'$| w |_{L^2(\Omega)}'+f'. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_W_{info_experiment}.png', dpi=300)
-    #plt.show()
+        max_w = max([max(experimental_data["L2norm w (Variational)"]), max(experimental_data["L2norm w (Brenner)"]), max(experimental_data["L2norm w (Carstensen)"])])
+        min_w = min([min(experimental_data["L2norm w (Variational)"]), min(experimental_data["L2norm w (Brenner)"]), min(experimental_data["L2norm w (Carstensen)"])])
+        steps_w = (max_w - min_w)/NUM_STEPS
+        if steps_w == 0: steps_w = NUM_STEPS # CFe: if the deflection is not activated
 
-    # PLOTS HESSIAN L2 NORM
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, experimental_data["Hessian L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Hessian L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Hessian L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_w, max_w, steps_w))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel(r'$| w |_{L^2(\Omega)} [m^2]$', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(r'$| w |_{L^2(\Omega)}'+f'. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_W_{info_experiment}.png', dpi=300)
+        #plt.show()
 
-    max_v = max([max(experimental_data["Hessian L2norm v (Variational)"]), max(experimental_data["Hessian L2norm v (Brenner)"]), max(experimental_data["Hessian L2norm v (Carstensen)"])])
-    min_v = min([min(experimental_data["Hessian L2norm v (Variational)"]), min(experimental_data["Hessian L2norm v (Brenner)"]), min(experimental_data["Hessian L2norm v (Carstensen)"])])
+        # PLOTS HESSIAN L2 NORM
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, experimental_data["Hessian L2norm v (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Hessian L2norm v (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Hessian L2norm v (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
-    steps_v = (max_v - min_v)/NUM_STEPS
-    if steps_v == 0: steps_v = NUM_STEPS # CFe: v is constant
+        max_v = max([max(experimental_data["Hessian L2norm v (Variational)"]), max(experimental_data["Hessian L2norm v (Brenner)"]), max(experimental_data["Hessian L2norm v (Carstensen)"])])
+        min_v = min([min(experimental_data["Hessian L2norm v (Variational)"]), min(experimental_data["Hessian L2norm v (Brenner)"]), min(experimental_data["Hessian L2norm v (Carstensen)"])])
 
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_v, max_v, steps_v))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel(r'$| \nabla^2 v |_{L^2(\Omega)} [N]$', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(r'$| \nabla^2 v |_{L^2(\Omega)}'+f'. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessV_{info_experiment}.png', dpi=300)
-    #plt.show()
+        steps_v = (max_v - min_v)/NUM_STEPS
+        if steps_v == 0: steps_v = NUM_STEPS # CFe: v is constant
 
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, experimental_data["Hessian L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Hessian L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Hessian L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_v, max_v, steps_v))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel(r'$| \nabla^2 v |_{L^2(\Omega)} [N]$', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(r'$| \nabla^2 v |_{L^2(\Omega)}'+f'. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessV_{info_experiment}.png', dpi=300)
+        #plt.show()
 
-    max_w = max([max(experimental_data["Hessian L2norm w (Variational)"]), max(experimental_data["Hessian L2norm w (Brenner)"]), max(experimental_data["Hessian L2norm w (Carstensen)"])])
-    min_w = min([min(experimental_data["Hessian L2norm w (Variational)"]), min(experimental_data["Hessian L2norm w (Brenner)"]), min(experimental_data["Hessian L2norm w (Carstensen)"])])
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, experimental_data["Hessian L2norm w (Variational)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Hessian L2norm w (Brenner)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Hessian L2norm w (Carstensen)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
-    steps_w = (max_w - min_w)/NUM_STEPS
-    if steps_w == 0: steps_w = NUM_STEPS # CFe: w is constant
+        max_w = max([max(experimental_data["Hessian L2norm w (Variational)"]), max(experimental_data["Hessian L2norm w (Brenner)"]), max(experimental_data["Hessian L2norm w (Carstensen)"])])
+        min_w = min([min(experimental_data["Hessian L2norm w (Variational)"]), min(experimental_data["Hessian L2norm w (Brenner)"]), min(experimental_data["Hessian L2norm w (Carstensen)"])])
 
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_w, max_w, steps_w))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel(r'$| \nabla^2 w |_{L^2(\Omega)} $', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(r'$| \nabla^2 w |_{L^2(\Omega)}'+f' Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessW_{info_experiment}.png', dpi=300)
-    #plt.show()
+        steps_w = (max_w - min_w)/NUM_STEPS
+        if steps_w == 0: steps_w = NUM_STEPS # CFe: w is constant
 
-    # PLOT MEMBRANE ENERGY
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.axhline(0, color='black', linewidth=2, label="zero value")
-    plt.axhline(kMembraneEng, color='red', linewidth=2, label="Kirchhoff-Love prediction")
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Membrane Erg (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Membrane Erg (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_w, max_w, steps_w))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel(r'$| \nabla^2 w |_{L^2(\Omega)} $', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(r'$| \nabla^2 w |_{L^2(\Omega)}'+f' Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessW_{info_experiment}.png', dpi=300)
+        #plt.show()
 
-    max_memEng = max(max(experimental_data["Membrane Erg (Var)"]), max(experimental_data["Membrane Erg (Brn)"]), max(experimental_data["Membrane Erg (Car)"]), 0, kMembraneEng )
-    min_memEng = min( min(experimental_data["Membrane Erg (Var)"]), min(experimental_data["Membrane Erg (Brn)"]), min(experimental_data["Membrane Erg (Car)"]), 0, kMembraneEng )
+        # PLOT MEMBRANE ENERGY
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        plt.axhline(0, color='black', linewidth=2, label="zero value")
+        plt.axhline(kMembraneEng, color='red', linewidth=2, label="Kirchhoff-Love prediction")
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Membrane Erg (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Membrane Erg (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
-    steps_memEng = abs( (max_memEng - min_memEng)/NUM_STEPS )
-    if steps_memEng == 0: steps_memEng = NUM_STEPS
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_memEng, max_memEng, steps_memEng))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel('Membrane Energy', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(f'Membrane Energy. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_MembEng_{info_experiment}.png', dpi=300)
+        max_memEng = max(max(experimental_data["Membrane Erg (Var)"]), max(experimental_data["Membrane Erg (Brn)"]), max(experimental_data["Membrane Erg (Car)"]), 0, kMembraneEng )
+        min_memEng = min( min(experimental_data["Membrane Erg (Var)"]), min(experimental_data["Membrane Erg (Brn)"]), min(experimental_data["Membrane Erg (Car)"]), 0, kMembraneEng )
 
-    # PLOT BENDING ENERGY
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, experimental_data["Bending Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Bending Erg (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Bending Erg (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.axhline(y=0, color='black', linewidth=2)
-    max_bendEng = max( max(experimental_data["Bending Erg (Var)"]), max(experimental_data["Bending Erg (Brn)"]), max(experimental_data["Bending Erg (Car)"]) )
-    min_bendEng = min( min(experimental_data["Bending Erg (Var)"]), min(experimental_data["Bending Erg (Var)"]), min(experimental_data["Bending Erg (Var)"]) )
-    steps_bendEng = (max_bendEng - min_bendEng)/NUM_STEPS
-    if steps_bendEng == 0: steps_bendEng = NUM_STEPS
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_bendEng, max_bendEng, steps_bendEng))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel('Bending Energy', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(f'Bending Energy. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_BendEng_{info_experiment}.png', dpi=300)
+        steps_memEng = abs( (max_memEng - min_memEng)/NUM_STEPS )
+        if steps_memEng == 0: steps_memEng = NUM_STEPS
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_memEng, max_memEng, steps_memEng))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel('Membrane Energy', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(f'Membrane Energy. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_MembEng_{info_experiment}.png', dpi=300)
 
-    # PLOT COUPLING ENERGY
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, experimental_data["Coupling Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Coupling Erg (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Coupling Erg (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.axhline(y=0, color='black', linewidth=2)
+        # PLOT BENDING ENERGY
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, experimental_data["Bending Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Bending Erg (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Bending Erg (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        plt.axhline(y=0, color='black', linewidth=2)
+        max_bendEng = max( max(experimental_data["Bending Erg (Var)"]), max(experimental_data["Bending Erg (Brn)"]), max(experimental_data["Bending Erg (Car)"]) )
+        min_bendEng = min( min(experimental_data["Bending Erg (Var)"]), min(experimental_data["Bending Erg (Var)"]), min(experimental_data["Bending Erg (Var)"]) )
+        steps_bendEng = (max_bendEng - min_bendEng)/NUM_STEPS
+        if steps_bendEng == 0: steps_bendEng = NUM_STEPS
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_bendEng, max_bendEng, steps_bendEng))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel('Bending Energy', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(f'Bending Energy. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_BendEng_{info_experiment}.png', dpi=300)
 
-    max_couplingEng = max( max(experimental_data["Coupling Erg (Var)"]), max(experimental_data["Coupling Erg (Brn)"]), max(experimental_data["Coupling Erg (Car)"]) )
-    min_couplingEng = min( min(experimental_data["Coupling Erg (Var)"]), min(experimental_data["Coupling Erg (Brn)"]), min(experimental_data["Coupling Erg (Car)"]) )
+        # PLOT COUPLING ENERGY
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, experimental_data["Coupling Erg (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Coupling Erg (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Coupling Erg (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        plt.axhline(y=0, color='black', linewidth=2)
 
-    steps_couplingEng = (max_couplingEng - min_couplingEng)/NUM_STEPS
-    if steps_couplingEng == 0: steps_couplingEng = NUM_STEPS
+        max_couplingEng = max( max(experimental_data["Coupling Erg (Var)"]), max(experimental_data["Coupling Erg (Brn)"]), max(experimental_data["Coupling Erg (Car)"]) )
+        min_couplingEng = min( min(experimental_data["Coupling Erg (Var)"]), min(experimental_data["Coupling Erg (Brn)"]), min(experimental_data["Coupling Erg (Car)"]) )
 
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_couplingEng, max_couplingEng, steps_couplingEng))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel('Coupling Energy', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(f'Coupling Energy. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/varying_c_CouplEng_{info_experiment}.png', dpi=300)
-    #plt.show()
+        steps_couplingEng = (max_couplingEng - min_couplingEng)/NUM_STEPS
+        if steps_couplingEng == 0: steps_couplingEng = NUM_STEPS
 
-    # PLOT LOG-LOG ENERGIES
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_couplingEng, max_couplingEng, steps_couplingEng))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel('Coupling Energy', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(f'Coupling Energy. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/varying_c_CouplEng_{info_experiment}.png', dpi=300)
+        #plt.show()
+
+# PLOT LOG-LOG ENERGIES
     plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
     print("gamma range: ", gamma_range)
+    plt.plot(gamma_range, kMembraneEngList, marker='.', color='k', linestyle='solid', label='KL model: membrane', linewidth=LINEWIDTH, markersize=0*MARKERSIZE) #, color='g' '--'
+    plt.plot(gamma_range, kBendingEngList, marker='s', color='k', linestyle='solid', label='KL model: bending', linewidth=1.5*LINEWIDTH, markersize=0*MARKERSIZE) #
     #plt.xticks(gamma_range, [str(tick) if tick in x_range_plot_log else '' for tick in gamma_range])
-    plt.plot(gamma_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='none', color='b', label='Membrane', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(gamma_range, kMembraneEngList, marker='.', linestyle='--', color='g', label='KL model: membrane', linewidth=LINEWIDTH, markersize=0*MARKERSIZE)
-    plt.plot(gamma_range, kBendingEngList, marker='s', linestyle='-.', color='y', label='KL model: bending', linewidth=LINEWIDTH, markersize=0*MARKERSIZE)
-    plt.plot(gamma_range, experimental_data["Bending Erg (Var)"], marker='^', linestyle='none', color='r', label='Bending', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.plot(gamma_range, experimental_data["Coupling Erg (Var)"], marker='v', linestyle='none', color='k', label='Coupling', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+    plt.plot(gamma_range, experimental_data["Membrane Erg (Var)"], marker='o', linestyle='none', label='Membrane', linewidth=LINEWIDTH, markersize=MARKERSIZE) #, color='b'
+    plt.plot(gamma_range, experimental_data["Bending Erg (Var)"], marker='^', linestyle='none', label='Bending', linewidth=LINEWIDTH, markersize=MARKERSIZE) #, color='r'
+    plt.plot(gamma_range, experimental_data["Coupling Erg (Var)"], marker='v', linestyle='none', label='Coupling', linewidth=LINEWIDTH, markersize=MARKERSIZE) #, color='k'
     plt.xscale('log')
     plt.yscale('log')
     plt.axhline(y=0, color='black', linewidth=2)
@@ -764,115 +771,117 @@ if __name__ == "__main__":
     #ax.xaxis.get_offset_text().set_fontsize(FONTSIZE)
     plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
     plt.grid(True)
+    visuals.setspines()
     plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_loglog_energies_{info_experiment}.png', dpi=300)
 
-    # PLOT  HESSIAN VS LAPLACIAN L2-NORM W: the absolute error
-    nu = parameters["model"]["nu"]
-    c_nu = 1/(12*(1-nu**2))
-    wHessLap_var_list = []
-    wHessLap_brn_list = []
-    wHessLap_car_list = []
-    for i in range(len(experimental_data["Bending Erg (Var)"])):
-        wHessLap_var_list.append( (2/c_nu)*experimental_data["Bending Erg (Var)"][i] - (experimental_data["Hessian L2norm w (Variational)"][i])**2 )
-        wHessLap_brn_list.append( (2/c_nu)*experimental_data["Bending Erg (Brn)"][i] - (experimental_data["Hessian L2norm w (Brenner)"][i])**2 )
-        #wHessLap_car_list.append( (2/c_nu)*experimental_data["Bending Erg (Car)"][i] - (experimental_data["Hessian L2norm w (Carstensen)"][i])**2 )
-        wHessLap_car_list.append(0)
+    if False:
+        # PLOT  HESSIAN VS LAPLACIAN L2-NORM W: the absolute error
+        nu = parameters["model"]["nu"]
+        c_nu = 1/(12*(1-nu**2))
+        wHessLap_var_list = []
+        wHessLap_brn_list = []
+        wHessLap_car_list = []
+        for i in range(len(experimental_data["Bending Erg (Var)"])):
+            wHessLap_var_list.append( (2/c_nu)*experimental_data["Bending Erg (Var)"][i] - (experimental_data["Hessian L2norm w (Variational)"][i])**2 )
+            wHessLap_brn_list.append( (2/c_nu)*experimental_data["Bending Erg (Brn)"][i] - (experimental_data["Hessian L2norm w (Brenner)"][i])**2 )
+            #wHessLap_car_list.append( (2/c_nu)*experimental_data["Bending Erg (Car)"][i] - (experimental_data["Hessian L2norm w (Carstensen)"][i])**2 )
+            wHessLap_car_list.append(0)
 
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, wHessLap_var_list, marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, wHessLap_brn_list, marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, wHessLap_car_list, marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.axhline(y=0, color='black', linewidth=2)
-    max_wHessLap = max( max(wHessLap_var_list), max(wHessLap_brn_list), max(wHessLap_car_list) )
-    min_wHessLap = min( min(wHessLap_var_list), min(wHessLap_brn_list), min(wHessLap_car_list) )
-    steps_wHessLap = (max_wHessLap - min_wHessLap)/NUM_STEPS
-    if steps_wHessLap == 0: steps_wHessLap = NUM_STEPS
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_wHessLap, max_wHessLap, steps_wHessLap))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel(r'$| \Delta w |^2_{L^2} - | \nabla^2 w |^2_{L^2}$', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(r'$| \Delta w |^2_{L^2} - | \nabla^2 w |^2_{L^2}$', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessVsLapW_{info_experiment}.png', dpi=300)
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, wHessLap_var_list, marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, wHessLap_brn_list, marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, wHessLap_car_list, marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        plt.axhline(y=0, color='black', linewidth=2)
+        max_wHessLap = max( max(wHessLap_var_list), max(wHessLap_brn_list), max(wHessLap_car_list) )
+        min_wHessLap = min( min(wHessLap_var_list), min(wHessLap_brn_list), min(wHessLap_car_list) )
+        steps_wHessLap = (max_wHessLap - min_wHessLap)/NUM_STEPS
+        if steps_wHessLap == 0: steps_wHessLap = NUM_STEPS
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_wHessLap, max_wHessLap, steps_wHessLap))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel(r'$| \Delta w |^2_{L^2} - | \nabla^2 w |^2_{L^2}$', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(r'$| \Delta w |^2_{L^2} - | \nabla^2 w |^2_{L^2}$', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessVsLapW_{info_experiment}.png', dpi=300)
 
-     # PLOT  HESSIAN VS LAPLACIAN L2-NORM W: the percent error
-    wHessLapPercErr_var_list = []
-    wHessLapPercErr_brn_list = []
-    wHessLapPercErr_car_list = []
-    for i in range(len(experimental_data["Bending Erg (Var)"])):
-        wHessLapPercErr_var_list.append( 100 * wHessLap_var_list[i] / ( (2/c_nu)*experimental_data["Bending Erg (Var)"][i] ) )
-        wHessLapPercErr_brn_list.append( 100 * wHessLap_brn_list[i]  / ( (2/c_nu)*experimental_data["Bending Erg (Brn)"][i]  ) )
-        #wHessLap_car_list.append( (2/c_nu)*experimental_data["Bending Erg (Car)"][i] - (experimental_data["Hessian L2norm w (Carstensen)"][i])**2 )
-        wHessLapPercErr_car_list.append(0)
+        # PLOT  HESSIAN VS LAPLACIAN L2-NORM W: the percent error
+        wHessLapPercErr_var_list = []
+        wHessLapPercErr_brn_list = []
+        wHessLapPercErr_car_list = []
+        for i in range(len(experimental_data["Bending Erg (Var)"])):
+            wHessLapPercErr_var_list.append( 100 * wHessLap_var_list[i] / ( (2/c_nu)*experimental_data["Bending Erg (Var)"][i] ) )
+            wHessLapPercErr_brn_list.append( 100 * wHessLap_brn_list[i]  / ( (2/c_nu)*experimental_data["Bending Erg (Brn)"][i]  ) )
+            #wHessLap_car_list.append( (2/c_nu)*experimental_data["Bending Erg (Car)"][i] - (experimental_data["Hessian L2norm w (Carstensen)"][i])**2 )
+            wHessLapPercErr_car_list.append(0)
 
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, wHessLapPercErr_var_list, marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, wHessLapPercErr_brn_list, marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, wHessLapPercErr_car_list, marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.axhline(y=0, color='black', linewidth=2)
-    max_wHessLap = max( max(wHessLapPercErr_var_list), max(wHessLapPercErr_brn_list), max(wHessLapPercErr_car_list) )
-    min_wHessLap = min( min(wHessLapPercErr_var_list), min(wHessLapPercErr_brn_list), min(wHessLapPercErr_car_list) )
-    steps_wHessLap = (max_wHessLap - min_wHessLap)/NUM_STEPS
-    if steps_wHessLap == 0: steps_wHessLap = NUM_STEPS
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    #plt.text(f'Max (Var): {max(wHessLapPercErr_var_list):.2f}%', ha='right', color='blue')
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_wHessLap, max_wHessLap, steps_wHessLap))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel(r'$ ( | \Delta w |^2_{L^2} - | \nabla^2 w |^2_{L^2} ) / | \Delta w |^2_{L^2} $', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(r'$ ( | \Delta w |^2_{L^2} - | \nabla^2 w |^2_{L^2} ) / | \Delta w |^2_{L^2} $', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.gca().yaxis.set_major_formatter(PercentFormatter())
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessVsLapWPerc_{info_experiment}.png', dpi=300)
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, wHessLapPercErr_var_list, marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, wHessLapPercErr_brn_list, marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, wHessLapPercErr_car_list, marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        plt.axhline(y=0, color='black', linewidth=2)
+        max_wHessLap = max( max(wHessLapPercErr_var_list), max(wHessLapPercErr_brn_list), max(wHessLapPercErr_car_list) )
+        min_wHessLap = min( min(wHessLapPercErr_var_list), min(wHessLapPercErr_brn_list), min(wHessLapPercErr_car_list) )
+        steps_wHessLap = (max_wHessLap - min_wHessLap)/NUM_STEPS
+        if steps_wHessLap == 0: steps_wHessLap = NUM_STEPS
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        #plt.text(f'Max (Var): {max(wHessLapPercErr_var_list):.2f}%', ha='right', color='blue')
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_wHessLap, max_wHessLap, steps_wHessLap))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel(r'$ ( | \Delta w |^2_{L^2} - | \nabla^2 w |^2_{L^2} ) / | \Delta w |^2_{L^2} $', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(r'$ ( | \Delta w |^2_{L^2} - | \nabla^2 w |^2_{L^2} ) / | \Delta w |^2_{L^2} $', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.gca().yaxis.set_major_formatter(PercentFormatter())
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessVsLapWPerc_{info_experiment}.png', dpi=300)
 
-    # PLOT  HESSIAN VS LAPLACIAN L2-NORM V
-    vHessLap_var_list = []
-    vHessLap_brn_list = []
-    vHessLap_car_list = []
-    for i in range(len(experimental_data["Membrane Erg (Var)"])):
-        vHessLap_var_list.append( 2*experimental_data["Membrane Erg (Var)"][i] - (experimental_data["Hessian L2norm v (Variational)"][i])**2 )
-        vHessLap_brn_list.append( 2*experimental_data["Membrane Erg (Brn)"][i] - (experimental_data["Hessian L2norm v (Brenner)"][i])**2 )
-        vHessLap_car_list.append( 2*experimental_data["Membrane Erg (Car)"][i] - (experimental_data["Hessian L2norm v (Carstensen)"][i])**2 )
+        # PLOT  HESSIAN VS LAPLACIAN L2-NORM V
+        vHessLap_var_list = []
+        vHessLap_brn_list = []
+        vHessLap_car_list = []
+        for i in range(len(experimental_data["Membrane Erg (Var)"])):
+            vHessLap_var_list.append( 2*experimental_data["Membrane Erg (Var)"][i] - (experimental_data["Hessian L2norm v (Variational)"][i])**2 )
+            vHessLap_brn_list.append( 2*experimental_data["Membrane Erg (Brn)"][i] - (experimental_data["Hessian L2norm v (Brenner)"][i])**2 )
+            vHessLap_car_list.append( 2*experimental_data["Membrane Erg (Car)"][i] - (experimental_data["Hessian L2norm v (Carstensen)"][i])**2 )
 
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, vHessLap_var_list, marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, vHessLap_var_list, marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, vHessLap_car_list, marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    plt.axhline(y=0, color='black', linewidth=2)
-    max_vHessLap = max( max(vHessLap_var_list), max(vHessLap_brn_list), max(vHessLap_car_list), 0 )
-    min_vHessLap = min( min(vHessLap_var_list), min(vHessLap_brn_list), min(vHessLap_car_list), 0 )
-    steps_vHessLap = (max_vHessLap - min_vHessLap)/NUM_STEPS
-    if steps_wHessLap == 0: steps_wHessLap = NUM_STEPS
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_vHessLap, max_vHessLap, steps_vHessLap))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel(r'$| \Delta v |^2_{L^2} - | \nabla^2 v |^2_{L^2}$', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(r'$| \Delta v |^2_{L^2} - | \nabla^2 v |^2_{L^2}$', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessVsLapV_{info_experiment}.png', dpi=300)
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, vHessLap_var_list, marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, vHessLap_var_list, marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, vHessLap_car_list, marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        plt.axhline(y=0, color='black', linewidth=2)
+        max_vHessLap = max( max(vHessLap_var_list), max(vHessLap_brn_list), max(vHessLap_car_list), 0 )
+        min_vHessLap = min( min(vHessLap_var_list), min(vHessLap_brn_list), min(vHessLap_car_list), 0 )
+        steps_vHessLap = (max_vHessLap - min_vHessLap)/NUM_STEPS
+        if steps_wHessLap == 0: steps_wHessLap = NUM_STEPS
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_vHessLap, max_vHessLap, steps_vHessLap))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel(r'$| \Delta v |^2_{L^2} - | \nabla^2 v |^2_{L^2}$', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(r'$| \Delta v |^2_{L^2} - | \nabla^2 v |^2_{L^2}$', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_HessVsLapV_{info_experiment}.png', dpi=300)
 
     # PLOT SIGMA NN
     subplotter = pyvista.Plotter(shape=(1, 1))
@@ -886,193 +895,194 @@ if __name__ == "__main__":
     IMG_HEIGHT = 1200
     PNG_SCALE = 2
     subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
-    subplotter.screenshot(f"{EXPERIMENT_DIR}/visualization_sigma_nn_{index_solution}_{info_experiment}.png", scale = PNG_SCALE)
-    subplotter.export_html(f"{EXPERIMENT_DIR}/visualization_sigma_nn_{index_solution}_{info_experiment}.html")
+    subplotter.screenshot(f"{EXPERIMENT_DIR}/visualization_sigma_rr_{index_solution}_{info_experiment}.png", scale = PNG_SCALE)
+    subplotter.export_html(f"{EXPERIMENT_DIR}/visualization_sigma_rr_{index_solution}_{info_experiment}.html")
 
-    # PLOT PENALIZATION ENERGY
+    if False:
+        # PLOT PENALIZATION ENERGY
 
-    # Total Penalization on the Transverse Displacement w
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, experimental_data["Penalization W Eng (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization W Eng (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization W Eng (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        # Total Penalization on the Transverse Displacement w
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, experimental_data["Penalization W Eng (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization W Eng (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization W Eng (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
 
-    max_penalizWEng = max( max(experimental_data["Penalization W Eng (Var)"]), max(experimental_data["Penalization W Eng (Brn)"]), max(experimental_data["Penalization W Eng (Car)"]) )
-    min_penalizWEng = min( min(experimental_data["Penalization W Eng (Var)"]), min(experimental_data["Penalization W Eng (Brn)"]), min(experimental_data["Penalization W Eng (Car)"]) )
+        max_penalizWEng = max( max(experimental_data["Penalization W Eng (Var)"]), max(experimental_data["Penalization W Eng (Brn)"]), max(experimental_data["Penalization W Eng (Car)"]) )
+        min_penalizWEng = min( min(experimental_data["Penalization W Eng (Var)"]), min(experimental_data["Penalization W Eng (Brn)"]), min(experimental_data["Penalization W Eng (Car)"]) )
 
-    steps_penalizWEng = (max_penalizWEng - min_penalizWEng)/NUM_STEPS
-    if steps_penalizWEng == 0: steps_penalizWEng = NUM_STEPS # CFe: w is constant
+        steps_penalizWEng = (max_penalizWEng - min_penalizWEng)/NUM_STEPS
+        if steps_penalizWEng == 0: steps_penalizWEng = NUM_STEPS # CFe: w is constant
 
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_penalizWEng, max_penalizWEng, steps_penalizWEng))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel('Penalization Energy w', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(f'Penalization Energy w. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_PenEngW_{info_experiment}.png', dpi=300)
-
-    # Penalization energy of the Jump of the Hessian of the Transverse Displacement w
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, experimental_data["Penalization W Hess Jump (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization W Hess Jump (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-
-    max_penalizWEng = max( max(experimental_data["Penalization W Hess Jump (Var)"]), max(experimental_data["Penalization W Hess Jump (Brn)"]) )
-    min_penalizWEng = min( min(experimental_data["Penalization W Hess Jump (Var)"]), min(experimental_data["Penalization W Hess Jump (Brn)"]) )
-
-    steps_penalizWEng = (max_penalizWEng - min_penalizWEng)/NUM_STEPS
-    if steps_penalizWEng == 0: steps_penalizWEng = NUM_STEPS # CFe: w is constant
-
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_penalizWEng, max_penalizWEng, steps_penalizWEng))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel('Penalization Hessian w', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(f'Penalization Hessian w. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_PenHessJumpW_{info_experiment}.png', dpi=300)
-
-    # Total Penalization on the Airy's function v
-    plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(gamma_range, experimental_data["Penalization V Eng (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization V Eng (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization V Eng (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
-
-    max_penalizVEng = max( max(experimental_data["Penalization V Eng (Var)"]), max(experimental_data["Penalization V Eng (Brn)"]), max(experimental_data["Penalization V Eng (Car)"]) )
-    min_penalizVEng = min( min(experimental_data["Penalization V Eng (Var)"]), min(experimental_data["Penalization V Eng (Brn)"]), min(experimental_data["Penalization V Eng (Car)"]) )
-    steps_penalizVEng = (max_penalizVEng - min_penalizVEng)/NUM_STEPS
-    if steps_penalizVEng == 0: steps_penalizVEng = NUM_STEPS # CFe: w is constant
-
-    if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    plt.yticks(np.arange(min_penalizVEng, max_penalizVEng, steps_penalizVEng))
-    plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.ylabel('Penalization Energy v', fontsize=FONTSIZE)
-    ax = plt.gca() # use scientific notation for y axis
-    ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-    ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-    ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.title(f'Penalization Energy v. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
-    plt.legend(fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.grid(True)
-    plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_PenEngV_{info_experiment}.png', dpi=300)
-
-
-    # PLOT DIFFERENCES BETWEEN ENERGIES AND PENALTY ENERGIES
-    w_dg1_var_list = experimental_data["Penalty w dg1 (Var)"]
-    w_dg2_var_list = experimental_data["Penalty w dg2 (Var)"]
-    w_bc1_var_list = experimental_data["Penalty w bc1 (Var)"]
-    w_bc3_var_list = experimental_data["Penalty w bc3 (Var)"]
-    w_dg3_var_list = experimental_data["Penalization W Hess Jump (Var)"]
-
-    w_dg1_brn_list = experimental_data["Penalty w dg1 (Brn)"]
-    w_dg2_brn_list = experimental_data["Penalty w dg2 (Brn)"]
-    w_bc1_brn_list = experimental_data["Penalty w bc1 (Brn)"]
-    w_bc3_brn_list = experimental_data["Penalty w bc3 (Brn)"]
-    w_dg3_brn_list = experimental_data["Penalization W Hess Jump (Brn)"]
-
-    fig, ax = plt.subplots(2, 2, figsize=(FIGWIDTH, FIGHIGHT))
-    ax[0,0].plot(gamma_range, w_dg1_var_list, marker='o', linestyle='solid', color='b', label="w_dg1 (VAR)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    ax[0,0].plot(gamma_range, w_dg1_brn_list, marker='v', linestyle='dotted', color='r', label="w_dg1 (BNRS17)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    ax[0,0].legend(fontsize=FONTSIZE)
-    ax[0,0].grid(True)
-    ax[0,0].set_xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    ax[0,1].plot(gamma_range, w_dg2_var_list, marker='o', linestyle='solid', color='b', label="w_dg2 (VAR)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    ax[0,1].plot(gamma_range, w_dg2_brn_list, marker='v', linestyle='dotted', color='r', label="w_dg2 (BNRS17)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    ax[0,1].legend(fontsize=FONTSIZE)
-    ax[0,1].grid(True)
-    ax[0,1].set_xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    ax[1,0].plot(gamma_range, w_bc1_var_list, marker='o', linestyle='solid', color='b', label="w_bc1 (Var)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    ax[1,0].plot(gamma_range, w_bc1_brn_list, marker='v', linestyle='dotted', color='r', label="w_bc1 (BNRS17)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    ax[1,0].legend(fontsize=FONTSIZE)
-    ax[1,0].grid(True)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    ax[1,0].set_xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    ax[1,1].plot(gamma_range, w_bc3_var_list, marker='o', linestyle='solid', color='b', label="w_bc3 (VAR)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    ax[1,1].plot(gamma_range, w_bc3_brn_list, marker='v', linestyle='dotted', color='r', label="w_bc3 (BNRS17)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
-    ax[1,1].legend(fontsize=FONTSIZE)
-    ax[1,1].grid(True)
-    ax[1,1].set_xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
-    plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
-    fig.suptitle(f'Penalization Energies w. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
-    plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
-    plt.savefig(EXPERIMENT_DIR+f'/varying_c_PenEngsW_{info_experiment}.png', dpi=300)
-
-    # PLOT PROFILES
-
-    tol = 1e-4
-    xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, 1001)
-    points = np.zeros((3, 1001))
-    points[0] = xs
-
-
-    for i in range(len(w_varModel_list)):
-
-        fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHIGHT))
-        axes.yaxis.get_offset_text().set_size(FONTSIZE) # Size of the order of magnitude
-        plt, data = plot_profile(w_varModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "VAR", "ls": "solid"}, fig=fig, subplotnumber=1)
-        if COMPARISON: plt, data = plot_profile(w_brnModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "BNRS17", "ls": "-"}, fig=fig, subplotnumber=1)
-        plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
-        plt.ylabel("w", fontsize=FONTSIZE)
-        plt.xticks(fontsize=FONTSIZE)
-        plt.yticks(fontsize=FONTSIZE)
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_penalizWEng, max_penalizWEng, steps_penalizWEng))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel('Penalization Energy w', fontsize=FONTSIZE)
         ax = plt.gca() # use scientific notation for y axis
         ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
         ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
         ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-        plt.title(fr"Transverse displacement. $\gamma$ = {gamma_range[i]}; Mesh = {mesh_size}. IP = {IP}. E = {E:.2e} tol = {SOL_TOLLERANCE}", size = FONTSIZE)
-        plt.grid(True)
+        plt.title(f'Penalization Energy w. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
         plt.legend(fontsize=FONTSIZE)
-        plt.savefig(f"{EXPERIMENT_DIR}/_{gamma_range[i]}a-w-profiles_{info_experiment}.png")
-
-        fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHIGHT))
-        plt, data = plot_profile(v_varModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "label": "VAR", "ls": "solid"}, fig=fig, subplotnumber=1)
-        if COMPARISON: plt, data = plot_profile(v_brnModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "BNRS17", "ls": "-"}, fig=fig, subplotnumber=1)
-        plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
-        plt.ylabel("v", fontsize=FONTSIZE)
-        plt.xticks(fontsize=FONTSIZE)
-        plt.yticks(fontsize=FONTSIZE)
-        plt.title(fr"Airy. $\gamma$ = {gamma_range[i]}. Mesh = {mesh_size}. IP = {IP}. E = {E:.2e}. tol = {SOL_TOLLERANCE}", size = FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
         plt.grid(True)
-        plt.legend(fontsize=FONTSIZE)
-        plt.savefig(f"{EXPERIMENT_DIR}/_{gamma_range[i]}a-v-profiles_{info_experiment}.png")
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_PenEngW_{info_experiment}.png', dpi=300)
 
-        # fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHIGHT))
-        # w_varModel_list[i].vector.array = w_varModel_list[i].vector.array * parameters["model"]["thickness"]
-        # w_brnModel_list[i].vector.array = w_brnModel_list[i].vector.array * parameters["model"]["thickness"]
-        # plt, data = plot_profile(w_varModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "label": "VAR", "ls": "solid"}, fig=fig, subplotnumber=1)
-        # if COMPARISON: plt, data = plot_profile(w_brnModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "BNRS17", "ls": "-"}, fig=fig, subplotnumber=1)
-        # plt.xlabel("x [m]", fontsize=FONTSIZE)
-        # plt.ylabel("w [m]", fontsize=FONTSIZE)
-        # plt.xticks(fontsize=FONTSIZE)
-        # plt.yticks(fontsize=FONTSIZE)
-        # ax = plt.gca() # use scientific notation for y axis
-        # ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
-        # ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
-        # ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
-        # plt.ylim(-1, 1)
-        # plt.title(f"Transverse displacement [1:1] aspect ratio. gamma = {gamma_range[i]}; Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}", size = FONTSIZE)
-        # plt.grid(True)
-        # plt.legend(fontsize=FONTSIZE)
-        # plt.savefig(f"{EXPERIMENT_DIR}/_{gamma_range[i]}b-w-profiles_{info_experiment}.png")
+        # Penalization energy of the Jump of the Hessian of the Transverse Displacement w
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, experimental_data["Penalization W Hess Jump (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization W Hess Jump (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+
+        max_penalizWEng = max( max(experimental_data["Penalization W Hess Jump (Var)"]), max(experimental_data["Penalization W Hess Jump (Brn)"]) )
+        min_penalizWEng = min( min(experimental_data["Penalization W Hess Jump (Var)"]), min(experimental_data["Penalization W Hess Jump (Brn)"]) )
+
+        steps_penalizWEng = (max_penalizWEng - min_penalizWEng)/NUM_STEPS
+        if steps_penalizWEng == 0: steps_penalizWEng = NUM_STEPS # CFe: w is constant
+
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_penalizWEng, max_penalizWEng, steps_penalizWEng))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel('Penalization Hessian w', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(f'Penalization Hessian w. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_PenHessJumpW_{info_experiment}.png', dpi=300)
+
+        # Total Penalization on the Airy's function v
+        plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
+        plt.plot(gamma_range, experimental_data["Penalization V Eng (Var)"], marker='o', linestyle='solid', color='b', label='VAR', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization V Eng (Brn)"], marker='v', linestyle='dotted', color='r', label='BNRS17', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        if COMPARISON: plt.plot(gamma_range, experimental_data["Penalization V Eng (Car)"], marker='^', linestyle='dashed', color='g', label='CMN18', linewidth=LINEWIDTH, markersize=MARKERSIZE)
+
+        max_penalizVEng = max( max(experimental_data["Penalization V Eng (Var)"]), max(experimental_data["Penalization V Eng (Brn)"]), max(experimental_data["Penalization V Eng (Car)"]) )
+        min_penalizVEng = min( min(experimental_data["Penalization V Eng (Var)"]), min(experimental_data["Penalization V Eng (Brn)"]), min(experimental_data["Penalization V Eng (Car)"]) )
+        steps_penalizVEng = (max_penalizVEng - min_penalizVEng)/NUM_STEPS
+        if steps_penalizVEng == 0: steps_penalizVEng = NUM_STEPS # CFe: w is constant
+
+        if LOG_SCALE: plt.xscale('log') # CFe: use log xscale when needed
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        plt.yticks(np.arange(min_penalizVEng, max_penalizVEng, steps_penalizVEng))
+        plt.xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.ylabel('Penalization Energy v', fontsize=FONTSIZE)
+        ax = plt.gca() # use scientific notation for y axis
+        ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+        ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+        ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.title(f'Penalization Energy v. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.tick_params(axis='both', which='major', labelsize=FONTSIZE)
+        plt.legend(fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.grid(True)
+        plt.savefig(EXPERIMENT_DIR+f'/vary_gamma_PenEngV_{info_experiment}.png', dpi=300)
+
+
+        # PLOT DIFFERENCES BETWEEN ENERGIES AND PENALTY ENERGIES
+        w_dg1_var_list = experimental_data["Penalty w dg1 (Var)"]
+        w_dg2_var_list = experimental_data["Penalty w dg2 (Var)"]
+        w_bc1_var_list = experimental_data["Penalty w bc1 (Var)"]
+        w_bc3_var_list = experimental_data["Penalty w bc3 (Var)"]
+        w_dg3_var_list = experimental_data["Penalization W Hess Jump (Var)"]
+
+        w_dg1_brn_list = experimental_data["Penalty w dg1 (Brn)"]
+        w_dg2_brn_list = experimental_data["Penalty w dg2 (Brn)"]
+        w_bc1_brn_list = experimental_data["Penalty w bc1 (Brn)"]
+        w_bc3_brn_list = experimental_data["Penalty w bc3 (Brn)"]
+        w_dg3_brn_list = experimental_data["Penalization W Hess Jump (Brn)"]
+
+        fig, ax = plt.subplots(2, 2, figsize=(FIGWIDTH, FIGHIGHT))
+        ax[0,0].plot(gamma_range, w_dg1_var_list, marker='o', linestyle='solid', color='b', label="w_dg1 (VAR)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        ax[0,0].plot(gamma_range, w_dg1_brn_list, marker='v', linestyle='dotted', color='r', label="w_dg1 (BNRS17)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        ax[0,0].legend(fontsize=FONTSIZE)
+        ax[0,0].grid(True)
+        ax[0,0].set_xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        ax[0,1].plot(gamma_range, w_dg2_var_list, marker='o', linestyle='solid', color='b', label="w_dg2 (VAR)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        ax[0,1].plot(gamma_range, w_dg2_brn_list, marker='v', linestyle='dotted', color='r', label="w_dg2 (BNRS17)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        ax[0,1].legend(fontsize=FONTSIZE)
+        ax[0,1].grid(True)
+        ax[0,1].set_xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        ax[1,0].plot(gamma_range, w_bc1_var_list, marker='o', linestyle='solid', color='b', label="w_bc1 (Var)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        ax[1,0].plot(gamma_range, w_bc1_brn_list, marker='v', linestyle='dotted', color='r', label="w_bc1 (BNRS17)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        ax[1,0].legend(fontsize=FONTSIZE)
+        ax[1,0].grid(True)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        ax[1,0].set_xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        ax[1,1].plot(gamma_range, w_bc3_var_list, marker='o', linestyle='solid', color='b', label="w_bc3 (VAR)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        ax[1,1].plot(gamma_range, w_bc3_brn_list, marker='v', linestyle='dotted', color='r', label="w_bc3 (BNRS17)", linewidth=LINEWIDTH, markersize=MARKERSIZE)
+        ax[1,1].legend(fontsize=FONTSIZE)
+        ax[1,1].grid(True)
+        ax[1,1].set_xlabel(r"$\gamma$ = $\frac{p_0}{E}$", fontsize=FONTSIZE)
+        plt.xticks(gamma_range, [str(tick) if tick in x_values else '' for tick in gamma_range])
+        fig.suptitle(f'Penalization Energies w. Mesh size = {mesh_size}. IP = {IP}. tol = {SOL_TOLLERANCE}', fontsize=FONTSIZE)
+        plt.gca().yaxis.get_offset_text().set_fontsize(FONTSIZE)
+        plt.savefig(EXPERIMENT_DIR+f'/varying_c_PenEngsW_{info_experiment}.png', dpi=300)
+
+        # PLOT PROFILES
+
+        tol = 1e-4
+        xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, 1001)
+        points = np.zeros((3, 1001))
+        points[0] = xs
+
+
+        for i in range(len(w_varModel_list)):
+
+            fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHIGHT))
+            axes.yaxis.get_offset_text().set_size(FONTSIZE) # Size of the order of magnitude
+            plt, data = plot_profile(w_varModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "VAR", "ls": "solid"}, fig=fig, subplotnumber=1)
+            if COMPARISON: plt, data = plot_profile(w_brnModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "BNRS17", "ls": "-"}, fig=fig, subplotnumber=1)
+            plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
+            plt.ylabel("w", fontsize=FONTSIZE)
+            plt.xticks(fontsize=FONTSIZE)
+            plt.yticks(fontsize=FONTSIZE)
+            ax = plt.gca() # use scientific notation for y axis
+            ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+            ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+            ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+            plt.title(fr"Transverse displacement. $\gamma$ = {gamma_range[i]}; Mesh = {mesh_size}. IP = {IP}. E = {E:.2e} tol = {SOL_TOLLERANCE}", size = FONTSIZE)
+            plt.grid(True)
+            plt.legend(fontsize=FONTSIZE)
+            plt.savefig(f"{EXPERIMENT_DIR}/_{gamma_range[i]}a-w-profiles_{info_experiment}.png")
+
+            fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHIGHT))
+            plt, data = plot_profile(v_varModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "label": "VAR", "ls": "solid"}, fig=fig, subplotnumber=1)
+            if COMPARISON: plt, data = plot_profile(v_brnModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "BNRS17", "ls": "-"}, fig=fig, subplotnumber=1)
+            plt.xlabel(r"$\xi_1$", fontsize=FONTSIZE)
+            plt.ylabel("v", fontsize=FONTSIZE)
+            plt.xticks(fontsize=FONTSIZE)
+            plt.yticks(fontsize=FONTSIZE)
+            plt.title(fr"Airy. $\gamma$ = {gamma_range[i]}. Mesh = {mesh_size}. IP = {IP}. E = {E:.2e}. tol = {SOL_TOLLERANCE}", size = FONTSIZE)
+            plt.grid(True)
+            plt.legend(fontsize=FONTSIZE)
+            plt.savefig(f"{EXPERIMENT_DIR}/_{gamma_range[i]}a-v-profiles_{info_experiment}.png")
+
+            # fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHIGHT))
+            # w_varModel_list[i].vector.array = w_varModel_list[i].vector.array * parameters["model"]["thickness"]
+            # w_brnModel_list[i].vector.array = w_brnModel_list[i].vector.array * parameters["model"]["thickness"]
+            # plt, data = plot_profile(w_varModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "label": "VAR", "ls": "solid"}, fig=fig, subplotnumber=1)
+            # if COMPARISON: plt, data = plot_profile(w_brnModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "BNRS17", "ls": "-"}, fig=fig, subplotnumber=1)
+            # plt.xlabel("x [m]", fontsize=FONTSIZE)
+            # plt.ylabel("w [m]", fontsize=FONTSIZE)
+            # plt.xticks(fontsize=FONTSIZE)
+            # plt.yticks(fontsize=FONTSIZE)
+            # ax = plt.gca() # use scientific notation for y axis
+            # ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+            # ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+            # ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
+            # plt.ylim(-1, 1)
+            # plt.title(f"Transverse displacement [1:1] aspect ratio. gamma = {gamma_range[i]}; Mesh = {parameters["geometry"]["mesh_size"]}. IP = {parameters["model"]["alpha_penalty"]}", size = FONTSIZE)
+            # plt.grid(True)
+            # plt.legend(fontsize=FONTSIZE)
+            # plt.savefig(f"{EXPERIMENT_DIR}/_{gamma_range[i]}b-w-profiles_{info_experiment}.png")
 
     if pyvista.OFF_SCREEN: pyvista.start_xvfb(wait=0.1)
     transparent = False
@@ -1103,8 +1113,8 @@ if __name__ == "__main__":
     scale_w6 = f"{np.max(np.abs(w_6sorted)):.2e}"
     scale_w9 = f"{np.max(np.abs(w_9sorted)):.2e}"
     plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(x_sorted, w_0normalized, label=fr'$\gamma$: {gamma_list[0]:.2e}, max(|w|): {scale_w0}', color='blue', linestyle='solid', linewidth=LINEWIDTH)
-    plt.plot(x_sorted, w_6normalized, label=fr'$\gamma$: {gamma_list[6]:.2e}, max(|w|): {scale_w6}', color='red', linestyle='dotted', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, w_0normalized, label=fr'$\gamma$: {gamma_list[0]:.2e}, max(|w|): {scale_w0}', linestyle='solid', linewidth=LINEWIDTH) #, color='blue'
+    plt.plot(x_sorted, w_6normalized, label=fr'$\gamma$: {gamma_list[6]:.2e}, max(|w|): {scale_w6}', linestyle='dotted', linewidth=LINEWIDTH) #, color='red'
     plt.plot(x_sorted, w_9normalized, label=fr'$\gamma$: {gamma_list[9]:.2e}, max(|w|): {scale_w9}', color='black', linestyle='dashed', linewidth=LINEWIDTH)
     plt.xticks(fontsize=FONTSIZE)
     plt.yticks(fontsize=FONTSIZE)
@@ -1119,6 +1129,7 @@ if __name__ == "__main__":
     plt.legend(fontsize=0.8*FONTSIZE)
     #plt.grid(True)
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_w_comparison_y_{y0}_{info_experiment}.png", dpi=300)
+    plt.savefig(f"{EXPERIMENT_DIR}/profiles_w_comparison_y_{y0}_{info_experiment}.pdf", dpi=300)
 
     grid.point_data["v_0.1"] = v_varModel_list[0].vector.array[dofs2_v]
     grid.point_data["v_100"] = v_varModel_list[4].vector.array[dofs2_v]
@@ -1140,8 +1151,8 @@ if __name__ == "__main__":
     scale_v6 = f"{np.max(np.abs(v_6sorted)):.1e}"
     scale_v9 = f"{np.max(np.abs(v_9sorted)):.1e}"
     plt.figure(figsize=(FIGWIDTH, FIGHIGHT))
-    plt.plot(x_sorted, v_0normalized, label=fr'$\gamma$: {gamma_list[0]:.2e}, max(|v|): {scale_v0}', color='blue', linestyle='solid', linewidth=LINEWIDTH)
-    plt.plot(x_sorted, v_6normalized, label=fr'$\gamma$: {gamma_list[6]:.2e}, max(|v|): {scale_v6}', color='red', linestyle='dotted', linewidth=LINEWIDTH)
+    plt.plot(x_sorted, v_0normalized, label=fr'$\gamma$: {gamma_list[0]:.2e}, max(|v|): {scale_v0}', linestyle='solid', linewidth=LINEWIDTH) #, color='blue'
+    plt.plot(x_sorted, v_6normalized, label=fr'$\gamma$: {gamma_list[6]:.2e}, max(|v|): {scale_v6}', linestyle='dotted', linewidth=LINEWIDTH) #, color='red'
     plt.plot(x_sorted, v_9normalized, label=fr'$\gamma$: {gamma_list[9]:.2e}, max(|v|): {scale_v9}', color='black', linestyle='dashed', linewidth=LINEWIDTH)
     plt.xticks(fontsize=FONTSIZE)
     plt.yticks(fontsize=FONTSIZE)
@@ -1156,3 +1167,5 @@ if __name__ == "__main__":
     plt.legend(fontsize=0.8*FONTSIZE)
     #plt.grid(True)
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_v_comparison_y_{y0}_{info_experiment}.png", dpi=300)
+    plt.savefig(f"{EXPERIMENT_DIR}/profiles_v_comparison_y_{y0}_{info_experiment}.pdf", dpi=300)
+    print(f"===================- {EXPERIMENT_DIR} -=================")

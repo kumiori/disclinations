@@ -4,8 +4,8 @@ Compare the three FE formulations (Variational, Brenner, Carstensen) with a know
 The script can use both the dimensional or the NON-dimensional FE formulations (see respectivelly "models/__init__.py" and "models/adimensional.py")
 
 ARTICLE RELATED SECTION
-"Tests 1: kinematically compatible plate under volume forces"
-"Tests 2: kinematically incompatible plate"
+"Sovler verification. Test 1: kinematically compatible plate under volume forces"
+"Sovler verification. Test 2: kinematically incompatible plate"
 """
 import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
 import yaml
@@ -18,7 +18,10 @@ import pandas as pd
 import argparse
 
 from disclinations.utils import load_parameters
-from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
+from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh, get_datapoints
+
+from visuals import visuals
+visuals.matplotlibdefaults(useTex=False) #palette="dark",
 
 SCRIPT_VAR = "validation_test1_adim"
 SCRIPT_BRN = "validation_test1_BR_adim"
@@ -164,10 +167,10 @@ PARAMETERS_FILE_PATH = 'disclinations.test'
 with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
     parameters, _ = load_parameters(f)
 
-info_experiment = f"mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]:.2e}_smth_{smoothing}"
+info_experiment = f"mesh_{parameters['geometry']['mesh_size']}_IP_{parameters['model']['alpha_penalty']:.2e}_smth_{smoothing}"
 
 experimental_data = pd.DataFrame(exp_dict)
-experimental_data.to_excel(f'{OUTDIR}/Models_comparison.xlsx', index=False)
+# experimental_data.to_excel(f'{OUTDIR}/Models_comparison.xlsx', index=False)
 
 # Plot profiles:
 import pyvista
@@ -187,42 +190,77 @@ FIGHEIGHT = 12
 
 fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
-_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":7, "label": "VAR"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1)
+# _plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":", "c": "C1"}, fig=fig, subplotnumber=1) #"c": "r",
+# _plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--", "c": "C2"}, fig=fig, subplotnumber=1) #"c": "g",
+_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"lw":11, "label": "VAR", "c": "C0"}, fig=fig, subplotnumber=1) #"c": "k",
+_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"lw":3, "label": "Analytical", "ls": "solid", "c": "k"}, fig=fig, subplotnumber=1) #"c": "k",
 
+ax_inset = fig.add_axes([0.35, 0.15, 0.3, 0.3])  # Adjust position and size of inset
+points_on_proc, w_values_exact = get_datapoints(w_exact, points)
+_, w_ref = get_datapoints(w_var, points)
+
+for _w, label, color in zip([w_brn, w_car], ["BNRS17", "CMN18"], ["C1", "C2"]):
+    _, w_values_current = get_datapoints(_w, points)  # Get current field data
+    differences = np.abs((w_values_current-w_ref)/w_ref)
+    ax_inset.semilogy(points_on_proc[:, 0], differences, label=f"|{label}-VAR|/VAR", lw=3, c=color)
+
+ax = _plt.gca() #
 _plt.xlabel(r"$\xi_1$", fontsize=35)
-_plt.ylabel(r"$\tilde{w}$", fontsize=35)
+_plt.ylabel(r"$w$", fontsize=35)
 _plt.xticks(fontsize=35)
 _plt.yticks(fontsize=35)
-_plt.title(f"Comparison between FE models. Transverse displacement. {info_experiment}", size = 30)
+#_plt.title(f"Comparison between FE models. Transverse displacement. {info_experiment}", size = 30)
 #_plt.grid(True)
-_plt.legend(fontsize=30)
-ax = _plt.gca() # use scientific notation for y axis
+_plt.legend(fontsize=30, loc="upper right")
 ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.yaxis.get_offset_text().set_fontsize(30)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
-_plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
+
+ax_inset.set_xlabel(r"$\xi_1$", fontsize=8)
+ax_inset.set_ylabel("Relative Difference", fontsize=8)
+ax_inset.tick_params(axis="both", which="major", labelsize=8)
+ax_inset.legend(fontsize=8, loc="upper right")
+ax_inset.xaxis.set_major_locator(MaxNLocator(nbins=3))  # Adjust the number of bins to choose the number of ticks
+visuals.setspines()
+fig.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
 
 fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
 
-_plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"c": "k", "lw":7, "label": "Analytical solution", "ls": "--"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":7, "label": "VAR"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":7, "label": "BNRS17", "ls": ":"}, fig=fig, subplotnumber=1)
-_plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"c": "g", "lw":7, "label": "CMN18", "ls": "--"}, fig=fig, subplotnumber=1)
+# _plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":", "c": "C1"}, fig=fig, subplotnumber=1) #"c": "r",
+# _plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--", "c": "C2"}, fig=fig, subplotnumber=1) #"c": "g",
+_plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"lw":11, "label": "VAR", "c": "C0"}, fig=fig, subplotnumber=1) #"c": "b",
+_plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"lw":3, "label": "Analytical", "ls": "solid", "c": "k"}, fig=fig, subplotnumber=1) #
 
+
+ax = _plt.gca() # use scientific notation for y axis
 _plt.xlabel(r"$\xi_1$", fontsize=35)
-_plt.ylabel(r"$\tilde{v}$", fontsize=35)
+_plt.ylabel(r"$v$", fontsize=35)
 _plt.xticks(fontsize=35)
 _plt.yticks(fontsize=35)
-_plt.title(f"Comparison between FE models. Airy's function. {info_experiment}", size = 30)
+#_plt.title(f"Comparison between FE models. Airy's function. {info_experiment}", size = 30)
 #_plt.grid(True)
 _plt.legend(fontsize=30)
-ax = _plt.gca() # use scientific notation for y axis
 ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.yaxis.get_offset_text().set_fontsize(30)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+
+ax_inset = fig.add_axes([0.35, 0.55, 0.3, 0.3])  # Adjust position and size of inset
+# points_on_proc, v_values_exact = get_datapoints(v_exact, points)
+_, v_ref = get_datapoints(v_var, points)
+
+for _v, label, color in zip([v_brn, v_car], ["BNRS17", "CMN18"], ["C1", "C2"]):
+    _, v_values_current = get_datapoints(_v, points)  # Get current field data
+    differences = np.abs((v_values_current-v_ref)/v_ref)
+    ax_inset.semilogy(points_on_proc[:, 0], differences, label=f"|{label}-VAR|/VAR", lw=3, c=color)
+
+ax_inset.set_xlabel(r"$\xi_1$", fontsize=8)
+ax_inset.set_ylabel("Relative Difference", fontsize=8)
+ax_inset.tick_params(axis="both", which="major", labelsize=8)
+ax_inset.legend(fontsize=8, loc="upper right")
+ax_inset.xaxis.set_major_locator(MaxNLocator(nbins=3))  # Adjust the number of bins to choose the number of ticks
+
+visuals.setspines()
 _plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-v-profiles.png")
+plt.close("all")

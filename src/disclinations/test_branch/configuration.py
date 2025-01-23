@@ -55,6 +55,8 @@ from disclinations.utils.la import compute_cell_contributions, compute_disclinat
 from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
 from disclinations.utils.sample_function import sample_function, interpolate_sample
 from disclinations.solvers import SNESSolver, SNESProblem
+from visuals import visuals
+visuals.matplotlibdefaults(useTex=False)
 
 PATH_TO_PARAMETERS_FILE = 'disclinations.test'
 
@@ -83,7 +85,7 @@ OUTDIR = os.path.join("output", "configuration")
 if comm.rank == 0:
     Path(OUTDIR).mkdir(parents=True, exist_ok=True)
 
-
+print("OUTDIR: ", OUTDIR)
 X_COORD = 0
 Y_COORD = 1
 AIRY = 0
@@ -142,20 +144,20 @@ def compute_fourier_coefficients(x_values, function_values):
     return frequencies, coeff_real, coeff_imag, wavelengths
 
 # SET DISCRETE DISTRIBUTION OF DISCLINATIONS
-# disclination_points_list = [[-0.7, 0.0, 0], [0.0, 0.7, 0], [0.7, 0.0, 0], [0.0, -0.7, 0],
-#                             [0.5, 0.5, 0], [0.5, -0.5, 0], [-0.5, -0.5, 0], [-0.5, 0.5, 0],
-#                             [0, 0, 0]] #
-#disclination_power_list = [-1, -1, -1, -1, +0.5, 0.5, 0.5, 0.5, 0]
+eps = 0.5
+#disclination_points_list = [[0,0,0], [-eps, 0.0, 0], [0.0, eps, 0], [eps, 0.0, 0], [0.0, -eps, 0]]
+#disclination_power_list = [1, -0.25, -0.25, -0.25, -0.25]
+#disclination_power_list = [-1, 0.25, 0.25, 0.25, 0.25]
 
-eps = 0.0
-#disclination_points_list = [[-eps, 0.0, 0], [0.0, eps, 0], [eps, 0.0, 0], [0.0, -eps, 0]]
+disclination_points_list = [[-eps, 0.0, 0], [0.0, eps, 0], [eps, 0.0, 0], [0.0, -eps, 0]]
+disclination_power_list = [-0.5, -0.5, -0.5, -0.5]
+
 #disclination_points_list = [[-eps, 0.0, 0], [eps, 0.0, 0]]
-#disclination_power_list = [0, 0, 0, 0]
-#disclination_power_list = [-0.5, -0.5, -0.5, -0.5]
-#disclination_power_list = [0.1, 0.1]
+#disclination_power_list = [-0.5, 0.5]
 
-disclination_points_list = [[0.0, 0.0, 0]]
-disclination_power_list = [1.0]
+#disclination_points_list = [[0.0, 0.0, 0]]
+#disclination_power_list = [1.0]
+
 
 # READ PARAMETERS FILE
 #with pkg_resources.path(PATH_TO_PARAMETERS_FILE, 'parameters.yml') as f:
@@ -163,13 +165,14 @@ disclination_power_list = [1.0]
 with open('../test/parameters.yml') as f:
     parameters = yaml.load(f, Loader=yaml.FullLoader)
 
-#parameters["geometry"]["mesh_size"] = 0.03
+#parameters["geometry"]["mesh_size"] = 0.05
 
 Eyoung =  parameters["model"]["E"]
 nu = parameters["model"]["nu"]
 thickness = parameters["model"]["thickness"]
 R = parameters["geometry"]["radius"]
 mesh_size = parameters["geometry"]["mesh_size"]
+# mesh_size = 0.03
 IP = parameters["model"]["alpha_penalty"]
 
 # UPDATE OUTDIR
@@ -178,9 +181,8 @@ OUTDIR = os.path.join(OUTDIR, info_experiment)
 if not os.path.exists(OUTDIR): os.makedirs(OUTDIR)
 
 # COMPUTE DIMENSIONLESS PARAMETERS
-#a -> beta
 beta = R / thickness
-rho_g = 2e4 # Density of the material times g-accelleration
+rho_g = 1e4 # Density of the material times g-accelleration
 N = 1 # N-times plate's own weight
 p0 = rho_g * thickness
 gamma = N * p0 / Eyoung
@@ -189,6 +191,7 @@ f0 = (beta**4) * gamma
 print(10*"*")
 print("Dimensionless parameters: ")
 print("beta := R/h = ", beta)
+print("gamma = ", gamma)
 print("f := beta^4 * gamma = ", f0)
 print(10*"*")
 
@@ -363,26 +366,62 @@ ax = plot_mesh(mesh)
 fig = ax.get_figure()
 fig.savefig(f"{OUTDIR}/mesh_{info_experiment}.png")
 
+# DRAW CROSS
+cross_size = 0.1
+crossWidth = 8
+cross_lines_list = []
+color_list = []
+
+# Iterate over the disclination points and add a cross for each
+for point, power in zip(disclination_points_list, disclination_power_list):
+    p = np.array(point)
+    vertical_line = np.array([
+        p + [0, -cross_size / 2, 0],  # Bottom point of vertical line
+        p + [0, cross_size / 2, 0]    # Top point of vertical line
+    ])
+    horizontal_line = np.array([
+        p + [-cross_size / 2, 0, 0],  # Left point of horizontal line
+        p + [cross_size / 2, 0, 0]    # Right point of horizontal line
+    ])
+
+    # Combine the lines into a single array
+    cross_lines = np.vstack([vertical_line, horizontal_line])
+    cross_lines[:, 2] += 1e-2 # Apply a small offset to the z-coordinate
+    cross_lines_list.append(cross_lines)
+    color = "black" if power > 0 else "white"
+    color_list.append(color)
 
 # PLOT WITH PYVISTA
-IMG_WIDTH = 1600
-IMG_HEIGHT = 1200
+IMG_WIDTH = 2200
+IMG_HEIGHT = 1500
 PNG_SCALE = 2.0
 LINEWIDTH = 5
 FONTSIZE = 30
+CLINEWIDTH = 4
 if pyvista.OFF_SCREEN: pyvista.start_xvfb(wait=0.1)
 transparent = False
 figsize = 800
-#sargs = dict(height=0.8, width=0.1, vertical=True, position_x=0.05, position_y=0.05, fmt="%1.2e", title_font_size=40, color="black", label_font_size=25)
 
+# scalar_bar_args = {
+#         "vertical": True,
+#         "title_font_size": 30,  # Increase the title font size
+#         "label_font_size": 30,  # Increase the label font size
+#         "width": 0.18,          # Adjust the width of the scalar bar
+#         "height": 0.8,          # Adjust the height of the scalar bar
+#         "position_x": 0.9,      # X position (between 0 and 1, relative to the viewport)
+#         "position_y": 0.1,       # Y position (between 0 and 1, relative to the viewport)
+#     }
+#"title": "Displacement",  # Label for the scalar bar
 scalar_bar_args = {
-    "vertical": True,
-    "title_font_size": 30,  # Increase the title font size
-    "label_font_size": 30,  # Increase the label font size
-    "width": 0.18,          # Adjust the width of the scalar bar
-    "height": 0.8,          # Adjust the height of the scalar bar
-    "position_x": 0.9,      # X position (between 0 and 1, relative to the viewport)
-    "position_y": 0.1       # Y position (between 0 and 1, relative to the viewport)
+    "title_font_size": 35,  # Font size for the title
+    "label_font_size": 35,  # Font size for the scalar bar labels <------------------------------------
+    "vertical": False,  # Vertical orientation of the scalar bar
+    "position_y": 0.025,  # Adjust vertical position
+    "position_x": 0.15,  # Adjust horizontal position
+    "height": 0.05,  # Height of the scalar bar
+    "width": 0.7,  # Width of the scalar bar
+    "n_labels": 4,  # Adjust number of ticks
+    "fmt": "%.2e",  # Format for two decimal places
 }
 
 topology, cells, geometry = dolfinx.plot.vtk_mesh(Q_v)
@@ -390,13 +429,12 @@ grid = pyvista.UnstructuredGrid(topology, cells, geometry)
 
 # PLOT FEM AND ANALYTICAL SOLUTIONS
 
-
 # Airy, countour plot
 subplotter = pyvista.Plotter(shape=(1, 2))
 grid.point_data["v"] = v_pp.x.array.real[dofs_v]
 grid.set_active_scalars("v")
 subplotter.subplot(0, 0)
-subplotter.add_text("v", font_size=14, color="black", position="upper_edge")
+#subplotter.add_text("v", font_size=14, color="black", position="upper_edge")
 scalar_bar_args["title"] = "v"
 subplotter.add_mesh(
     grid,
@@ -405,25 +443,24 @@ subplotter.add_mesh(
     show_scalar_bar=True,
     scalar_bar_args=scalar_bar_args,
     cmap="viridis")
-#subplotter.view_xy()
-
-
+for cross_lines, color in zip(cross_lines_list, color_list): subplotter.add_lines(cross_lines, color=color, width=crossWidth) # Add the cross to the plot
 grid.set_active_scalars("v")
 subplotter.subplot(0, 1)
 subplotter.add_text("v", position="upper_edge", font_size=14, color="black")
 scalar_bar_args["title"] = "v"
-subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1/max(np.abs(w_pp.x.array.real[dofs_v] )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="viridis")
+subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1/max(np.abs(v_pp.x.array.real[dofs_v] )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="viridis")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
-subplotter.screenshot(f"{OUTDIR}/visualization_Airy_{info_experiment}.png", scale = PNG_SCALE)
 subplotter.export_html(f"{OUTDIR}/visualization_Airy_{info_experiment}.html")
+subplotter.screenshot(f"{OUTDIR}/visualization_Airy_{info_experiment}.png", scale = PNG_SCALE)
+#pdb.set_trace()
 
 # Transverse displacement, countour
-subplotter = pyvista.Plotter(shape=(1, 2))
+subplotter = pyvista.Plotter(shape=(1, 2)) #
 grid.point_data["w"] = w_pp.x.array.real[dofs_w]
 grid.set_active_scalars("w")
 scalar_bar_args["title"] = "w"
 subplotter.subplot(0, 0)
-subplotter.add_text("w", font_size=14, color="black", position="upper_edge")
+subplotter.add_text("w", font_size=30, color="black", position="upper_edge")
 subplotter.add_mesh(
     grid,
     show_edges=False,
@@ -431,6 +468,7 @@ subplotter.add_mesh(
     show_scalar_bar=True,
     scalar_bar_args=scalar_bar_args,
     cmap="plasma")
+for cross_lines, color in zip(cross_lines_list, color_list): subplotter.add_lines(cross_lines, color=color, width=crossWidth) # Add the cross to the plot
 #subplotter.view_xy()
 
 # Transverse displacement, 3D view
@@ -438,13 +476,13 @@ grid.set_active_scalars("w")
 subplotter.subplot(0, 1)
 subplotter.add_text("w", position="upper_edge", font_size=14, color="black")
 subplotter.add_mesh(
-    grid.warp_by_scalar( scale_factor = 1/max(np.abs(w_pp.x.array.real[dofs_w] )) ),
-    show_edges=False,
-    edge_color="white",
-    show_scalar_bar=True,
-    scalar_bar_args=scalar_bar_args,
-    cmap="plasma")
-#subplotter.show_grid(xlabel="X-axis", ylabel="Y-axis", zlabel="Height (u)")
+   grid.warp_by_scalar( scale_factor = 1/max(np.abs(w_pp.x.array.real[dofs_w] )) ),
+   show_edges=False,
+   edge_color="white",
+   show_scalar_bar=True,
+   scalar_bar_args=scalar_bar_args,
+   cmap="plasma")
+subplotter.show_grid(xlabel="X-axis", ylabel="Y-axis", zlabel="Height (u)")
 subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_w_{info_experiment}.png", scale = PNG_SCALE)
 subplotter.export_html(f"{OUTDIR}/visualization_w_{info_experiment}.html")
@@ -556,7 +594,8 @@ subplotter.add_mesh(
     scalar_bar_args=scalar_bar_args,
     cmap="coolwarm")
 contours = grid.contour(isosurfaces=10)
-subplotter.add_mesh(contours, color="black",line_width=2, show_scalar_bar=False)
+subplotter.add_mesh(contours, color="black", line_width=CLINEWIDTH, show_scalar_bar=True)
+for cross_lines, color in zip(cross_lines_list, color_list): subplotter.add_lines(cross_lines, color=color, width=crossWidth) # Add the cross to the plot
 subplotter.subplot(0, 1)
 scalar_bar_args["title"] = "sigma_rr"
 subplotter.add_text("sigma_rr", position="upper_edge", font_size=14, color="black")
@@ -579,7 +618,8 @@ subplotter.add_mesh(
     scalar_bar_args=scalar_bar_args,
     cmap="coolwarm")
 contours = grid.contour(isosurfaces=10)
-subplotter.add_mesh(contours, color="black",line_width=2, show_scalar_bar=False)
+subplotter.add_mesh(contours, color="black",line_width=CLINEWIDTH, show_scalar_bar=False)
+for cross_lines, color in zip(cross_lines_list, color_list): subplotter.add_lines(cross_lines, color=color, width=crossWidth) # Add the cross to the plot
 subplotter.subplot(0, 1)
 subplotter.add_text("sigma_nt", position="upper_edge", font_size=14, color="black")
 scalar_bar_args["title"] = "sigma_nt"
@@ -602,7 +642,8 @@ subplotter.add_mesh(
     scalar_bar_args=scalar_bar_args,
     cmap="coolwarm")
 contours = grid.contour(isosurfaces=10)
-subplotter.add_mesh(contours, color="black",line_width=2, show_scalar_bar=False)
+subplotter.add_mesh(contours, color="black",line_width=CLINEWIDTH, show_scalar_bar=False)
+for cross_lines, color in zip(cross_lines_list, color_list): subplotter.add_lines(cross_lines, color=color, width=crossWidth) # Add the cross to the plot
 subplotter.subplot(0, 1)
 subplotter.add_text("sigma_tt", position="upper_edge", font_size=14, color="black")
 scalar_bar_args["title"] = "sigma_tt"
@@ -611,12 +652,13 @@ subplotter.window_size = (IMG_WIDTH, IMG_HEIGHT)
 subplotter.screenshot(f"{OUTDIR}/visualization_sigma_tt_{info_experiment}.png", scale = PNG_SCALE)
 subplotter.export_html(f"{OUTDIR}/visualization_sigma_tt_{info_experiment}.html")
 
+#pdb.set_trace()
 # PLOT MONGE-AMPERE W
 subplotter = pyvista.Plotter(shape=(1, 2))
 grid["ma_w"] = ma_w.x.array.real
 grid.set_active_scalars("ma_w")
 subplotter.subplot(0, 0)
-subplotter.add_text(r"w", font_size=14, color="black", position="upper_edge")
+subplotter.add_text("[w, w]", font_size=14, color="black", position="upper_edge")
 scalar_bar_args["title"] = "[w, w]"
 subplotter.add_mesh(
     grid,
@@ -626,8 +668,14 @@ subplotter.add_mesh(
     scalar_bar_args=scalar_bar_args,
     cmap="coolwarm")
 contours = grid.contour(isosurfaces=10)
-subplotter.add_mesh(contours, color="black",line_width=2, show_scalar_bar=False)
+subplotter.add_mesh(contours, color="black",line_width=CLINEWIDTH, show_scalar_bar=False)
+for cross_lines, color in zip(cross_lines_list, color_list): subplotter.add_lines(cross_lines, color=color, width=crossWidth) # Add the cross to the plot
 subplotter.subplot(0, 1)
+# subplotter.screenshot(f"{OUTDIR}/viz_[w,w]_{info_experiment}.png", scale = PNG_SCALE)
+# subplotter.export_html(f"{OUTDIR}/viz_[w,w]_{info_experiment}.html")
+#
+#
+# subplotter = pyvista.Plotter(shape=(1, 2))
 subplotter.add_text("ma_w", position="upper_edge", font_size=14, color="black")
 scalar_bar_args["title"] = "[w, w]"
 subplotter.add_mesh( grid.warp_by_scalar( scale_factor = 1 / max(np.abs(ma_w.x.array.real )) ), show_edges=False, edge_color="white", show_scalar_bar=True, scalar_bar_args=scalar_bar_args, cmap="coolwarm")
@@ -672,7 +720,9 @@ ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
 #plt.legend(fontsize=FONTSIZE)
 #plt.grid(True)
+visuals.setspines()
 plt.savefig(f"{OUTDIR}/profile_w_y_{y0}_{info_experiment}.png", dpi=300)
+plt.savefig(f"{OUTDIR}/profile_w_y_{y0}_{info_experiment}.pdf", dpi=300)
 
 grid.set_active_scalars("v")
 points = grid.points
@@ -693,7 +743,9 @@ ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
 #plt.legend(fontsize=FONTSIZE)
 #plt.grid(True)
+visuals.setspines()
 plt.savefig(f"{OUTDIR}/profile_v_y_{y0}_{info_experiment}.png", dpi=300)
+plt.savefig(f"{OUTDIR}/profile_v_y_{y0}_{info_experiment}.pdf", dpi=300)
 
 grid.set_active_scalars("w")
 points = grid.points
@@ -716,7 +768,9 @@ ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+visuals.setspines()
 plt.savefig(f"{OUTDIR}/profile_w_x_{x0}_{info_experiment}.png", dpi=300)
+plt.savefig(f"{OUTDIR}/profile_w_x_{x0}_{info_experiment}.pdf", dpi=300)
 
 grid.set_active_scalars("v")
 points = grid.points
@@ -735,7 +789,9 @@ ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
 ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
 ax.yaxis.get_offset_text().set_fontsize(FONTSIZE)
 ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+visuals.setspines()
 plt.savefig(f"{OUTDIR}/profile_v_x_{x0}_{info_experiment}.png", dpi=300)
+plt.savefig(f"{OUTDIR}/profile_v_x_{x0}_{info_experiment}.pdf", dpi=300)
 
 # COMPUTE FOURIER COEFFICIENTS, FREQUENCIES
 from scipy.interpolate import interp1d
@@ -755,6 +811,7 @@ plt.title('Interpolation and Resampling on Uniform Grid', fontsize=16)
 plt.legend(fontsize=12)
 plt.grid(True)
 plt.savefig(f"{OUTDIR}/interp_original_w_y_{y0}_{info_experiment}.png", dpi=300)
+plt.savefig(f"{OUTDIR}/interp_original_w_y_{y0}_{info_experiment}.pdf", dpi=300)
 
 N_fourier_coeff = 10
 frequencies, coeff_real, coeff_imag, wavelength_list = compute_fourier_coefficients(uniform_grid, resampled_values)
@@ -787,6 +844,7 @@ plt.grid(True)
 plt.tight_layout()
 plt.gca().yaxis.get_offset_text().set_fontsize(35)
 plt.savefig(f"{OUTDIR}/frequencies_w_y_{y0}_{info_experiment}.png", dpi=300)
+plt.savefig(f"{OUTDIR}/frequencies_w_y_{y0}_{info_experiment}.pdf", dpi=300)
 
 # xv = np.linspace(0, 2*np.pi, 6283185)  # Uniform grid
 # fv = np.sin(xv)  # Example function
