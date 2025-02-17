@@ -1,5 +1,5 @@
 # Disclinations
-Plates with...
+This package is to solve equilibrium problems for nonlinear models of plates with disclinations.
 
 .
 
