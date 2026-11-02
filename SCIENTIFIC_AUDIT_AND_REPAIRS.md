@@ -549,3 +549,23 @@ retained. The sampling helper now has an explicitly collective common-point cont
 The supported native API is pinned to0.9; later DOLFINx APIs require a separate
 migration/verification. Old test/plotting sources and all pre-audit user changes
 remain recoverable at `71e11e4`.
+
+## GitHub follow-up tracking
+
+The [audit tracker](https://github.com/kumiori/disclinations/issues/11) records A01–A18 as implemented and verified
+on `codex/scientific-audit`. The following open issues track the remaining
+scientific decisions and verification work; each links back to this audit and
+states its acceptance criteria.
+
+| Audit ID | GitHub issue | Work remaining |
+|---|---|---|
+| U02 | [#6](https://github.com/kumiori/disclinations/issues/6) | Specify Airy boundary and gauge conditions for hole geometries |
+| U03 | [#7](https://github.com/kumiori/disclinations/issues/7) | Clarify finite-width notch geometry and mechanical boundary conditions |
+| U05 | [#8](https://github.com/kumiori/disclinations/issues/8) | Establish nonlinear convergence, stabilisation sensitivity and equilibrium evidence |
+| U06 | [#9](https://github.com/kumiori/disclinations/issues/9) | Resolve historical benchmark scales and reproduce plate plotting workflows |
+| U07 | [#10](https://github.com/kumiori/disclinations/issues/10) | Verify a clean reproducible native environment and installation workflow |
+
+U01 and U04 are confirmed scope exclusions and have no open defect issues.
+The machine-readable mapping is in `audit/github_issues.json`. Completed
+A-series repairs are recorded in #11. Integration of the audit branch into the
+default branch is separate from these records.

@@ -1,0 +1,59 @@
+{
+  "repository": "kumiori/disclinations",
+  "branch": "codex/scientific-audit",
+  "audit_source_commit": "2d24cc8d9275d5f7ba886467ef73197d13277a48",
+  "tracker": {
+    "url": "https://github.com/kumiori/disclinations/issues/11"
+  },
+  "follow_ups": [
+    {
+      "id": "U02",
+      "title": "[Audit U02] Specify Airy boundary and gauge conditions for hole geometries",
+      "url": "https://github.com/kumiori/disclinations/issues/6"
+    },
+    {
+      "id": "U03",
+      "title": "[Audit U03] Clarify finite-width notch geometry and mechanical boundary conditions",
+      "url": "https://github.com/kumiori/disclinations/issues/7"
+    },
+    {
+      "id": "U05",
+      "title": "[Audit U05] Establish nonlinear convergence, stabilisation sensitivity and equilibrium evidence",
+      "url": "https://github.com/kumiori/disclinations/issues/8"
+    },
+    {
+      "id": "U06",
+      "title": "[Audit U06] Resolve historical benchmark scales and reproduce plate plotting workflows",
+      "url": "https://github.com/kumiori/disclinations/issues/9"
+    },
+    {
+      "id": "U07",
+      "title": "[Audit U07] Verify a clean reproducible native environment and installation workflow",
+      "url": "https://github.com/kumiori/disclinations/issues/10"
+    }
+  ],
+  "completed_audit_ids": [
+    "A01",
+    "A02",
+    "A03",
+    "A04",
+    "A05",
+    "A06",
+    "A07",
+    "A08",
+    "A09",
+    "A10",
+    "A11",
+    "A12",
+    "A13",
+    "A14",
+    "A15",
+    "A16",
+    "A17",
+    "A18"
+  ],
+  "excluded_audit_ids": [
+    "U01",
+    "U04"
+  ]
+}
