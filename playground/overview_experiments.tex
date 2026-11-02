@@ -1,0 +1,527 @@
+% Options for packages loaded elsewhere
+\PassOptionsToPackage{unicode}{hyperref}
+\PassOptionsToPackage{hyphens}{url}
+%
+\documentclass[
+  11pt,
+]{article}
+\usepackage{amsmath,amssymb}
+\usepackage{iftex}
+\ifPDFTeX
+  \usepackage[T1]{fontenc}
+  \usepackage[utf8]{inputenc}
+  \usepackage{textcomp} % provide euro and other symbols
+\else % if luatex or xetex
+  \usepackage{unicode-math} % this also loads fontspec
+  \defaultfontfeatures{Scale=MatchLowercase}
+  \defaultfontfeatures[\rmfamily]{Ligatures=TeX,Scale=1}
+\fi
+\usepackage{lmodern}
+\ifPDFTeX\else
+  % xetex/luatex font selection
+\fi
+% Use upquote if available, for straight quotes in verbatim environments
+\IfFileExists{upquote.sty}{\usepackage{upquote}}{}
+\IfFileExists{microtype.sty}{% use microtype if available
+  \usepackage[]{microtype}
+  \UseMicrotypeSet[protrusion]{basicmath} % disable protrusion for tt fonts
+}{}
+\makeatletter
+\@ifundefined{KOMAClassName}{% if non-KOMA class
+  \IfFileExists{parskip.sty}{%
+    \usepackage{parskip}
+  }{% else
+    \setlength{\parindent}{0pt}
+    \setlength{\parskip}{6pt plus 2pt minus 1pt}}
+}{% if KOMA class
+  \KOMAoptions{parskip=half}}
+\makeatother
+\usepackage{xcolor}
+\usepackage{graphicx}
+\makeatletter
+\def\maxwidth{\ifdim\Gin@nat@width>\linewidth\linewidth\else\Gin@nat@width\fi}
+\def\maxheight{\ifdim\Gin@nat@height>\textheight\textheight\else\Gin@nat@height\fi}
+\makeatother
+% Scale images if necessary, so that they will not overflow the page
+% margins by default, and it is still possible to overwrite the defaults
+% using explicit options in \includegraphics[width, height, ...]{}
+\setkeys{Gin}{width=\maxwidth,height=\maxheight,keepaspectratio}
+% Set default figure placement to htbp
+\makeatletter
+\def\fps@figure{htbp}
+\makeatother
+\setlength{\emergencystretch}{3em} % prevent overfull lines
+\providecommand{\tightlist}{%
+  \setlength{\itemsep}{0pt}\setlength{\parskip}{0pt}}
+\setcounter{secnumdepth}{-\maxdimen} % remove section numbering
+\ifLuaTeX
+  \usepackage{selnolig}  % disable illegal ligatures
+\fi
+\usepackage{bookmark}
+\IfFileExists{xurl.sty}{\usepackage{xurl}}{} % add URL line breaks if available
+\urlstyle{same}
+\hypersetup{
+  hidelinks,
+  pdfcreator={LaTeX via pandoc}}
+
+\author{}
+\date{}
+
+\begin{document}
+
+\section{Numerical Experiments}\label{numerical-experiments}
+
+\[
+\begin{equation}
+\begin{align}
+E(y):=
+\underbrace{\frac{-1}{2}\int_\Omega |\nabla^2 v|^2 - \nu [v, v]}_{\text{membrane}} +
+\underbrace{\frac{1}{2}c_\nu\int_\Omega |\Delta w|^2 - (1-\nu) [w, w]}_{\text{bending}} \nonumber \\  +
+\underbrace{\frac{1}{2 }\int_\Omega J^T \nabla^2 v J: \nabla w\otimes \nabla w}_{\text{coupling}} - \gamma \beta^4\underbrace{\int_\Omega p w }_{\text{transv. pressure}} + \beta^2\underbrace{ \sum_i\int_\Omega s_i \delta(x_i) v}_{\text{disclinations}}
+\end{align}
+\end{equation}
+\]
+
+\subsection{1. Numerical Setup}\label{numerical-setup}
+
+\subsubsection{1.1 Variational Problem}\label{variational-problem}
+
+\begin{itemize}
+\tightlist
+\item
+  Brief description of the problem being solved.
+\item
+  Reference to the finite element discretisation and solver
+  configuration.
+\end{itemize}
+
+\subsubsection{1.2 Implementation Details}\label{implementation-details}
+
+The numerical solution of the variational problem presented in Section 5
+is carried out leveraging the dolfinx/FEniCSx finite element platform,
+relying on the PETSc library for efficient linear and nonlinear algebra.
+Our implementation, https://github.com/kumiori/disclinations features
+high-order polynomial Lagrange finite elements whose order can be
+changed at runtime, for flexible accuracy in the discretisation of the
+variational principle. More specifically, we use the Newton nonlinear
+solver provided by PETSc SNES and without step adjustment (`basic
+lineasearch', cf.~manual). The iterative subproblems are solved by
+Krylov subspace method (preonly) with LU factorization as preconditioner
+(pc\_type: lu).
+
+The numeircal • Stopping tolerance: snes\_stol = 1e-6 • Absolute
+tolerance: snes\_atol = 1e-6 • Relative tolerance: snes\_rtol = 1e-6 •
+Maximum iterations: snes\_max\_it = 200
+
+Geometry and Mesh
+
+All presented numerical experiments are performed on a circular domain
+\(\Omega := B(0, 1)\) (the unit open ball) centered in the origin,
+meshed with triangular (Delaunay) elements of typical size
+\(\eta = 0.05\). This geometry forms the basis for all parametric
+verification computations and numerical experiments. The finite element
+discretisation employs third-order Lagrange elements for both the
+transverse displacement (\(w\)) and the Airy stress potential (\(v\)),
+ensuring sufficient smoothness, allowing for the computation of the
+Gaussian curvature, whilst capturing the nonlinear coupling between
+in-plane and out-of-plane elastic behaviour.
+
+The numerical stabilisation coefficient \(\alpha\) is fixed to \ldots{}
+
+1,595 nodes, xxxx elements, matrix sizes \textasciitilde{} \ldots K
+entries
+
+The non-dimensional formulation involves two tunable parameters The
+aspect ratio (\(\beta = R/h \gg 1\)), measuring the plate's slenderness
+and the relative transverse pressure (\(p_0/E\)), ratio of applied
+pressure to material stiffness. Finally, the disclination strength,
+characterised by the Frank angle for kinematically incompatible loads,
+is fixed to \(\pm 1\) in the following experiments, to qualitatively
+distinguish positive from negative induced membrane stresses,
+respectively corresponding to compression and tension.
+
+All computations refer to the non-dimensional formulation.
+
+Nontrivial kinematically incompatible loads, verified against
+closed-form analytical solutions.
+
+Mixed loading conditions combining surface pressure and disclinations.
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{2. Verification Tests}\label{verification-tests}
+
+Validation experiments provide substantiation that the computational
+model accurately represents the mathematical model of the mechanical
+system within specified limits of accuracy. These experiments are
+functional in establishing the reliability of the numerical framework
+and its ability to predict key physical behaviors. The aim of validation
+is twofold:
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Quantitative Accuracy: Demonstrating that the numerical results match
+  known solutions within acceptable bounds.
+\item
+  Qualitative Insights: Ensuring that the model captures the essential
+  physical mechanisms and trends inherent to the system.
+\end{enumerate}
+
+Validation experiments focus on two configurations: kinematically
+compatible loads through surface pressure distributed over the plate and
+kinematically incompatible loads with a dipole of disclinations,
+symmetrically distributed around the centre of the plate.
+
+\(\rho(x) = \sqrt{x_1^2 + x_2^2}\)
+
+\subsubsection{2.1 Plate with Kinematically Compatible Loads: transverse
+pressure}\label{plate-with-kinematically-compatible-loads-transverse-pressure}
+
+rescaling nondimensionalisation, all test collapse to \ldots{}
+
+Let \(\theta = 0\) and
+\(p(x)  = p_0\frac{40}{3} (1 - \rho^2(x) )^4 + \frac{16}{3} (11 + \rho^2(x) )\),
+then \$w(x) \$ = \(w_0 (1 - \rho^2(x) )^2\) and
+\(v(x) =v_0  (-\frac{1}{12} (1 - \rho^2(x) )^2 -\frac{1}{18} (1 - \rho^2(x) )^3 -\frac{1}{24} (1 - \rho^2(x) )^4)\)
+solves eq \ldots.
+
+Here, \(p_0=\sqrt{\frac{2D^3}{E h}}\),
+\(w_0\sqrt{\frac{2D}{E h}}, v_0 =\frac{D}{h}\) In Figures \ref{} we
+compare the approximate solutions of the three finite element
+formulations introduced in section \ref{} to the analytical solution
+presented above.
+
+Due to the rescaling, the nondimensional formulation involving only
+transverse load is independent of the aspect ratio,
+
+the dependence on the aspect ratio is explicit in the rescaling factors
+for the fields and the energy
+
+figure \ldots{} we compare the profile of the finite element approximate
+fields with the closed form analytic solution, along the segment
+\(x_2 = 0\)
+
+Owing to the interpretation of \(v\) as membrane stress potential, its
+sign locally informs of the positive vs.~negative character of membrane
+strains.
+
+Transverse pressure induces bending which in turn, induces tensile
+(positive) membrane strains.
+
+Finally, figure \ldots{} shows the Gaussian curvature, computed
+postprocessing the equilibrium solution, as the determinant of the
+Hessian of the transverse displacement. Note the inversion of curvature
+due to the clamping boundary condition. In the image, the red locus
+corresponds to \(x: \kappa(x)=0\)
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Setup}: Plate loaded with surface pressure.
+\item
+  \textbf{Objectives}: Compare numerical results against known analytic
+  solutions.
+\item
+  \textbf{Results}: Error analysis, visualisations.
+\end{itemize}
+
+\includegraphics{experiment_parametric_transverse/output/d8cb39/1742dd/transverse.png}
+\includegraphics{experiment_parametric_transverse/output/d8cb39/1742dd/transverse-profiles.png}
+\includegraphics{experiment_parametric_transverse/output/909867_energy_terms.png}
+Caption: remove figure, energy (bending, membrane, and coupling) wrt
+closed form computation
+\includegraphics{experiment_parametric_transverse/output/909867_error_terms.png}
+\includegraphics{experiment_parametric_transverse/output/909867/a945c5/gaussian_curvature.png}
+\includegraphics{experiment_parametric_transverse/output/d8cb39/1742dd/gaussian_curvature.png}
+Caption: Gaussian curvature, locus of inversion of the curvature Extra:
+compare errors varying penalisation parameter?
+
+\subsubsection{2.2 Plate with Kinematically Incompatible Loads, Dipole,
+Parametric varying aspect
+ratio}\label{plate-with-kinematically-incompatible-loads-dipole-parametric-varying-aspect-ratio}
+
+To verify our numerical implementation for a nontrivial incompatible
+loading against closed form analytic solutions, the second setup
+involves a plate loaded with a dipole of disclinations symmetrically
+arranged around the centre of the plate.
+
+Let \(\theta(x) = \delta(x-0.2 e_1) - \delta(x+0.2 e_1), p(x)= 0\). Then
+\(w(x) \equiv 0\) and
+\(v(x) = v_0( \rho^2(x) \ln(\rho^2(x)) - \rho^2(x) + 1)\) solves
+\eqref{2406171748}. here \(v_0=\frac{E h s}{16\pi}\) We solve
+{[}\ldots{]} with \(\gamma = 0\), for varying \(\beta\) between \(10\)
+and \(X00\).
+
+\(w=0\) is an admissible solution for the dipole problem
+
+Figure, \ldots, show energy scaling as a function of the aspect ratio,
+fourth power of \(\beta\). This behaviour corresponds to the expected
+energy scaling, by remarking that the multiplicative factor which scales
+the membrane equations - linear when \(w=0\) - is \(\beta^2\). The
+stress solution is hence quadratic in \(\beta^2\) thus exponent of the
+energy. On the other hand, the bending energy and the coupling energy
+are zero.
+
+Figure \ldots{} compares the profiles of approximate finite element
+solutions with respect to the closed form analytic solutions.
+
+Figure \ldots{} shows the fields \(w, v\) on the two-dimensional
+computational domain, the dots mark the locations of the disclinations
+(colour coding),
+
+Figure shows the scalar stress potential associated to the positive
+(colour) and negative (colour) disclination, respectively inducing a
+locally tensile and compressive state. RK: colours are inverted, FIX
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Results}: Error analysis, visualisations.
+\end{itemize}
+
+\includegraphics{experiment_parametric_dipole/output/4a96c1_energy_terms.png}
+\includegraphics{experiment_parametric_dipole/output/4a96c1/a33f9515b198a07caa4d27cc0b7b367c/dipole.png}
+\includegraphics{experiment_parametric_dipole/output/4a96c1/a33f9515b198a07caa4d27cc0b7b367c/dipole-profiles.png}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{3. Parametric Experiments}\label{parametric-experiments}
+
+\subsubsection{3.1 Mixed Loading: Disclination monopole and surface
+pressure, Varying
+Thickness}\label{mixed-loading-disclination-monopole-and-surface-pressure-varying-thickness}
+
+We perform a series of parametric experiments investigating mixed-mode
+loading combining surface pressure and a disclination monopole, as the
+plate's aspect ratio is varied whilst keeping the prefactor of the
+transverse external load \(\gamma \beta^4\) constant and equal to one.
+This implies that, as \(\beta\) varies between \(10\) and \(X00\), the
+physical dimensional surface pressure decreases with the inverse fourth
+power of the dimensional thickness.
+
+Nondimensional energy plots show the energy scaling of the different
+components of the energy. Similarly to the dipole setting, the membrane
+energy scales with the fourth power of the aspect ratio, whereas the
+non-dimensional bending energy decreases with a (negative) exponent
+smaller than \(-2\) {[}show the bound{]} (more precisely, \(-1.65\)).
+
+For large values of the aspect ratio, small numerical oscillations
+appear on the bending term, whose order of magnitude is 8 orders of
+magnitude smaller than the dominant membrane energy term.
+
+In the dimensionless formulation presented {[}X{]}, \(\beta\) acts as a
+gain for the distribution of disclinations, while \(\gamma\) modulates
+the external load.
+
+In this section we analyse the mechanics of the system by varying first
+\(\beta\) in some appropriate range while keeping \(\gamma\) constant;
+and then varying \(\gamma\) with constant \(\beta\). In order to do
+this, we provide an estimate for a realistic range of values for both
+the dimensionless parameters.
+
+Non-dimensional transverse displacement goes to zero.
+
+We tune \(\overline{p_0}\) to (a multiplier for) the weight of the
+plate, i.e.~considering a density \(\rho_{\text{D}} = O(10^3 kg/m^3)\)
+(corresponding to a reference density for steel/metal) and denoting by
+\(g\) the gravitational acceleration we obtain
+
+\(\overline{p_0} \sim \rho_{\text{D}} g  h \sim 10^2 \text{Pa}\)
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Results}: Parametric plots (e.g., energy terms, deformation
+  profiles).
+\end{itemize}
+
+\includegraphics{experiment_Parametric_Relative_Work_constant_transverse/output/0869de_energy_terms.png}
+\includegraphics{experiment_Parametric_Relative_Work_constant_transverse/output/0869de/042eed1759fac538ebfe539ab7e3f60f/state.png}
+\includegraphics{experiment_Parametric_Relative_Work_constant_transverse/output/0869de/042eed1759fac538ebfe539ab7e3f60f/state-profiles.png}
+\includegraphics{experiment_Parametric_Relative_Work_constant_transverse/output/0869de/a51acb047d059a0c1a4309343a3d6984/state-profiles.png}
+\includegraphics{experiment_Parametric_Relative_Work_constant_transverse/output/0869de/bb2d43230517c6468001976846f268b7/state-profiles.png}
+
+For large values of \(a\), \(h\) is small and \(p_0\) growths with the
+fourth power of \(h\). For \(p_0 \equiv 0\), \(w \equiv 0\) in
+\(B_1(0)\) solves the out-of-plane equation. This is the reason why in
+Figure \ref{fig:24108179} the transverse displacement approaches zero as
+\(a\) increases. As a consequence, \(v\) in equation \eqref{2410161145}
+is only activated by \(\delta(0)\) and hence asymptotically approaches
+\(v^0(x)\), solution to the problem
+
+\[
+\begin{equation}
+\left\{
+    \begin{aligned}
+        &\Delta^2 v^0 = XXX \delta(0) && \text{ in } B_1(0) \\
+        &v^0 = \partial_n v^0 = 0 && \text{ on } \partial B_1(0)
+    \end{aligned}
+\right.
+\end{equation}
+\]
+
+\[
+\begin{equation}
+    v^0(x) = E h s \mathcal{G}_{\Omega}(x) \quad \Rightarrow |\!| v^0 |\!|_{L^2(\Omega)} = \frac{E h s}{30\pi} \approx 10^5 N/m
+\end{equation}
+\]
+
+where \(\mathcal{G}_{\Omega}\) is the Green function of the biharmonic
+problem in \(H^2_0(\Omega)\) and is equal to
+
+\[
+\begin{equation}
+    \mathcal{G}_{\Omega}(x) = \frac{1}{16\pi} \Big( 1- |x|^2 + |x|^2 \ln (|x|^2) \Big), \qquad x\in \Omega
+\end{equation}
+\]
+
+\subsubsection{3.2 Mixed Loading: Varying
+Pressure}\label{mixed-loading-varying-pressure}
+
+parametric experiment, varying surface pressure in a range that spans
+0.1 to 100 times the plate's weight, assuming \ldots{} density
+
+relative interplay of bending vs.~membrane deformation, changing
+external loading conditions whilst keeping the aspect ratio and the
+power of the disclination constant.
+
+interpreted as .. multiplier of plate's weight
+
+Energy plot shows scaling properties of the energy terms
+
+computations for aspect ratio \(\beta =100\)
+
+both the disclination and the surface pressure induce same sign
+curvature this setup shows a relatively weak coupling across the entire
+range of the loading parameter, the membrane energy is constant and
+equals the energy estimate provided by the closed form solution for the
+fundamental monopole solution. On the other hand, the bending energy is
+quadratic with respect to the load multiplier, as expected by inspecting
+the (strong form of the) bending problem whilst considering the stress
+potential a given. As the value of the surface pressure varies, the
+stress potential shows a self-similar profile (cf images), whereas the
+transverse displacement progressively localises the deformation around
+the (clamped) boundary.
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Setup}: Surface pressure combined with disclination monopole;
+  pressure is varied to span a range \ldots{}
+\item
+  \textbf{Results}: Parametric plots (e.g., energy terms, deformation
+  profiles).
+\end{itemize}
+
+\begin{figure}
+\centering
+\includegraphics{experiment_Parametric_Relative_work_constant_thickness/output/5f1f1d_energy_terms.png}
+\caption{image}
+\end{figure}
+
+\includegraphics{experiment_02/output/5509b4/mesh.png} typical mesh
+(with one indicated disclination at the centre)
+
+\includegraphics{experiment_Parametric_Relative_work_constant_thickness/output/5f1f1d/7e70a6881a231348bb4816b62d437858/state.png}
+\includegraphics{experiment_Parametric_Relative_work_constant_thickness/output/5f1f1d/7e70a6881a231348bb4816b62d437858/state-profiles.png}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{4. Complex Experiment: Flower
+Configuration}\label{complex-experiment-flower-configuration}
+
+\subsubsection{4.1 Setup}\label{setup}
+
+\begin{itemize}
+\tightlist
+\item
+  \textbf{Configuration}: A flower-like arrangement of disclinations
+  mimicking engineered graphene sheets.
+\item
+  \textbf{Objectives}: Demonstrate the capability of the model for
+  complex and nonstandard configurations.
+\end{itemize}
+
+\subsubsection{4.2 Results}\label{results}
+
+\begin{itemize}
+\tightlist
+\item
+  Energy analysis, deformation profiles.
+\item
+  Discussion of insights from this experiment.
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsection{5. Summary of Numerical
+Results}\label{summary-of-numerical-results}
+
+\begin{itemize}
+\tightlist
+\item
+  Recap key findings from the verification and parametric experiments.
+\item
+  Discuss implications for the mechanics of thin plates under complex
+  loading scenarios.
+\end{itemize}
+
+\begin{center}\rule{0.5\linewidth}{0.5pt}\end{center}
+
+\subsubsection{Details}\label{details}
+
+\begin{itemize}
+\item
+  Software environment: dolfinx/FEniCSx, PETSc.
+\item
+  Solver configurations (e.g., SNES settings, tolerance). solvers:
+  nonlinear: prefix: fvk snes: snes\_type: newtonls snes\_stol: 1e-6
+  snes\_atol: 1e-6 snes\_rtol: 1e-6 snes\_max\_it: 200 \#
+  snes\_divergence\_tolerance: -1.0 snes\_monitor: '\,' ksp: ksp\_type:
+  preonly pc\_type: lu
+\item
+  Meshes geom\_type: `circle' radius: 1. mesh\_size: 0.05
+\end{itemize}
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\tightlist
+\item
+  Variational Problem: • What is the mathematical formulation? governing
+  equations, detaild in sec.~5 boundary conditions, H20
+\end{enumerate}
+
+• What are the primary unknowns (e.g., displacements, rotations)?
+transverse displacement w, airy membrane stress potential v • What are
+the physical parameters involved? Youngs modulus E, thickness h
+non-dimensional formulation highlights the role of two non-dimensional
+parameters: aspect ratio, beta, R/h relative transverse pressure, p0/E
+disclination strength, frank angle (taken either +1 or -1) 2. Finite
+Element Model: • What is the type of elements used (e.g., Argyris,
+Lagrange)? FEM lagrange, order: 3 • What is the resolution of the mesh
+(e.g., element size, refinement levels)?
+
+\begin{enumerate}
+\def\labelenumi{\arabic{enumi}.}
+\setcounter{enumi}{2}
+\tightlist
+\item
+  Solver Details: • Which solver (e.g., PETSc's SNES) and
+  preconditioning methods are used? petsc snes, the linear iterative
+  solver is based on the krylov subspace method, preconditioner is an lu
+  factorisation
+\end{enumerate}
+
+• What are the tolerances for convergence (e.g., relative, absolute
+residuals)? solvers: nonlinear: prefix: fvk snes: snes\_type: newtonls
+snes\_stol: 1e-6 snes\_atol: 1e-6 snes\_rtol: 1e-6 snes\_max\_it: 200 \#
+snes\_divergence\_tolerance: -1.0 snes\_monitor: '\,' ksp: ksp\_type:
+preonly pc\_type: lu
+
+• Any specific solver settings or configurations? 4. Physical
+Parameters: • Geometry (e.g., radius, thickness). • Material properties
+(e.g., elastic moduli). • Loading conditions (e.g., surface pressure, ).
+
+\end{document}

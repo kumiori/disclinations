@@ -1,0 +1,125 @@
+\documentclass[8pt]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[lined]{algorithm2e}
+\usepackage{minitoc}
+\usepackage{mathtools}
+
+\usepackage{stmaryrd} % Double square brackets
+
+% pygments
+\usepackage{fancyvrb}
+\usepackage{color}
+% \usepackage{refcheck}
+\usepackage{multicol}
+
+\usepackage{datetime}
+% end pygments
+\usepackage[left=3cm,right=3cm]{geometry}
+\usepackage{soul}
+\usepackage{cancel}
+% bibliography done here
+
+\usepackage[pdfauthor={Andres A Leon Baldelli},pdftitle={},pdfsubject={},pdfkeywords={},pdfproducer={Latex with hyperref},pdfcreator={pdflatex}]{hyperref}
+\usepackage[english]{babel}
+
+
+% Running Headers and footers
+%\usepackage{fancyhdr}
+
+% Multipart figures
+%\usepackage{subfigure}
+% More symbols
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% Running Headers and footers
+%\usepackage{fancyhdr}
+
+% Multipart figures
+%\usepackage{subfigure}
+% More symbols
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\newtheorem{prop}{Proposition}
+\newtheorem{definition}{Definition}
+% \newtheorem{proof}{Proof}
+\newtheorem{theorem}{Theorem}
+\newtheorem{Remark}{Remark}%
+\newtheorem{proposition}{Proposition}
+\newtheorem{corollary}{Corollary}[theorem]
+\newtheorem{lemma}{Lemma}
+\usepackage{latexsym}
+
+% Surround parts of graphics with box
+\usepackage{boxedminipage}
+
+% Package for including code in the document
+\usepackage{listings}
+
+% If you want to generate a toc for each chapter (use with book)
+\usepackage{minitoc}
+
+% This is now the recommended way for checking for PDFLaTeX:
+\usepackage{ifpdf}
+
+\usepackage{graphicx}
+% \graphicspath{ {./Images/} }
+\usepackage{subcaption}
+
+\usepackage{changes}
+\definechangesauthor[color=orange]{ALB}
+% \definechangesauthor[color=blue]{}
+
+\newcommand\ALBadd[1]{\added[id=ALB]{#1}}
+\newcommand\ALBdel[1]{\deleted[id=ALB]{#1}}
+\newcommand\ALBrep[1]{\replaced[id=ALB]{#1}}
+
+\usepackage{booktabs}
+
+
+% \ifpdf
+% \usepackage[pdftex]{graphicx}
+% \else
+\usepackage{graphicx}
+% \fi
+\title{Von Karman plates, existence results and numerical tests}
+\author{Pierluigi Cesana, Edoardo Fabbrini, Andrés A. León Baldelli}
+
+%\affil[1]{Institute of Mathematics for Industry, Kyushu University, 
+%%744 Motooka, Fukuoka 819-0395, 
+%Japan   and Department of Mathematics and Statistics, La Trobe University, 
+%%Bundoora, VIC 3086, 
+%Australia
+%}
+
+
+\begin{document}
+
+\ifpdf
+\DeclareGraphicsExtensions{.pdf, .jpg, .tif}
+\else
+\DeclareGraphicsExtensions{.eps, .jpg}
+\fi
+
+\maketitle
+
+
+\begin{abstract}
+We study thin plates where out of plane deformations are activated by wedge disclinations which are configurations observed    in metal plates and graphene.
+
+...We are interested in the situation where out-of-plane deflections are activated by membrane kinematic incompatibility,
+noticeably, Volterra's disclinations. We show existence of equilibrium solutions in the presence of a finite system of disclinations and a dead load for the deflection under various boundary conditions. We set up a numerical code in Fenics environment for the resolution of the equilibrium equations which we study in a set of parametric test studies. Our implementation of the Finite Element method follows the Discontinuous Galerkin Method with $C^0$ elements.
+ \end{abstract}
+
+\tableofcontents
+
+
+
+
+% \input{numerics}
+
+
+\end{document}

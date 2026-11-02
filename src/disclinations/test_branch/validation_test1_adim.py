@@ -99,7 +99,7 @@ PARAMETERS_FILE_PATH = 'disclinations.test'
 with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
     parameters, _ = load_parameters(f)
 
-info_test = f"smth_{SMOOTHING}_mesh_{parameters["geometry"]["mesh_size"]}"
+info_test = f"smth_{SMOOTHING}_mesh_{parameters['geometry']['mesh_size']}"
 
 # GEOMETRIC PARAMETERS
 thickness = parameters["model"]["thickness"]

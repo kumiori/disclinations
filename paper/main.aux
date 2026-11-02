@@ -1,0 +1,197 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyperFirstAtBeginDocument{\AtBeginDocument}
+\HyperFirstAtBeginDocument{\ifx\hyper@anchor\@undefined
+\global\let\oldnewlabel\newlabel
+\gdef\newlabel#1#2{\newlabelxx{#1}#2}
+\gdef\newlabelxx#1#2#3#4#5#6{\oldnewlabel{#1}{{#2}{#3}}}
+\AtEndDocument{\ifx\hyper@anchor\@undefined
+\let\newlabel\oldnewlabel
+\fi}
+\fi}
+\global\let\hyper@last\relax 
+\gdef\HyperFirstAtBeginDocument#1{#1}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces Material and geometric parameters.\relax }}{1}{table.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{table:notation}{{1}{1}{Material and geometric parameters.\relax }{table.caption.1}{}}
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{TOFIX}}{1}{section*.2}\protected@file@percent }
+\citation{Brenner}
+\citation{Arnold82}
+\citation{Arnold01}
+\citation{Arnold00}
+\citation{Georgoulis08}
+\citation{Dong23}
+\citation{Carstensen}
+\citation{brunetti}
+\citation{Brenner:Von_Karman}
+\@writefile{toc}{\contentsline {subsection}{\numberline {0.1}Discrete Numerical Formulation}{2}{subsection.0.1}\protected@file@percent }
+\newlabel{sec:IPCDformulation}{{0.1}{2}{Discrete Numerical Formulation}{subsection.0.1}{}}
+\pgfsyspdfmark {pgfid1}{12042772}{38233886}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{conforming?}}{2}{section*.3}\protected@file@percent }
+\pgfsyspdfmark {pgfid4}{36207846}{38250812}
+\pgfsyspdfmark {pgfid5}{37338342}{37979996}
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ We adopt $C^0$-elements with an interior penalty approach to weakly enforce gradient continuity across interior mesh interfaces (see \cite  {Brenner}). This results into a non-conforming Discontinuous Galerkin (DG) method\nobreakspace  {}\cite  {Arnold82, Arnold01} for our fourth-order problem formulated in $H^2$. A comprehensive comparison of DG methods for fourth-order problems can be found in \cite  {Arnold00}, while standard\comment [id=ALB]{conforming?} implementations for biharmonic problems are discussed in \cite  {Georgoulis08, Dong23}. For the specific case of von Kármán equations, $C^0$-DG methods and corresponding error estimates are provided in \cite  {Carstensen}. Our implementation builds upon the formulation in \cite  {brunetti}, but instead of embedding the penalty terms into the discrete weak form, we generalise the approach by incorporating them directly into the energy functional. }}{2}{section*.4}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ Discontinuous Galerkin methods are non-conforming finite element methods, which rules out restricting the energy functional $\mathcal  {\setbox \z@ \hbox {\mathsurround \z@ $\textstyle F$}\mathaccent "0365{F}}$ to a finite-dimensional subspace of $H^2_0(\Omega ) \times H^2_0(\Omega )$ to derive the discrete weak formulation of problem \eqref  {2408121717}. Following \cite  {Brenner:Von_Karman}, a proper DG formulation requires adding additional terms to the energy functional. These terms account for discontinuities in the gradient across mesh interfaces and ensure the coercivity of the problem. Let $\mathcal  {T}$ denote a regular triangulation of $\Omega \subset \mathbb  {R}^2$. Define \( \mathcal  {E}_{\text  {bd}}\) as the set of boundary edges, \( \mathcal  {E}_{\text  {in}}\) as the set of internal edges, so that \( \mathcal  {E} := \mathcal  {E}_{\text  {in}}\cup \mathcal  {E}_{\text  {bd}}\) is the collection of all edges. For $T \in \mathcal  {T}$, let $\mathrm  {P}_3(T)$ be the space of polynomials of degree at most three defined on $T$. The Lagrange finite element space $\mathcal  {V}(\mathcal  {T})$ consists of globally continuous, piecewise cubic polynomials that vanish on the boundary edges \( \mathcal  {E}_{\text  {bd}}\), namely }}{2}{section*.5}\protected@file@percent }
+\pgfsyspdfmark {pgfid6}{4736286}{21653278}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{unclear def. $\pm $ if T on the boundary}}{2}{section*.6}\protected@file@percent }
+\pgfsyspdfmark {pgfid9}{36207846}{21670204}
+\pgfsyspdfmark {pgfid10}{37338342}{21399388}
+\newlabel{eq:femoperators}{{2}{2}{Discrete Numerical Formulation}{equation.0.2}{}}
+\newlabel{eq:202412121212}{{3}{2}{Discrete Numerical Formulation}{equation.0.3}{}}
+\newlabel{eq:202412121231}{{4}{2}{Discrete Numerical Formulation}{equation.0.4}{}}
+\pgfsyspdfmark {pgfid11}{6703708}{5345751}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{is K the triangle T?}}{2}{section*.7}\protected@file@percent }
+\pgfsyspdfmark {pgfid14}{36207846}{5362677}
+\pgfsyspdfmark {pgfid15}{37338342}{5091861}
+\citation{}
+\citation{}
+\citation{brunetti}
+\citation{Brenner:Von_Karman}
+\citation{Carstensen}
+\citation{Brenner:Von_Karman}
+\citation{Brenner:Von_Karman}
+\@writefile{loc}{\contentsline {replaced}{Replaced\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{T}}{3}{section*.12}\protected@file@percent }
+\@writefile{loc}{\contentsline {replaced}{Replaced\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{T}}{3}{section*.13}\protected@file@percent }
+\@writefile{loc}{\contentsline {replaced}{Replaced\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{T}}{3}{section*.14}\protected@file@percent }
+\@writefile{loc}{\contentsline {replaced}{Replaced\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{T}}{3}{section*.15}\protected@file@percent }
+\newlabel{eq: Functional Von-Karman Plate discretized}{{5}{3}{Discrete Numerical Formulation}{equation.0.5}{}}
+\newlabel{eq: DG formulation - LCDG1}{{6}{3}{Discrete Numerical Formulation}{equation.0.6}{}}
+\pgfsyspdfmark {pgfid16}{25682126}{40679351}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{in which natural sense?}}{3}{section*.16}\protected@file@percent }
+\pgfsyspdfmark {pgfid19}{36207846}{40696277}
+\pgfsyspdfmark {pgfid20}{37338342}{40425461}
+\@writefile{loc}{\contentsline {deleted}{Deleted\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{larger}}{3}{section*.17}\protected@file@percent }
+\@writefile{loc}{\contentsline {replaced}{Replaced\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ensures symmetry}}{3}{section*.18}\protected@file@percent }
+\pgfsyspdfmark {pgfid21}{9418241}{37828535}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{unclear}}{3}{section*.19}\protected@file@percent }
+\pgfsyspdfmark {pgfid24}{36207846}{34322083}
+\pgfsyspdfmark {pgfid25}{37338342}{34051267}
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{On the other hand, $L_{2}$ introduces a stabilization term which ensures coercivity, provided the interior penalty parameter $\alpha $ is positive and sufficiently large}}{3}{section*.20}\protected@file@percent }
+\newlabel{eq:202412121840}{{7}{3}{Discrete Numerical Formulation}{equation.0.7}{}}
+\newlabel{eq: DG formulation - energy - Favata variazionale}{{8}{3}{Discrete Numerical Formulation}{equation.0.8}{}}
+\@writefile{loc}{\contentsline {deleted}{Deleted\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{Now, we may formulate the Symmetric IPC$^0$DG variational formulation as. \\}}{3}{section*.21}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{We seek $(v, w) \in \mathcal  {V}(\mathcal  {T}) \times \mathcal  {V}(\mathcal  {T})$ such that}}{3}{section*.22}\protected@file@percent }
+\@writefile{loc}{\contentsline {replaced}{Replaced\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{To assess the performance of our approach we also present two alternative formulations available in the literature.}}{3}{section*.23}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{The first, proposed by \cite  {Brenner:Von_Karman}: find $(v, w) \in \mathcal  {V}(\mathcal  {T}) \times \mathcal  {V}(\mathcal  {T})$ such that}}{3}{section*.24}\protected@file@percent }
+\newlabel{eq:brn1}{{11}{3}{Discrete Numerical Formulation}{equation.0.11}{}}
+\citation{Carstensen}
+\citation{Carstensen}
+\newlabel{eq:brn2}{{12}{4}{Discrete Numerical Formulation}{equation.0.12}{}}
+\@writefile{loc}{\contentsline {replaced}{Replaced\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{And the second, proposed by \cite  {Carstensen}: find $(v, w) \in \mathcal  {V}(\mathcal  {T}) \times \mathcal  {V}(\mathcal  {T})$ such that $(v, w)$ satisfy \eqref  {eq:brn1} and \eqref  {eq:brn2} where the terms marked with $\bigstar $ are omitted.}}{4}{section*.25}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {0.2}Non-dimensional formulation}{4}{subsection.0.2}\protected@file@percent }
+\newlabel{subsection:2416101524}{{0.2}{4}{Non-dimensional formulation}{subsection.0.2}{}}
+\newlabel{eq: dimensionless analysis - eq 1}{{14}{4}{Non-dimensional formulation}{equation.0.14}{}}
+\newlabel{eq:202412111724}{{15}{4}{Non-dimensional formulation}{equation.0.15}{}}
+\newlabel{eq:202412111723}{{16}{4}{Non-dimensional formulation}{equation.0.16}{}}
+\citation{}
+\citation{petsc-efficient}
+\citation{petsc-user-ref}
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{\begin  {equation}  {E^2 h^4 w_0^2} = {v_0^2}, \hskip 2em\relax {E h w_0^2} = {v_0} \end  {equation}}}{5}{section*.26}\protected@file@percent }
+\newlabel{2408121717}{{18}{5}{Non-dimensional formulation}{equation.0.18}{}}
+\newlabel{eq:refValue}{{19}{5}{Non-dimensional formulation}{equation.0.19}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Numerical experiments}{5}{section.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Implementation}{5}{section*.27}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ We address the numerical solution of the variational problem \eqref  {} leveraging dolfinx/FEniCSx\nobreakspace  {}\cite  {} as finite element framework and PETSc\nobreakspace  {}\cite  {petsc-efficient,petsc-user-ref} for efficient and scalable linear algebra. Our implementation \nobreakspace  {}\texttt  {footnote: https://github.com/kumiori/disclinations} implements polynomial (Lagrange) finite elements whose order can be fixed at runtime, for flexibility in the discretisation of the variational principle. More specifically, we use SNES, the Newton nonlinear solver provided by PETSc. The iterative subproblems are solved by a semi-direct Krylov subspace method with LU factorization as the preconditioning step (ksp...: preonly, pc type: lu).}}{5}{section*.28}\protected@file@percent }
+\citation{Brenner:Von_Karman}
+\citation{Carstensen}
+\citation{Brenner:Von_Karman}
+\citation{Carstensen}
+\citation{Brenner:Von_Karman}
+\citation{Carstensen}
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{3d Young}}{6}{section*.29}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ Experiments are performed on a unit disc $\Omega := B_1(0)$ centered in the origin, meshed with triangular (Delaunay) elements of typical size $\eta = 0.05$, corresponding to 1,595 nodes and xxxx elements. We employ third-order Lagrange elements for both the transverse displacement and the Airy stress potential, providing a piecewise linear approximation of the Gaussian curvature. This choice of discretisation yields matrix sizes of approx. ...K nonzero entries. The non-dimensional formulation involves two tunable parameters: the aspect ratio ($\beta = R/h \gg 1$) measuring the plate's slenderness, and the relative transverse pressure ($p_0/E$) with respect to the Young modulus, measuring the membrane stiffness\added [id=ALB]{3d Young}. Finally, the disclination strength given by the Frank angle, is fixed to $\pm 1$, to qualitatively distinguish positive from negative induced membrane stresses, respectively corresponding to membrane tension and compression. }}{6}{section*.30}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ All computations throughout this section use the non-dimensional formulation, likewise the plots representing the energy contributions and the mechanical fields. }}{6}{section*.31}\protected@file@percent }
+\pgfsyspdfmark {pgfid26}{22125203}{46311074}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{CHECK}}{6}{section*.32}\protected@file@percent }
+\pgfsyspdfmark {pgfid29}{36207846}{46328000}
+\pgfsyspdfmark {pgfid30}{37338342}{46057184}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Solver {verification}}{6}{subsection.1.1}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{Two verification experiments, functional in establishing the reliability of the numerical framework with respect to closed form solutions, substantiate that the computational implementation accurately represents the mathematical model within specified accuracy. We focus on two configurations: kinematically compatible loads by transverse surface pressure and kinematically incompatible loads generated by a disclination dipole, symmetric with respect to the centre of the plate. }}{6}{section*.33}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.1.1}Test 1: Kinematically compatible plate under transverse pressure}{6}{subsubsection.1.1.1}\protected@file@percent }
+\newlabel{sec:test1}{{1.1.1}{6}{Test 1: Kinematically compatible plate under transverse pressure}{subsubsection.1.1.1}{}}
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{Here, the non-dimensional parameters read $p_0=\sqrt  {\frac  {2D^3}{E h}}$, $w_0=\sqrt  {\frac  {2D}{E h}},$ and $ v_0 =\frac  {D}{h}$. Note that the nondimensional formulation involving transverse loading only is independent of the aspect ratio. Remark that, because $v$ plays the role of the membrane stress potential (?), its sign locally informs of the positive vs. negative character of membrane strains. Transverse pressure induces bending which in turn, induces tensile (positive) membrane strains. ... inversion of curvature due to the clamping boundary condition. In the image, the red locus corresponds to $x: \kappa (x)=0$ }}{6}{section*.34}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.1.2}Test 2: Kinematically Incompatible plate, disclination dipole}{6}{subsubsection.1.1.2}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{A circular plate loaded with a dipole of disclinations symmetrically arranged around the centre of the plate constitutes our second verification test.}}{6}{section*.38}\protected@file@percent }
+\citation{Brenner:Von_Karman}
+\citation{Carstensen}
+\citation{Brenner:Von_Karman}
+\citation{Carstensen}
+\citation{Brenner:Von_Karman}
+\citation{Carstensen}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces LEFT: $w(x_1, 0)$. RIGHT: $v(x_1, 0)$. $x_1 \in [-1, 1]$. Blue line: variational FE formulation. Dotted red line: \cite  {Brenner:Von_Karman} FE formulation. Green dashed line: \cite  {Carstensen} FE formulation. Dashed black line: analytical solution.\relax }}{7}{figure.caption.35}\protected@file@percent }
+\newlabel{fig:241091104}{{1}{7}{LEFT: $w(x_1, 0)$. RIGHT: $v(x_1, 0)$. $x_1 \in [-1, 1]$. Blue line: variational FE formulation. Dotted red line: \cite {Brenner:Von_Karman} FE formulation. Green dashed line: \cite {Carstensen} FE formulation. Dashed black line: analytical solution.\relax }{figure.caption.35}{}}
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Comparison of exact energy values with relative errors across different methods.\relax }}{7}{table.caption.37}\protected@file@percent }
+\newlabel{tab:energy_comparison}{{2}{7}{Comparison of exact energy values with relative errors across different methods.\relax }{table.caption.37}{}}
+\newlabel{tab:results test compatible load}{{\caption@xref {tab:results test compatible load}{ on input line 169}}{7}{Test 1: Kinematically compatible plate under transverse pressure}{table.caption.37}{}}
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{We solve [...] with $\gamma = 0$, for varying aspect ratio $\beta $ between $10$ and $X00$.}}{7}{section*.39}\protected@file@percent }
+\pgfsyspdfmark {pgfid31}{18893389}{20442168}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{dimensional?}}{7}{section*.40}\protected@file@percent }
+\pgfsyspdfmark {pgfid34}{36207846}{20459094}
+\pgfsyspdfmark {pgfid35}{37338342}{20188278}
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ Figure, ... shows the energy dependence to the fourth power of the aspect ratio, $\beta $. This behaviour corresponds to the expected scaling, remarking that the multiplicative factor in the membrane equations - linear when $w=0$ - is $\beta ^2$. On the other hand, the bending energy and the coupling energy are zero. We compare in Figure the profiles of approximate finite element solutions with respect to the closed form analytic solutions, along the segment $x_2 = 0$. Figure ... shows the fields $w, v$ on the two-dimensional computational domain, the dots mark the locations of the disclinations (colour coding), Figure shows the scalar stress potential associated to the positive (colour) and negative (colour) disclination, respectively inducing a locally tensile and compressive state. }}{7}{section*.41}\protected@file@percent }
+\citation{Kirchhoff-Love}
+\citation{timoshenko1959theory}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces $v(x_1, 0)$ for $x_1 \in [-1, 1]$. Blue line: variational FE formulation. Dotted red line: \cite  {Brenner:Von_Karman} FE formulation. Green dashed line: \cite  {Carstensen} FE formulation. Dashed black line: analytical solution.\relax }}{8}{figure.caption.42}\protected@file@percent }
+\newlabel{fig:241091050}{{2}{8}{$v(x_1, 0)$ for $x_1 \in [-1, 1]$. Blue line: variational FE formulation. Dotted red line: \cite {Brenner:Von_Karman} FE formulation. Green dashed line: \cite {Carstensen} FE formulation. Dashed black line: analytical solution.\relax }{figure.caption.42}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Parametric experiments}{8}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {paragraph}{Mixed Loading: Disclination monopole and surface pressure, Varying Thickness}{8}{section*.43}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ We analyse in this section the mechanics of the nonlinear system by varying first $\beta $ in some appropriate while keeping $\gamma $ constant; and then varying $\gamma $ with constant $\beta $. In order to do this, we provide an estimate for a realistic range of values for both the dimensionless parameters. The first series of parametric experiments investigating mixed-mode loading combine surface pressure and a disclination monopole, as the plate's aspect ratio is varied between $10$ and $X00$ keeping constant the prefactor of the transverse external load $\gamma \beta ^4=1$. As $\beta $ varies, the physical dimensional surface pressure decreases with the inverse fourth power of the dimensional thickness. Nondimensional energy plots show the energy scaling of the different components of the energy. Similarly to the dipole setting, the membrane energy scales with the fourth power of the aspect ratio, whereas the non-dimensional bending energy decreases with a exponent of $-1.65$, numerically computed by linear regression. For large values of the aspect ratio, small numerical oscillations appear on the bending term, whose order of magnitude several orders smaller than the dominant membrane energy term. Non-dimensional transverse displacement goes to zero. }}{8}{section*.44}\protected@file@percent }
+\pgfsyspdfmark {pgfid36}{19554855}{18819194}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{dimensional}}{8}{section*.45}\protected@file@percent }
+\pgfsyspdfmark {pgfid39}{36207846}{18836120}
+\pgfsyspdfmark {pgfid40}{37338342}{18565304}
+\newlabel{sec:202412091330}{{1.2}{8}{The effect of the aspect ratio $\aratio $}{section*.46}{}}
+\@writefile{toc}{\contentsline {paragraph}{The effect of the aspect ratio $\beta $}{8}{section*.46}\protected@file@percent }
+\pgfsyspdfmark {pgfid41}{25582380}{10044423}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{unclear}}{8}{section*.48}\protected@file@percent }
+\pgfsyspdfmark {pgfid44}{36207846}{10061349}
+\pgfsyspdfmark {pgfid45}{37338342}{9790533}
+\newlabel{2408121226}{{24}{8}{The effect of the aspect ratio $\aratio $}{equation.1.24}{}}
+\pgfsyspdfmark {pgfid46}{4736286}{6890720}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{drop the tildas}}{8}{section*.49}\protected@file@percent }
+\pgfsyspdfmark {pgfid49}{36207846}{6857676}
+\pgfsyspdfmark {pgfid50}{37338342}{6586860}
+\pgfsyspdfmark {pgfid51}{32583079}{4990176}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{rel. sigma-v}}{8}{section*.50}\protected@file@percent }
+\pgfsyspdfmark {pgfid54}{36207846}{2384026}
+\pgfsyspdfmark {pgfid55}{37338342}{2113210}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Dimensionless energies. Membrane (blue). Bending (green). Coupling (yellow). Membrane energy predicted by Kirchhoff-Love model $\varepsilon _{\text  {KL}} = \frac  {a^4}{32\pi } $ (red). Plot in log-log scale.\relax }}{9}{figure.caption.47}\protected@file@percent }
+\newlabel{fig:24108179}{{3}{9}{Dimensionless energies. Membrane (blue). Bending (green). Coupling (yellow). Membrane energy predicted by Kirchhoff-Love model $\varepsilon _{\text {KL}} = \frac {a^4}{32\pi } $ (red). Plot in log-log scale.\relax }{figure.caption.47}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {4}{\ignorespaces Dimensionless $\sigma _{rr}$.\relax }}{9}{figure.caption.51}\protected@file@percent }
+\newlabel{fig:2412092103}{{4}{9}{Dimensionless $\sigma _{rr}$.\relax }{figure.caption.51}{}}
+\pgfsyspdfmark {pgfid56}{7146978}{9003287}
+\@writefile{loc}{\contentsline {comment}{Commented\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{unclear}}{9}{section*.52}\protected@file@percent }
+\pgfsyspdfmark {pgfid59}{36207846}{9020213}
+\pgfsyspdfmark {pgfid60}{37338342}{8749397}
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ As a consequence, $v$ in equation \eqref  {2410161145} is only activated by $\delta (0)$ and hence asymptotically approaches $v^0(x)$, solution to the problem ... }}{9}{section*.53}\protected@file@percent }
+\citation{Kirchhoff-Love}
+\@writefile{lof}{\contentsline {figure}{\numberline {5}{\ignorespaces $\tilde  v(\xi _1, 0)$ for $\xi _1 \in [-1, 1]$. LEFT: $a = 10$. RIGHT: $a = 100$.\relax }}{10}{figure.caption.54}\protected@file@percent }
+\newlabel{fig:2412080519}{{5}{10}{$\tilde v(\xi _1, 0)$ for $\xi _1 \in [-1, 1]$. LEFT: $a = 10$. RIGHT: $a = 100$.\relax }{figure.caption.54}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {6}{\ignorespaces $\tilde  w(\xi _1, 0)$ for $\xi _1 \in [-1, 1]$. LEFT: $a = 10$. RIGHT: $a = 100$.\relax }}{10}{figure.caption.55}\protected@file@percent }
+\newlabel{fig:2412080520}{{6}{10}{$\tilde w(\xi _1, 0)$ for $\xi _1 \in [-1, 1]$. LEFT: $a = 10$. RIGHT: $a = 100$.\relax }{figure.caption.55}{}}
+\@writefile{toc}{\contentsline {paragraph}{The effect of the dimensionless external load $\gamma $}{10}{section*.56}\protected@file@percent }
+\@writefile{loc}{\contentsline {added}{Added\nobreakspace  {}(ALB): \truncate {\Changestruncatewidth }{ }}{10}{section*.57}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {7}{\ignorespaces Dimensionless membrane energy (blue). Dimensionless bending energy (green). Dimensionless coupling energy (yellow). Membrane energy predicted by Kirchhoff-Love model (red). \relax }}{11}{figure.caption.58}\protected@file@percent }
+\newlabel{fig:241081710}{{7}{11}{Dimensionless membrane energy (blue). Dimensionless bending energy (green). Dimensionless coupling energy (yellow). Membrane energy predicted by Kirchhoff-Love model (red). \relax }{figure.caption.58}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {8}{\ignorespaces $\tilde  v(\xi _1, 0)$ for $\xi _1 \in [-1, 1]$. LEFT: $a = 10$. RIGHT: $a = 100$.\relax }}{11}{figure.caption.59}\protected@file@percent }
+\newlabel{fig:2412080521}{{8}{11}{$\tilde v(\xi _1, 0)$ for $\xi _1 \in [-1, 1]$. LEFT: $a = 10$. RIGHT: $a = 100$.\relax }{figure.caption.59}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {9}{\ignorespaces $\tilde  w(\xi _1, 0)$ for $\xi _1 \in [-1, 1]$. LEFT: $\gamma = 0.1$. RIGHT: $\gamma = 10$.\relax }}{11}{figure.caption.60}\protected@file@percent }
+\newlabel{fig:2412080522}{{9}{11}{$\tilde w(\xi _1, 0)$ for $\xi _1 \in [-1, 1]$. LEFT: $\pratio = 0.1$. RIGHT: $\pratio = 10$.\relax }{figure.caption.60}{}}
+\citation{qualcosa}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Configuration}{12}{subsection.1.3}\protected@file@percent }
+\newlabel{eq:202412091308}{{25}{12}{Configuration}{equation.1.25}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.1}Case 1: negative Frank's angle $s$}{12}{subsubsection.1.3.1}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {10}{\ignorespaces $\sigma _{rr}$ [Pa$\times $m] induced by a distribution of negative disclinations. Side and top views.\relax }}{12}{figure.caption.61}\protected@file@percent }
+\newlabel{fig:fournegativedisc}{{10}{12}{$\sigma _{rr}$ [Pa$\times $m] induced by a distribution of negative disclinations. Side and top views.\relax }{figure.caption.61}{}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {1.3.2}Case 2: positive Frank's angle $s$}{12}{subsubsection.1.3.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {11}{\ignorespaces LEFT: $v$ [Nm]. RIGHT: $w$ [m]. Profile evaluated for $x_1 \in [-1,1] $ and $x_2 = 0$.\relax }}{13}{figure.caption.62}\protected@file@percent }
+\newlabel{fig:202412072139}{{11}{13}{LEFT: $v$ [Nm]. RIGHT: $w$ [m]. Profile evaluated for $x_1 \in [-1,1] $ and $x_2 = 0$.\relax }{figure.caption.62}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {12}{\ignorespaces $\sigma _{rr}$ [Pa$\times $m] induced by a distribution of positive disclinations. Side and top views.\relax }}{13}{figure.caption.63}\protected@file@percent }
+\newlabel{fig:fourpositivedisc}{{12}{13}{$\sigma _{rr}$ [Pa$\times $m] induced by a distribution of positive disclinations. Side and top views.\relax }{figure.caption.63}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {13}{\ignorespaces LEFT: $v$ [Nm]. RIGHT: $w$ [m]. Profiles evaluated for $x_1 \in [-1,1]$ and $ x_2 = 0$.\relax }}{14}{figure.caption.64}\protected@file@percent }
+\newlabel{fig:202412072147}{{13}{14}{LEFT: $v$ [Nm]. RIGHT: $w$ [m]. Profiles evaluated for $x_1 \in [-1,1]$ and $ x_2 = 0$.\relax }{figure.caption.64}{}}
+\@writefile{lof}{\contentsline {figure}{\numberline {14}{\ignorespaces Wrinkling effect induced by the distribution of positive disclinations.\relax }}{14}{figure.caption.65}\protected@file@percent }
+\newlabel{fig:2412080541}{{14}{14}{Wrinkling effect induced by the distribution of positive disclinations.\relax }{figure.caption.65}{}}
+\gdef \@abspage@last{14}

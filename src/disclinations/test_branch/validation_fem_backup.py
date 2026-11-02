@@ -1,0 +1,259 @@
+"""
+PURPOSE OF THE SCRIPT
+Compare the three FE formulations (Variational, Brenner, Carstensen) with a known solution.
+The script can use both the dimensional or the NON-dimensional FE formulations (see respectivelly "models/__init__.py" and "models/adimensional.py")
+
+ARTICLE RELATED SECTION
+"Sovler verification. Test 1: kinematically compatible plate under volume forces"
+"Sovler verification. Test 2: kinematically incompatible plate"
+"""
+import importlib.resources as pkg_resources  # Python 3.7+ for accessing package files
+import yaml
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib.ticker import ScalarFormatter, MaxNLocator
+import pdb
+import os
+import pandas as pd
+import argparse
+
+from disclinations.utils import load_parameters
+from disclinations.utils.viz import plot_scalar, plot_profile, plot_mesh
+
+from visuals import visuals
+visuals.matplotlibdefaults(useTex=False) #palette="dark",
+
+SCRIPT_VAR = "validation_test1_adim"
+SCRIPT_BRN = "validation_test1_BR_adim"
+SCRIPT_CAR = "validation_test1_CA_adim"
+
+#SCRIPT_VAR = "validation_test2_adim"
+#SCRIPT_BRN = "validation_test2_BR_adim"
+#SCRIPT_CAR = "validation_test2_CA_adim"
+
+OUTDIR = os.path.join("output", "compare", SCRIPT_VAR)
+if not os.path.exists(OUTDIR): os.makedirs(OUTDIR)
+
+# Define a function to run a script and return a variable
+def run_script(filename):
+    globals_dict = {}  # Dictionary to capture script's variables
+    with open(filename) as file:
+        exec(file.read(), globals_dict)
+    return globals_dict
+
+script_var = run_script(SCRIPT_VAR+".py")
+script_brn = run_script(SCRIPT_BRN+".py")
+script_car = run_script(SCRIPT_CAR+".py")
+
+print("script_var[energy_terms] = ", script_var["energy_terms"])
+
+smoothing = script_var["SMOOTHING"]
+#sol_tollerance = script_var["SOL_TOLLERANCE"]
+print("Smoothing: ", smoothing)
+
+V_v = script_var["V_v"]
+V_w = script_var["V_w"]
+dofs_v = script_var["dofs_v"]
+dofs_w = script_var["dofs_w"]
+
+v_exact = script_var["v_exact_adim"]
+v_var = script_var["vpp"]
+v_brn = script_brn["vpp"]
+v_car = script_car["vpp"]
+
+w_exact = script_var["w_exact_adim"]
+w_var = script_var["wpp"]
+w_brn = script_brn["wpp"]
+w_car = script_car["wpp"]
+
+# Compare energies
+columns = ["Error % Bending Energy (Var)", "Error % Bending Energy (Brn)", "Error % Bending Energy (Car)",
+           "Error % Membrane Energy (Var)", "Error % Membrane Energy (Brn)", "Error % Membrane Energy (Car)",
+           "Error % Coupling Energy (Var)", "Error % Coupling Energy (Brn)", "Error % Coupling Energy (Car)",
+           "Bending Energy (Exact)", "Bending Energy (Var)", "Bending Energy (Brn)", "Bending Energy (Car)",
+           "Membrane Energy (Exact)", "Membrane Energy (Var)", "Membrane Energy (Brn)", "Membrane Energy (Car)",
+           "Coupling Energy (Exact)", "Coupling Energy (Var)", "Coupling Energy (Brn)", "Coupling Energy (Car)",
+           "Mesh size", "Interior Penalty (IP)", "Thickness", "Young modulus", "Poisson ratio"]
+
+#experimental_data = pd.DataFrame(columns=columns)
+e_data = {}
+e_data["Bending Energy (Var)"] = script_var["energy_terms"]["bending"]
+e_data["Bending Energy (Brn)"] = script_brn["energy_terms"]["bending"]
+e_data["Bending Energy (Car)"] = script_car["energy_terms"]["bending"]
+
+e_data["Membrane Energy (Var)"] = script_var["energy_terms"]["membrane"]
+e_data["Membrane Energy (Brn)"] = script_brn["energy_terms"]["membrane"]
+e_data["Membrane Energy (Car)"] = script_car["energy_terms"]["membrane"]
+
+e_data["Coupling Energy (Var)"] = script_var["energy_terms"]["coupling"]
+e_data["Coupling Energy (Brn)"] = script_brn["energy_terms"]["coupling"]
+e_data["Coupling Energy (Car)"] = script_car["energy_terms"]["coupling"]
+
+e_data["Bending Energy (Exact)"] = script_var["ex_bending_energy"]
+e_data["Membrane Energy (Exact)"] = script_var["ex_membrane_energy"]
+e_data["Coupling Energy (Exact)"] = script_var["ex_coupl_energy"]
+
+errorBending_var = "N.A."
+errorBending_brn = "N.A."
+errorBending_car = "N.A."
+errorMembrane_var = "N.A."
+errorMembrane_brn = "N.A."
+errorMembrane_car = "N.A."
+errorCoupling_var = "N.A."
+errorCoupling_brn = "N.A."
+errorCoupling_car = "N.A."
+
+if e_data["Bending Energy (Exact)"] != 0.0:
+    errorBending_var = 100*( e_data["Bending Energy (Var)"] - e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
+    errorBending_brn = 100*( e_data["Bending Energy (Brn)"] - e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
+    errorBending_car = 100*( e_data["Bending Energy (Car)"] - e_data["Bending Energy (Exact)"] ) / e_data["Bending Energy (Exact)"]
+
+if e_data["Membrane Energy (Exact)"] != 0.0:
+    errorMembrane_var = 100*( e_data["Membrane Energy (Var)"] - e_data["Membrane Energy (Exact)"] ) / e_data["Membrane Energy (Exact)"]
+    errorMembrane_brn = 100*( e_data["Membrane Energy (Brn)"] - e_data["Membrane Energy (Exact)"] ) / e_data["Membrane Energy (Exact)"]
+    errorMembrane_car = 100*( e_data["Membrane Energy (Car)"] - e_data["Membrane Energy (Exact)"] ) / e_data["Membrane Energy (Exact)"]
+
+if e_data["Coupling Energy (Exact)"] != 0.0:
+    errorCoupling_var = 100*( e_data["Coupling Energy (Var)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
+    errorCoupling_brn = 100*( e_data["Coupling Energy (Brn)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
+    errorCoupling_car = 100*( e_data["Coupling Energy (Car)"] - e_data["Coupling Energy (Exact)"] ) / e_data["Coupling Energy (Exact)"]
+
+print("RESULTS")
+print("----------------------------------------------")
+print("Percent errorBending_var: ", errorBending_var)
+print("Percent errorBending_brn: ", errorBending_brn)
+print("Percent errorBending_car: ", errorBending_car)
+print("----------------------------------------------")
+print("Percent errorMembrane_var: ", errorMembrane_var)
+print("Percent errorMembrane_brn: ", errorMembrane_brn)
+print("Percent errorMembrane_car: ", errorMembrane_car)
+print("----------------------------------------------")
+print("Percent errorCoupling_var: ", errorCoupling_var)
+print("Percent errorCoupling_brn: ", errorCoupling_brn)
+print("Percent errorCoupling_car: ", errorCoupling_car)
+print("----------------------------------------------")
+
+#pdb.set_trace()
+exp_dict = {
+    "Bending Energy (Var)": [e_data["Bending Energy (Var)"]],
+    "Bending Energy (Brn)":  [e_data["Bending Energy (Brn)"]],
+    "Bending Energy (Car)": [e_data["Bending Energy (Car)"]],
+    "Membrane Energy (Var)": [e_data["Membrane Energy (Var)"]],
+    "Membrane Energy (Brn)": [e_data["Membrane Energy (Brn)"]],
+    "Membrane Energy (Car)": [e_data["Membrane Energy (Car)"]],
+    "Coupling Energy (Var)": [e_data["Coupling Energy (Var)"]],
+    "Coupling Energy (Brn)": [e_data["Coupling Energy (Brn)"]],
+    "Coupling Energy (Car)": [e_data["Coupling Energy (Car)"]],
+    "Bending Energy (Exact)": [e_data["Bending Energy (Exact)"]],
+    "Membrane Energy (Exact)": [e_data["Membrane Energy (Exact)"]],
+    "Coupling Energy (Exact)": [e_data["Coupling Energy (Exact)"]],
+    "Mesh size": [script_var["mesh_size"]],
+    "Interior Penalty (IP)": [script_var["parameters"]["model"]["alpha_penalty"]],
+    "Thickness": [script_var["thickness"]], "Young modulus": [script_var["_E"]],
+    "Poisson ratio": [script_var["nu"]],
+    "Error % Bending Energy (Var)": [errorBending_var],
+    "Error % Bending Energy (Brn)": [errorBending_brn],
+    "Error % Bending Energy (Car)": [errorBending_car],
+    "Error % Membrane Energy (Var)": [errorMembrane_var],
+    "Error % Membrane Energy (Brn)": [errorMembrane_brn],
+    "Error % Membrane Energy (Car)": [errorMembrane_car],
+    "Error % Coupling Energy (Var)": [errorCoupling_var],
+    "Error % Coupling Energy (Brn)": [errorCoupling_brn],
+    "Error % Coupling Energy (Car)": [errorCoupling_car]
+    }
+
+#with open("parameters.yml") as f: parameters = yaml.load(f, Loader=yaml.FullLoader)
+PARAMETERS_FILE_PATH = 'disclinations.test'
+with pkg_resources.path(PARAMETERS_FILE_PATH, 'parameters.yml') as f:
+    parameters, _ = load_parameters(f)
+
+info_experiment = f"mesh_{parameters["geometry"]["mesh_size"]}_IP_{parameters["model"]["alpha_penalty"]:.2e}_smth_{smoothing}"
+
+experimental_data = pd.DataFrame(exp_dict)
+experimental_data.to_excel(f'{OUTDIR}/Models_comparison.xlsx', index=False)
+
+# Plot profiles:
+import pyvista
+
+pyvista.OFF_SCREEN = True
+
+plotter = pyvista.Plotter(title="Displacement", window_size=[1200, 600], shape=(2, 2))
+
+
+tol = 1e-3
+xs = np.linspace(-parameters["geometry"]["radius"] + tol, parameters["geometry"]["radius"] - tol, 101)
+points = np.zeros((3, 101))
+points[0] = xs
+
+FIGWIDTH = 17
+FIGHEIGHT = 12
+
+fig, axes = plt.subplots(1, 2, figsize=(FIGWIDTH, FIGHEIGHT))
+
+
+# # INSERT ANDRES: -------------------------
+# difference = np.abs(y_exact - y_numerical)
+#
+# # Main plot
+# #fig, ax = plt.subplots(figsize=(8, 6))
+# ax.plot(x, y_exact, label="Exact Solution", linestyle="-", color="blue", linewidth=2)
+# ax.plot(x, y_numerical, label="Numerical Solution", linestyle="--", color="red", linewidth=1.5, alpha=0.7)
+# ax.set_xlabel("x")
+# ax.set_ylabel("y")
+# ax.set_title("Superposed Curves with Difference Inset")
+# ax.legend()
+#
+# # Add inset plot
+# ax_inset = inset_axes(ax, width="40%", height="30%", loc="upper right")
+# ax_inset.plot(x, w_var-w_brn, color="green", linewidth=1.5)
+# ax_inset.set_yscale("log")
+# ax_inset.set_title("Difference (Log Scale)", fontsize=10)
+# ax_inset.set_xlabel("x", fontsize=8)
+# ax_inset.set_ylabel("|Exact - Numerical|", fontsize=8)
+# ax_inset.tick_params(axis='both', which='major', labelsize=8)
+# ax_inset.grid(True, linestyle="--", alpha=0.5)
+# Display the plot
+#plt.tight_layout()
+#plt.show()
+
+_plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":", "c": "C1"}, fig=fig, subplotnumber=1) #"c": "r",
+_plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--", "c": "C2"}, fig=fig, subplotnumber=1) #"c": "g",
+_plt, data = plot_profile(w_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR", "c": "k"}, fig=fig, subplotnumber=1) #"c": "k",
+_plt, data = plot_profile(w_exact, points, None, subplot=(1, 1), lineproperties={"lw":2, "label": "Analytical (white)", "ls": "solid", "c":"w"}, fig=fig, subplotnumber=1) #"c": "k",
+
+_plt.xlabel(r"$\xi_1$", fontsize=35)
+_plt.ylabel(r"$w$", fontsize=35)
+_plt.xticks(fontsize=35)
+_plt.yticks(fontsize=35)
+#_plt.title(f"Comparison between FE models. Transverse displacement. {info_experiment}", size = 30)
+#_plt.grid(True)
+_plt.legend(fontsize=30)
+ax = _plt.gca() # use scientific notation for y axis
+ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+ax.yaxis.get_offset_text().set_fontsize(30)
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+visuals.setspines()
+_plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-w-profiles.png")
+
+fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
+
+_plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "BNRS17", "ls": ":", "c": "C1"}, fig=fig, subplotnumber=1) #"c": "r",
+_plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "CMN18", "ls": "--", "c": "C2"}, fig=fig, subplotnumber=1) #"c": "g",
+_plt, data = plot_profile(v_var, points, None, subplot=(1, 1), lineproperties={"lw":7, "label": "VAR", "c": "k"}, fig=fig, subplotnumber=1) #"c": "b",
+_plt, data = plot_profile(v_exact, points, None, subplot=(1, 1), lineproperties={"lw":2, "label": "Analytical (white)", "ls": "solid", "c": "w"}, fig=fig, subplotnumber=1) #
+
+_plt.xlabel(r"$\xi_1$", fontsize=35)
+_plt.ylabel(r"$v$", fontsize=35)
+_plt.xticks(fontsize=35)
+_plt.yticks(fontsize=35)
+#_plt.title(f"Comparison between FE models. Airy's function. {info_experiment}", size = 30)
+#_plt.grid(True)
+_plt.legend(fontsize=30)
+ax = _plt.gca() # use scientific notation for y axis
+ax.yaxis.set_major_formatter(ScalarFormatter(useMathText=True))
+ax.ticklabel_format(axis="y", style="sci", scilimits=(0, 0))
+ax.yaxis.get_offset_text().set_fontsize(30)
+ax.xaxis.set_major_locator(MaxNLocator(nbins=5))  # Adjust the number of bins to choose the number of ticks
+visuals.setspines()
+_plt.savefig(f"{OUTDIR}/{SCRIPT_VAR}-v-profiles.png")
