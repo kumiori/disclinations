@@ -125,35 +125,34 @@ def setup_logger_mpi(root_priority: int = logging.INFO):
 
     return logger
 
-_logger = setup_logger_mpi()
+_logger = logging.getLogger(__name__)
 
+from importlib.metadata import version, PackageNotFoundError
+from pathlib import Path
 import subprocess
 
-# Get the current Git branch
-branch = subprocess.check_output(["git", "rev-parse", "--abbrev-ref", "HEAD"]).strip().decode("utf-8")
 
-# Get the current Git commit hash
-commit_hash = subprocess.check_output(["git", "rev-parse", "HEAD"]).strip().decode("utf-8")
+def _code_info():
+    try:
+        root = Path(__file__).resolve().parents[3]
+        def git(*args):
+            return subprocess.check_output(["git", "-C", str(root), *args], stderr=subprocess.DEVNULL).decode().strip()
+        return {"branch": git("rev-parse", "--abbrev-ref", "HEAD"),
+                "commit_hash": git("rev-parse", "HEAD")}
+    except (OSError, subprocess.CalledProcessError):
+        return {"branch": None, "commit_hash": None}
 
-code_info = {
-    "branch": branch,
-    "commit_hash": commit_hash,
-}
 
-from dolfinx import __version__ as dolfinx_version
-from petsc4py import __version__ as petsc_version
-from slepc4py import __version__ as slepc_version
+code_info = _code_info()
+library_info = {"dolfinx_version": dolfinx.__version__}
+for package in ("petsc4py", "slepc4py"):
+    try:
+        library_info[package+"_version"] = version(package)
+    except PackageNotFoundError:
+        library_info[package+"_version"] = None
 
-library_info = {
-    "dolfinx_version": dolfinx_version,
-    "petsc4py_version": petsc_version,
-    "slepc4py_version": slepc_version,
-}
 
-simulation_info = {
-    **library_info,
-    **code_info,
-}
+simulation_info = {**library_info, **code_info}
 
 def norm_L2(u):
     """
@@ -357,10 +356,10 @@ def indicator_function(v):
 
     # Create the indicator function
     w = dolfinx.fem.Function(v.function_space)
-    with w.vector.localForm() as w_loc, v.vector.localForm() as v_loc:
+    with w.x.petsc_vec.localForm() as w_loc, v.x.petsc_vec.localForm() as v_loc:
         w_loc[:] = np.where(v_loc[:] > 0, 1., 0.)
 
-    w.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT,
+    w.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT,
         mode=PETSc.ScatterMode.FORWARD)
     
     return w
@@ -436,7 +435,7 @@ def write_to_output(prefix, q, extra_fields = {}):
             else:
                 # Interpolate and write scalar or vector fields
                 interpolate_and_write(file, interpolation, field, name)
-        __import__('pdb').set_trace()
+
 
 def interpolate_and_write(file, interpolation, field, name):
     """Interpolate a field to V_P1 and write it to an XDMF file."""
@@ -468,8 +467,11 @@ TRANSVERSE = 1
 
 def homogeneous_dirichlet_bc_H20(mesh, Q):
     """
-    Apply homogeneous Dirichlet boundary conditions (H^2_0 Sobolev space)
-    to both AIRY and TRANSVERSE fields.
+    Impose zero value traces on both fields, on all exterior facets.
+
+    This supplies only the H1 trace. Zero normal slope requires the model's
+    separate Nitsche terms. On holes this fixes all affine Airy gauges to
+    zero; it is not a general traction-free multiply connected formulation.
 
     Args:
     - mesh: The mesh of the domain.
@@ -550,61 +552,33 @@ from pathlib import Path
 import os
 
 def create_or_load_circle_mesh(parameters, prefix):
+    """Create/cache a circle without altering radius or discarding mesh tags.
+
+    Collective on MPI.COMM_WORLD. Geometry (including radius/mesh size) keys
+    determine the cache identity. Both fresh and cached calls return mesh,
+    cell tags and facet tags. Gmsh remains alive for the caller to finalise.
     """
-    Create a new mesh if it doesn't exist, otherwise load the existing one.
-
-    Args:
-    - parameters (dict): A dictionary containing the geometry and mesh parameters.
-    - comm (MPI.Comm): MPI communicator.
-    - outdir (str): Directory to store the mesh file.
-
-    Returns:
-    - mesh: The generated or loaded mesh.
-    - mts: Mesh topology data structure.
-    - fts: Facet topology data structure.
-    """
-    # Extract geometry and mesh size parameters
-    mesh_size = parameters["geometry"]["mesh_size"]
-    parameters["geometry"]["radius"] = 1  # Assuming the radius is 1
-    parameters["geometry"]["geom_type"] = "circle"
-    geometry_json = json.dumps(parameters["geometry"], sort_keys=True)
-    sha_hash = hashlib.sha256(geometry_json.encode()).hexdigest()
-
-    # Set up file prefix for mesh storage
-    mesh_file_path = f"{prefix}/mesh-{sha_hash}.xdmf"
-    with dolfinx.common.Timer("~Mesh Generation") as timer:
-        # Check if the mesh file already exists
-        if os.path.exists(mesh_file_path):
-            print("Loading existing mesh...")
-            with XDMFFile(comm, mesh_file_path, "r") as file:
-                mesh = file.read_mesh()
-                mts = None  # Assuming facet tags are needed
-                # mts = file.read_meshtags(mesh, "facet")  # Assuming facet tags are needed
-                fts = None  # Modify as needed if facet topology structure is available
-            return mesh, mts, fts
-
-        else:
-            # If no mesh file exists, create a new mesh
-            print("Creating new mesh...")
-            model_rank = 0
-            tdim = 2
-
-            gmsh_model, tdim = mesh_circle_gmshapi(
-                parameters["geometry"]["geom_type"], 1, mesh_size, tdim
-            )
-
-            #gmsh_model.model.mesh.refine()
-
-            mesh, mts, fts = gmshio.model_to_mesh(gmsh_model, comm, model_rank, tdim)
-
-            # Save the mesh for future use
-            # os.makedirs(prefix, exist_ok=True)
-            if comm.rank == 0:
-                Path(prefix).mkdir(parents=True, exist_ok=True)
-                    
-            with XDMFFile(
-                comm, mesh_file_path, "w", encoding=XDMFFile.Encoding.HDF5
-            ) as file:
-                file.write_mesh(mesh)
-
-        return mesh, mts, fts
+    geometry = dict(parameters["geometry"])
+    radius = geometry.setdefault("radius", 1.)
+    geometry["geom_type"] = "circle"
+    signature = hashlib.sha256(json.dumps({"cache_schema": "circle-tags/v1", "geometry": geometry}, sort_keys=True).encode()).hexdigest()
+    path = f"{prefix}/mesh-{signature}.xdmf"
+    if comm.rank == 0:
+        Path(prefix).mkdir(parents=True, exist_ok=True)
+    comm.barrier()
+    exists = comm.bcast(os.path.exists(path) if comm.rank == 0 else None, root=0)
+    if exists:
+        with XDMFFile(comm, path, "r") as file:
+            mesh = file.read_mesh()
+            mesh.topology.create_connectivity(mesh.topology.dim-1, mesh.topology.dim)
+            cells = file.read_meshtags(mesh, "cells")
+            facets = file.read_meshtags(mesh, "facets")
+        return mesh, cells, facets
+    model, tdim = mesh_circle_gmshapi("circle", radius, geometry["mesh_size"], 2)
+    mesh, cells, facets = gmshio.model_to_mesh(model, comm, 0, gdim=tdim)
+    cells.name, facets.name = "cells", "facets"
+    with XDMFFile(comm, path, "w") as file:
+        file.write_mesh(mesh)
+        file.write_meshtags(cells, mesh.geometry)
+        file.write_meshtags(facets, mesh.geometry)
+    return mesh, cells, facets

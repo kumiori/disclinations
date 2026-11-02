@@ -135,8 +135,8 @@ def run_experiment(FEMmodel, costantData, parameters, q_ig, gamma, beta):
 
     # FUNCTION SPACE
     q = dolfinx.fem.Function(Q)
-    #q.vector.array = copy.deepcopy(q_ig.vector.array)
-    #q.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+    #q.x.petsc_vec.array = copy.deepcopy(q_ig.x.petsc_vec.array)
+    #q.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
     v, w = ufl.split(q)
     state = {"v": v, "w": w}
 
@@ -197,7 +197,7 @@ def run_experiment(FEMmodel, costantData, parameters, q_ig, gamma, beta):
         bounds=None,
         petsc_options=solver_parameters,
         prefix="plate_fvk",
-        b0=b.vector,
+        b0=b.x.petsc_vec,
     )
 
     # run solver
@@ -390,7 +390,7 @@ if __name__ == "__main__":
     #f_value replaced for gamma_value
     for i, gamma_value in enumerate(gamma_list):
         print("Running experiment with gamma = ", gamma_value)
-        #q_ig.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+        #q_ig.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
         data_var = run_experiment(VARIATIONAL, costantData, parameters, q_ig, gamma_value, beta)
         if COMPARISON:
             data_brn = run_experiment(BRENNER, costantData, parameters, q_ig, gamma_value, beta)
@@ -398,10 +398,10 @@ if __name__ == "__main__":
         else:
             data_brn = data_var
             data_car = data_var
-        #q_ig.vector.array = copy.deepcopy(data_brn["q"].vector.array)
-        #q_ig.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
-        #q_ig.vector.array = copy.deepcopy(data_brn["q"].vector.array)
-        #q_ig.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+        #q_ig.x.petsc_vec.array = copy.deepcopy(data_brn["q"].x.petsc_vec.array)
+        #q_ig.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+        #q_ig.x.petsc_vec.array = copy.deepcopy(data_brn["q"].x.petsc_vec.array)
+        #q_ig.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
         if (data_var["convergence_id"] > 0) and (data_brn["convergence_id"] > 0) and (data_car["convergence_id"] > 0):
             #f_range replaced for gamma_range
@@ -437,8 +437,8 @@ if __name__ == "__main__":
             v_carModel_list.append(data_car["v"])
 
             # Update the initial guess
-            #q_ig.vector.array = copy.deepcopy(data_var["q"].vector.array)
-            #q_ig.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+            #q_ig.x.petsc_vec.array = copy.deepcopy(data_var["q"].x.petsc_vec.array)
+            #q_ig.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
         else:
             print(f"At least one of the three FEM models did not converged for {PARAMETER_NAME} = {gamma_value}")
@@ -1066,8 +1066,8 @@ if __name__ == "__main__":
             plt.savefig(f"{EXPERIMENT_DIR}/_{gamma_range[i]}a-v-profiles_{info_experiment}.png")
 
             # fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHIGHT))
-            # w_varModel_list[i].vector.array = w_varModel_list[i].vector.array * parameters["model"]["thickness"]
-            # w_brnModel_list[i].vector.array = w_brnModel_list[i].vector.array * parameters["model"]["thickness"]
+            # w_varModel_list[i].x.petsc_vec.array = w_varModel_list[i].x.petsc_vec.array * parameters["model"]["thickness"]
+            # w_brnModel_list[i].x.petsc_vec.array = w_brnModel_list[i].x.petsc_vec.array * parameters["model"]["thickness"]
             # plt, data = plot_profile(w_varModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "b", "lw":5, "label": "VAR", "ls": "solid"}, fig=fig, subplotnumber=1)
             # if COMPARISON: plt, data = plot_profile(w_brnModel_list[i], points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "label": "BNRS17", "ls": "-"}, fig=fig, subplotnumber=1)
             # plt.xlabel("x [m]", fontsize=FONTSIZE)
@@ -1090,9 +1090,9 @@ if __name__ == "__main__":
     grid = pyvista.UnstructuredGrid(topology, cells, geometry)
 
     # PLOT PROFILES
-    grid.point_data["w_0.1"] = w_varModel_list[0].vector.array[dofs2_w]
-    grid.point_data["w_100"] = w_varModel_list[4].vector.array[dofs2_w]
-    grid.point_data["w_3000"] = w_varModel_list[-1].vector.array[dofs2_w]
+    grid.point_data["w_0.1"] = w_varModel_list[0].x.petsc_vec.array[dofs2_w]
+    grid.point_data["w_100"] = w_varModel_list[4].x.petsc_vec.array[dofs2_w]
+    grid.point_data["w_3000"] = w_varModel_list[-1].x.petsc_vec.array[dofs2_w]
     #grid.set_active_scalars("w")
     y0 = 0
     tolerance = 1e-2
@@ -1131,9 +1131,9 @@ if __name__ == "__main__":
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_w_comparison_y_{y0}_{info_experiment}.png", dpi=300)
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_w_comparison_y_{y0}_{info_experiment}.pdf", dpi=300)
 
-    grid.point_data["v_0.1"] = v_varModel_list[0].vector.array[dofs2_v]
-    grid.point_data["v_100"] = v_varModel_list[4].vector.array[dofs2_v]
-    grid.point_data["v_3000"] = v_varModel_list[-1].vector.array[dofs2_v]
+    grid.point_data["v_0.1"] = v_varModel_list[0].x.petsc_vec.array[dofs2_v]
+    grid.point_data["v_100"] = v_varModel_list[4].x.petsc_vec.array[dofs2_v]
+    grid.point_data["v_3000"] = v_varModel_list[-1].x.petsc_vec.array[dofs2_v]
     points = grid.points
     x_values = points[np.abs(points[:, 1] - y0) < tolerance, 0]  # Select x-coordinates at xi2 = 0
     v_0 = grid['v_0.1'][np.abs(points[:, 1] - y0) < tolerance]

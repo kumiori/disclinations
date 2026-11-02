@@ -172,8 +172,8 @@ V_w, dofs_w = Q.sub(1).collapse()
 v_exact.interpolate(function_v_exact)
 w_exact.interpolate(function_w_exact)
 
-v_exact_adim.vector.array.real[dofs_v] = v_exact.vector.array.real[dofs_v] / (E*(thickness**3))
-w_exact_adim.vector.array.real[dofs_w] = w_exact.vector.array.real[dofs_w] / thickness
+v_exact_adim.x.petsc_vec.array.real[dofs_v] = v_exact.x.petsc_vec.array.real[dofs_v] / (E*(thickness**3))
+w_exact_adim.x.petsc_vec.array.real[dofs_w] = w_exact.x.petsc_vec.array.real[dofs_w] / thickness
 
 def compute_exact_energy_dipole(v_exact):
     energy = 0.0
@@ -215,7 +215,7 @@ solver = SNESSolver(
     bcs=bcs,
     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
     prefix='plate_fvk_disclinations',
-    b0=b.vector,
+    b0=b.x.petsc_vec,
     monitor=monitor,
 )
 
@@ -290,15 +290,15 @@ wpp.name = "deflection"
 
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
-print("sup norm w_var: ", max(abs(wpp.vector.array.real[dofs_w])) )
-#vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
-#wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
+print("sup norm w_var: ", max(abs(wpp.x.petsc_vec.array.real[dofs_w])) )
+#vpp.x.petsc_vec.array.real[dofs_v] = E*(thickness**3) * vpp.x.petsc_vec.array.real[dofs_v]
+#wpp.x.petsc_vec.array.real[dofs_w] = thickness * wpp.x.petsc_vec.array.real[dofs_w]
 
 _pv_points = np.array([p[0] for p in disclinations])
 _pv_colours = np.array(-np.array(DISCLINATION_POWER_LIST))
 
 scalar_plot = plot_scalar(wpp, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w,
-                            lineproperties={'clim': [min(wpp.vector[:]), max(wpp.vector[:])]})
+                            lineproperties={'clim': [min(wpp.x.petsc_vec[:]), max(wpp.x.petsc_vec[:])]})
 plotter.add_points(
         _pv_points,
         scalars = _pv_colours,
@@ -308,7 +308,7 @@ plotter.add_points(
 )
 
 scalar_plot = plot_scalar(vpp, plotter, subplot=(0, 1), V_sub=V_v, dofs=dofs_v,
-                          lineproperties={'clim': [min(vpp.vector[:]), max(vpp.vector[:])]})
+                          lineproperties={'clim': [min(vpp.x.petsc_vec[:]), max(vpp.x.petsc_vec[:])]})
 plotter.add_points(
         _pv_points,
         scalars = _pv_colours,

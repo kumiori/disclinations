@@ -273,7 +273,7 @@ solver = SNESSolver(
     bcs=bcs,
     petsc_options=solver_parameters, #parameters.get("solvers").get("elasticity").get("snes"),
     prefix='plate_configuration',
-    b0=b.vector,
+    b0=b.x.petsc_vec,
     monitor=monitor,
 )
 
@@ -304,8 +304,8 @@ print("w_scale := h = ", model.w_scale)
 v_pp, w_pp = q.split()
 V_v, dofs_v = Q.sub(AIRY).collapse()
 V_w, dofs_w = Q.sub(TRANSVERSE).collapse()
-#v_pp.vector.array.real[dofs_v] = model.v_scale * v_pp.vector.array.real[dofs_v]
-#w_pp.vector.array.real[dofs_w] = model.w_scale * w_pp.vector.array.real[dofs_w]
+#v_pp.x.petsc_vec.array.real[dofs_v] = model.v_scale * v_pp.x.petsc_vec.array.real[dofs_v]
+#w_pp.x.petsc_vec.array.real[dofs_w] = model.w_scale * w_pp.x.petsc_vec.array.real[dofs_w]
 
 # COMPUTE STRESSES
 sigma_xx = dolfinx.fem.Function(V_v)

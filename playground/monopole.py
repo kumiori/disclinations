@@ -218,7 +218,7 @@ solver = SNESSolver(
     bcs=bcs,
     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
     prefix='plate_fvk_disclinations',
-    b0=b.vector,
+    b0=b.x.petsc_vec,
     monitor=monitor,
 )
 

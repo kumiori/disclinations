@@ -1,52 +1,20 @@
+"""ADIOS output smoke test, explicitly skipped without compiled support."""
+import pytest
 import dolfinx
-import ufl
+from dolfinx import fem, mesh, io
 from mpi4py import MPI
-from dolfinx.mesh import create_unit_square
-from dolfinx.fem import functionspace, form, assemble_scalar, Function
-from ufl import div, grad, dx
-import basix
-from pathlib import Path
-from dolfinx.io import VTXWriter
-import numpy as np
 
-# Step 1: Create a mesh (unit square domain)
-mesh = create_unit_square(MPI.COMM_WORLD, 10, 10)
-filename = Path('output', "mesh_vtx.bp")
 
-with VTXWriter(mesh.comm, filename, mesh) as f:
-    f.write(0.0)
-    mesh.geometry.x[:, 1] += 0.1
-    f.write(0.1)
-
-gdim = 2
-dtype = np.float32
-V = functionspace(mesh, ("DG", 2, (gdim,)))
-W = functionspace(mesh, ("DG", 2))
-
-v = Function(V)
-w = Function(W)
-bs = V.dofmap.index_map_bs
-
-w.interpolate(lambda x: x[0] + x[1])
-
-for c in [0, 1]:
-    dofs = np.asarray([V.dofmap.cell_dofs(c) * bs + b for b in range(bs)], dtype=np.int32)
-    v.x.array[dofs] = 0
-    w.x.array[W.dofmap.cell_dofs(c)] = 1
-v.x.scatter_forward()
-w.x.scatter_forward()
-
-print(v.vector[:])
-
-filename = Path('output', "fields_vtx.bp")
-
-writer = VTXWriter(mesh.comm, filename, [v, w])
-
-# Save twice and update geometry
-for t in [0.1, 1]:
-    mesh.geometry.x[:, :2] += 0.1
-    writer.write(t)
-
-writer.close()
-
-__import__('pdb').set_trace()
+def test_adios_output(tmp_path):
+    if not dolfinx.has_adios2:
+        pytest.skip("DOLFINx built without ADIOS2")
+    msh = mesh.create_unit_square(MPI.COMM_WORLD, 2, 2)
+    V = fem.functionspace(msh, ("Lagrange", 1))
+    u = fem.Function(V)
+    u.interpolate(lambda x: x[0] + x[1])
+    # Every MPI rank must open the same collective output path.
+    path = MPI.COMM_WORLD.bcast(
+        str(tmp_path / "fields.bp") if MPI.COMM_WORLD.rank == 0 else None, root=0
+    )
+    with io.VTXWriter(msh.comm, path, [u]) as writer:
+        writer.write(0.0)

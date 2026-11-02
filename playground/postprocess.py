@@ -70,8 +70,8 @@ read_timestep_data(h5_file_path, v, "v", timesteps[0])
 # read_timestep_data(h5_file_path, pxx, "Pxx", timesteps[0])
 
 
-w_norm = w.vector.norm()
-v_norm = v.vector.norm()
+w_norm = w.x.petsc_vec.norm()
+v_norm = v.x.petsc_vec.norm()
 
 print(f"Norm of w field: {w_norm:.4e}")
 print(f"Norm of v field: {v_norm:.4e}")

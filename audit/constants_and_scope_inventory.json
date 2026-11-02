@@ -1,0 +1,792 @@
+[
+  {
+    "path": "paper/Archive.zip!main.tex",
+    "line": 67,
+    "text": "$s \\in \\mathbb{R}$                                      & Frank angle                                            & rad             \\\\"
+  },
+  {
+    "path": "paper/Archive.zip!numerics.tex",
+    "line": 97,
+    "text": "Finally, the disclination strength given by the Frank angle, is fixed to $\\pm 1$, to qualitatively distinguish positive from negative induced membrane stresses, respectively corresponding to membrane tension and compression."
+  },
+  {
+    "path": "paper/Archive.zip!numerics.tex",
+    "line": 367,
+    "text": "We focus now our attention to the effect that the sign of a disclination has on the membrane deformation. Let us first fix the setting. $\\Omega \\equiv B_1(0)$ ($B_1(0)$ is the unit ball centered on the origin). Then $R = 1$. We also set $E = 10$GPa, $\\nu = 0.15$, $h = 0.05$m and $p_0$ equals to the plate's weight per unit area ($p_0 := - \\rho g h$ where $\\rho = 10^3$kg/m$^3$ and $g = 9.81$m/s is the gravity acceleration field). In the dimensionless setting we find: $\\pratio = 0.016$ and $a = 20$. We further consider a discrete distribution of four disclinations of equal Frank's angle $s$ to be specified later. Namely we set"
+  },
+  {
+    "path": "paper/Archive.zip!numerics.tex",
+    "line": 373,
+    "text": "\\subsubsection{Case 1: negative Frank's angle $s$}"
+  },
+  {
+    "path": "paper/Archive.zip!numerics.tex",
+    "line": 406,
+    "text": "\\subsubsection{Case 2: positive Frank's angle $s$}"
+  },
+  {
+    "path": "playground/adimensions.ipynb!cell1",
+    "line": 12,
+    "text": "where $E$ is the 3d Young's modulus and $D^*c_\\nu:=D=\\frac{E h^3}{12(1-\\nu^2)}$ is the bending modulus, $h$ is the thickness of the plate"
+  },
+  {
+    "path": "playground/adimensions.ipynb!cell11",
+    "line": 12,
+    "text": "where $E$ is the 3d Young's modulus and $D^*c_\\nu:=D=\\frac{E h^3}{12(1-\\nu^2)}$ is the bending modulus, $h$ is the thickness of the plate"
+  },
+  {
+    "path": "playground/analytic_fvk.ipynb!cell10",
+    "line": 16,
+    "text": "where $D = \\frac{Eh^3}{12(1-\\nu^2)}$ is the flexural rigidity of the plate, $p$ is the external pressure, and $[\\phi, w ]$ is the Monge-Amp\u00e8re term defined as:"
+  },
+  {
+    "path": "playground/experiment_00/experiment_00.py",
+    "line": 80,
+    "text": "_D = E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "playground/experiment_00/experiment_00.py",
+    "line": 81,
+    "text": "w_scale = np.sqrt(2 * _D / (E * thickness))"
+  },
+  {
+    "path": "playground/experiment_00/experiment_00.py",
+    "line": 82,
+    "text": "v_scale = _D"
+  },
+  {
+    "path": "playground/experiment_00/experiment_00.py",
+    "line": 85,
+    "text": "b_scale = (radius / thickness)**2"
+  },
+  {
+    "path": "playground/experiment_00/experiment_00.py",
+    "line": 137,
+    "text": "_v = _v * v_scale"
+  },
+  {
+    "path": "playground/experiment_00/experiment_00.py",
+    "line": 142,
+    "text": "return _w*w_scale"
+  },
+  {
+    "path": "playground/experiment_00/experiment_00.py",
+    "line": 164,
+    "text": "# print(b_scale)"
+  },
+  {
+    "path": "playground/experiment_00/experiment_00.py",
+    "line": 182,
+    "text": "b0=b_scale*b.x.petsc_vec,"
+  },
+  {
+    "path": "playground/experiment_01/experiment_01.py",
+    "line": 80,
+    "text": "_D = E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "playground/experiment_01/experiment_01.py",
+    "line": 81,
+    "text": "w_scale = np.sqrt(2 * _D / (E * thickness))"
+  },
+  {
+    "path": "playground/experiment_01/experiment_01.py",
+    "line": 82,
+    "text": "v_scale = _D"
+  },
+  {
+    "path": "playground/experiment_01/experiment_01.py",
+    "line": 85,
+    "text": "b_scale = (radius / thickness)**2"
+  },
+  {
+    "path": "playground/experiment_01/experiment_01.py",
+    "line": 149,
+    "text": "print(b_scale)"
+  },
+  {
+    "path": "playground/experiment_01/experiment_01.py",
+    "line": 167,
+    "text": "b0=b_scale*b.x.petsc_vec,"
+  },
+  {
+    "path": "playground/experiment_02/experiment_02.py",
+    "line": 80,
+    "text": "_D = E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "playground/experiment_02/experiment_02.py",
+    "line": 81,
+    "text": "w_scale = np.sqrt(2 * _D / (E * thickness))"
+  },
+  {
+    "path": "playground/experiment_02/experiment_02.py",
+    "line": 82,
+    "text": "v_scale = _D"
+  },
+  {
+    "path": "playground/experiment_02/experiment_02.py",
+    "line": 85,
+    "text": "b_scale = (radius / thickness)**2"
+  },
+  {
+    "path": "playground/experiment_02/experiment_02.py",
+    "line": 153,
+    "text": "print(b_scale)"
+  },
+  {
+    "path": "playground/experiment_02/experiment_02.py",
+    "line": 171,
+    "text": "b0=b_scale*b.x.petsc_vec,"
+  },
+  {
+    "path": "playground/monopole.py",
+    "line": 128,
+    "text": "_D = _E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "playground/monopole.py",
+    "line": 130,
+    "text": "w_scale = np.sqrt(2*_D/(_E*thickness))"
+  },
+  {
+    "path": "playground/monopole.py",
+    "line": 131,
+    "text": "v_scale = _D"
+  },
+  {
+    "path": "playground/monopole.py",
+    "line": 186,
+    "text": "return _v * v_scale"
+  },
+  {
+    "path": "playground/overview_experiments.tex",
+    "line": 138,
+    "text": "characterised by the Frank angle for kinematically incompatible loads,"
+  },
+  {
+    "path": "playground/postprocess.py",
+    "line": 97,
+    "text": "D = model.D"
+  },
+  {
+    "path": "playground/postprocess.py",
+    "line": 99,
+    "text": "Eh = model.E*model.t"
+  },
+  {
+    "path": "playground/postprocess.py",
+    "line": 100,
+    "text": "k_g = -D*(1-nu)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 45,
+    "text": "crackBR= model.geo.addLine(pRa, prM, tag=2)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 46,
+    "text": "crackTR= model.geo.addLine(prM, pRb, tag=3)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 51,
+    "text": "crackTL = model.geo.addLine(pLb, plM, tag=7)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 52,
+    "text": "crackBL = model.geo.addLine(plM, pLa, tag=8)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 55,
+    "text": "cloop1 = model.geo.addCurveLoop([crackTR, rightT, top, leftT, crackTL, crackBL, leftB, bottom, rightB, crackBR])"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 165,
+    "text": "crackTL = model.geo.addLine(pLb, plM, tag=7)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 166,
+    "text": "crackBL = model.geo.addLine(plM, pLa, tag=8)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 169,
+    "text": "cloop1 = model.geo.addCurveLoop([right, top, leftT, crackTL, crackBL, leftB, bottom])"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 356,
+    "text": "c1 = gmsh.model.geo.addCircleArc(p1, p0, p2)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 357,
+    "text": "c2 = gmsh.model.geo.addCircleArc(p2, p0, p3)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 361,
+    "text": "circle = model.geo.addCurveLoop([c1, c2, c3, c4])"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 368,
+    "text": "model.addPhysicalGroup(1, [c1,c2,c3,c4], tag=6)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 374,
+    "text": "#gmsh.model.mesh.field.setNumbers(field_id, \"EdgesList\", [c1, c2, c3, c4])"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 483,
+    "text": "c1 = model.geo.addCircleArc(p1, p0, p2)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 484,
+    "text": "c2 = model.geo.addCircleArc(p2, p0, p3)"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 487,
+    "text": "outer_circle = model.geo.addCurveLoop([c1, c2, c3, c4])"
+  },
+  {
+    "path": "src/disclinations/meshes/primitives.py",
+    "line": 515,
+    "text": "model.addPhysicalGroup(1, [c1, c2, c3, c4], tag=6)"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 83,
+    "text": "self.D = self.material.bending_stiffness"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 102,
+    "text": "D = self.D"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 104,
+    "text": "Eh = self.E * self.t"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 105,
+    "text": "k_g = -D * (1 - nu)"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 193,
+    "text": "Frank-angle sign. Points use the mesh coordinate units. Signs are retained"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 251,
+    "text": "# _D = params[\"model\"][\"D\"]"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 252,
+    "text": "_D = PlateMaterial(_E, nu, thickness).bending_stiffness"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 255,
+    "text": "w_scale = np.sqrt(2 * _D / (_E * thickness))"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 256,
+    "text": "v_scale = _D"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 260,
+    "text": "params[\"model\"][\"w_scale\"] = float(w_scale)"
+  },
+  {
+    "path": "src/disclinations/models/__init__.py",
+    "line": 261,
+    "text": "params[\"model\"][\"v_scale\"] = float(v_scale)"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 38,
+    "text": "self.c_nu = self.material.dimensionless_bending"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 42,
+    "text": "self.v_scale = self.E * (self.t**3)"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 43,
+    "text": "self.w_scale = self.t"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 100,
+    "text": "bending = self.c_nu / 2 * inner(hessian(w), hessian(w)) * dx"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 109,
+    "text": "self.c_nu * self.dg1(w)"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 113,
+    "text": "+ self.c_nu * self.bc1(w)"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 162,
+    "text": "self.c_nu * dg1_computed,"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 164,
+    "text": "self.c_nu * bc1_computed,"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 234,
+    "text": "self.c_nu * self.dg1(w)"
+  },
+  {
+    "path": "src/disclinations/models/adimensional.py",
+    "line": 238,
+    "text": "+ self.c_nu * self.bc1(w)"
+  },
+  {
+    "path": "src/disclinations/models/material.py",
+    "line": 22,
+    "text": "\"\"\"D = E t\u00b3/[12(1-nu\u00b2)] [N m].\"\"\""
+  },
+  {
+    "path": "src/disclinations/models/material.py",
+    "line": 27,
+    "text": "\"\"\"1/(E t) [m/N], for an Airy potential of stress resultants.\"\"\""
+  },
+  {
+    "path": "src/disclinations/models/material.py",
+    "line": 28,
+    "text": "return 1 / (self.E * self.thickness)"
+  },
+  {
+    "path": "src/disclinations/models/material.py",
+    "line": 34,
+    "text": "def energy_scale(self, radius):"
+  },
+  {
+    "path": "src/disclinations/test/params_with_scaling.yml",
+    "line": 23,
+    "text": "v_scale: 0.08333333333333333"
+  },
+  {
+    "path": "src/disclinations/test/params_with_scaling.yml",
+    "line": 24,
+    "text": "w_scale: 0.408248290463863"
+  },
+  {
+    "path": "src/disclinations/test_branch/configuration.py",
+    "line": 285,
+    "text": "energy_scale = Eyoung * (thickness**3) / (beta**2)"
+  },
+  {
+    "path": "src/disclinations/test_branch/configuration.py",
+    "line": 287,
+    "text": "\"bending\": energy_scale*model.energy(state)[1],"
+  },
+  {
+    "path": "src/disclinations/test_branch/configuration.py",
+    "line": 288,
+    "text": "\"membrane\": energy_scale*model.energy(state)[2],"
+  },
+  {
+    "path": "src/disclinations/test_branch/configuration.py",
+    "line": 289,
+    "text": "\"coupling\": energy_scale*model.energy(state)[3],"
+  },
+  {
+    "path": "src/disclinations/test_branch/configuration.py",
+    "line": 302,
+    "text": "print(\"v_scale := Eh^3 = \", model.v_scale)"
+  },
+  {
+    "path": "src/disclinations/test_branch/configuration.py",
+    "line": 303,
+    "text": "print(\"w_scale := h = \", model.w_scale)"
+  },
+  {
+    "path": "src/disclinations/test_branch/configuration.py",
+    "line": 307,
+    "text": "#v_pp.x.petsc_vec.array.real[dofs_v] = model.v_scale * v_pp.x.petsc_vec.array.real[dofs_v]"
+  },
+  {
+    "path": "src/disclinations/test_branch/configuration.py",
+    "line": 308,
+    "text": "#w_pp.x.petsc_vec.array.real[dofs_w] = model.w_scale * w_pp.x.petsc_vec.array.real[dofs_w]"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_beta.py",
+    "line": 330,
+    "text": "c_nu =  1/(12*(1-nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_beta.py",
+    "line": 452,
+    "text": "kBendingEngList = [( (f0**2) * np.pi * (R**6) ) / ( 384 * c_nu ) for a in beta_range]"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_gamma.py",
+    "line": 327,
+    "text": "c_nu =  1/(12*(1-nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_gamma.py",
+    "line": 473,
+    "text": "kBendingEngList = [( ( ( gamma* (beta)**4 )**2) * np.pi * (R**6) ) / ( 384 * c_nu ) for gamma in gamma_range]"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_gamma.py",
+    "line": 780,
+    "text": "c_nu = 1/(12*(1-nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_gamma.py",
+    "line": 785,
+    "text": "wHessLap_var_list.append( (2/c_nu)*experimental_data[\"Bending Erg (Var)\"][i] - (experimental_data[\"Hessian L2norm w (Variational)\"][i])**2 )"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_gamma.py",
+    "line": 786,
+    "text": "wHessLap_brn_list.append( (2/c_nu)*experimental_data[\"Bending Erg (Brn)\"][i] - (experimental_data[\"Hessian L2norm w (Brenner)\"][i])**2 )"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_gamma.py",
+    "line": 787,
+    "text": "#wHessLap_car_list.append( (2/c_nu)*experimental_data[\"Bending Erg (Car)\"][i] - (experimental_data[\"Hessian L2norm w (Carstensen)\"][i])**2 )"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_gamma.py",
+    "line": 820,
+    "text": "wHessLapPercErr_var_list.append( 100 * wHessLap_var_list[i] / ( (2/c_nu)*experimental_data[\"Bending Erg (Var)\"][i] ) )"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_gamma.py",
+    "line": 821,
+    "text": "wHessLapPercErr_brn_list.append( 100 * wHessLap_brn_list[i]  / ( (2/c_nu)*experimental_data[\"Bending Erg (Brn)\"][i]  ) )"
+  },
+  {
+    "path": "src/disclinations/test_branch/experiment_parametric_gamma.py",
+    "line": 822,
+    "text": "#wHessLap_car_list.append( (2/c_nu)*experimental_data[\"Bending Erg (Car)\"][i] - (experimental_data[\"Hessian L2norm w (Carstensen)\"][i])**2 )"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem.py",
+    "line": 193,
+    "text": "# _plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={\"lw\":7, \"label\": \"BNRS17\", \"ls\": \":\", \"c\": \"C1\"}, fig=fig, subplotnumber=1) #\"c\": \"r\","
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem.py",
+    "line": 194,
+    "text": "# _plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={\"lw\":7, \"label\": \"CMN18\", \"ls\": \"--\", \"c\": \"C2\"}, fig=fig, subplotnumber=1) #\"c\": \"g\","
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem.py",
+    "line": 202,
+    "text": "for _w, label, color in zip([w_brn, w_car], [\"BNRS17\", \"CMN18\"], [\"C1\", \"C2\"]):"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem.py",
+    "line": 230,
+    "text": "# _plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={\"lw\":7, \"label\": \"BNRS17\", \"ls\": \":\", \"c\": \"C1\"}, fig=fig, subplotnumber=1) #\"c\": \"r\","
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem.py",
+    "line": 231,
+    "text": "# _plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={\"lw\":7, \"label\": \"CMN18\", \"ls\": \"--\", \"c\": \"C2\"}, fig=fig, subplotnumber=1) #\"c\": \"g\","
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem.py",
+    "line": 253,
+    "text": "for _v, label, color in zip([v_brn, v_car], [\"BNRS17\", \"CMN18\"], [\"C1\", \"C2\"]):"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem_backup.py",
+    "line": 219,
+    "text": "_plt, data = plot_profile(w_brn, points, None, subplot=(1, 1), lineproperties={\"lw\":7, \"label\": \"BNRS17\", \"ls\": \":\", \"c\": \"C1\"}, fig=fig, subplotnumber=1) #\"c\": \"r\","
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem_backup.py",
+    "line": 220,
+    "text": "_plt, data = plot_profile(w_car, points, None, subplot=(1, 1), lineproperties={\"lw\":7, \"label\": \"CMN18\", \"ls\": \"--\", \"c\": \"C2\"}, fig=fig, subplotnumber=1) #\"c\": \"g\","
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem_backup.py",
+    "line": 241,
+    "text": "_plt, data = plot_profile(v_brn, points, None, subplot=(1, 1), lineproperties={\"lw\":7, \"label\": \"BNRS17\", \"ls\": \":\", \"c\": \"C1\"}, fig=fig, subplotnumber=1) #\"c\": \"r\","
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_fem_backup.py",
+    "line": 242,
+    "text": "_plt, data = plot_profile(v_car, points, None, subplot=(1, 1), lineproperties={\"lw\":7, \"label\": \"CMN18\", \"ls\": \"--\", \"c\": \"C2\"}, fig=fig, subplotnumber=1) #\"c\": \"g\","
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_BR_adim.py",
+    "line": 104,
+    "text": "D = E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_BR_adim.py",
+    "line": 203,
+    "text": "energy_dimension = model.material.energy_scale(a)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_BR_adim.py",
+    "line": 204,
+    "text": "print(\"energy_dimension = \", energy_dimension)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_BR_adim.py",
+    "line": 205,
+    "text": "energy_components = {\"bending\": energy_dimension*model.energy(state)[1],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_BR_adim.py",
+    "line": 206,
+    "text": "\"membrane\": energy_dimension*model.energy(state)[2],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_BR_adim.py",
+    "line": 207,
+    "text": "\"coupling\": energy_dimension*model.energy(state)[3]}"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_CA_adim.py",
+    "line": 105,
+    "text": "D = E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_CA_adim.py",
+    "line": 204,
+    "text": "energy_dimension = model.material.energy_scale(a)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_CA_adim.py",
+    "line": 205,
+    "text": "print(\"energy_dimension = \", energy_dimension)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_CA_adim.py",
+    "line": 206,
+    "text": "energy_components = {\"bending\": energy_dimension*model.energy(state)[1],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_CA_adim.py",
+    "line": 207,
+    "text": "\"membrane\": energy_dimension*model.energy(state)[2],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_CA_adim.py",
+    "line": 208,
+    "text": "\"coupling\": energy_dimension*model.energy(state)[3]}"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_adim.py",
+    "line": 111,
+    "text": "D = E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_adim.py",
+    "line": 221,
+    "text": "energy_dimension = model.material.energy_scale(a)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_adim.py",
+    "line": 222,
+    "text": "print(\"energy_dimension = \", energy_dimension)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_adim.py",
+    "line": 224,
+    "text": "\"bending\": energy_dimension*model.compute_bending_energy(state, COMM),"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_adim.py",
+    "line": 225,
+    "text": "\"membrane\": energy_dimension*model.compute_membrane_energy(state, COMM),"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_adim.py",
+    "line": 226,
+    "text": "\"coupling\": energy_dimension*model.compute_coupling_energy(state, COMM),"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_parametric.py",
+    "line": 104,
+    "text": "_D = _E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_parametric.py",
+    "line": 162,
+    "text": "v_scale = parameters[\"model\"][\"E\"] * (parameters[\"model\"][\"thickness\"]**3)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_parametric.py",
+    "line": 163,
+    "text": "w_scale = parameters[\"model\"][\"thickness\"]"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_parametric.py",
+    "line": 181,
+    "text": "return v_scale*v_hessianNrm, w_scale*w_hessianNrm, v_scale*v_Nrm, w_scale*w_Nrm, convergence_id"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_parametric.py",
+    "line": 191,
+    "text": "return parameters[\"model\"][\"v_scale\"]* ( - (1/12) * (1 - x[0]**2 - x[1]**2)**2  - (1/18) * (1 - x[0]**2 - x[1]**2)**3 - (1/24) * (1 - x[0]**2 - x[1]**2)**4 )"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test1_parametric.py",
+    "line": 193,
+    "text": "def _w_exact(x): return parameters[\"model\"][\"w_scale\"] * (1 - x[0]**2 - x[1]**2)**2"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_BR_adim.py",
+    "line": 89,
+    "text": "_D = E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_BR_adim.py",
+    "line": 94,
+    "text": "v_scale = _E * thickness**3"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_BR_adim.py",
+    "line": 95,
+    "text": "w_scale = thickness"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_BR_adim.py",
+    "line": 96,
+    "text": "energy_scale = (_E*thickness**5)/(parameters[\"geometry\"][\"radius\"]**2)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_BR_adim.py",
+    "line": 214,
+    "text": "\"total\": energy_scale*model.energy(state)[0],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_BR_adim.py",
+    "line": 215,
+    "text": "\"bending\": energy_scale*model.energy(state)[1],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_BR_adim.py",
+    "line": 216,
+    "text": "\"membrane\": energy_scale*model.energy(state)[2],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_BR_adim.py",
+    "line": 217,
+    "text": "\"coupling\": energy_scale*model.energy(state)[3],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_CA_adim.py",
+    "line": 89,
+    "text": "_D = E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_CA_adim.py",
+    "line": 94,
+    "text": "v_scale = _E * thickness**3"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_CA_adim.py",
+    "line": 95,
+    "text": "w_scale = thickness"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_CA_adim.py",
+    "line": 96,
+    "text": "energy_scale = (_E*thickness**5)/(parameters[\"geometry\"][\"radius\"]**2)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_CA_adim.py",
+    "line": 229,
+    "text": "\"total\": energy_scale*model.energy(state)[0],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_CA_adim.py",
+    "line": 230,
+    "text": "\"bending\": energy_scale*model.energy(state)[1],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_CA_adim.py",
+    "line": 231,
+    "text": "\"membrane\": energy_scale*model.energy(state)[2],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_CA_adim.py",
+    "line": 232,
+    "text": "\"coupling\": energy_scale*model.energy(state)[3],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_adim.py",
+    "line": 96,
+    "text": "_D = E * thickness**3 / (12 * (1 - nu**2))"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_adim.py",
+    "line": 101,
+    "text": "v_scale = _E * thickness**3"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_adim.py",
+    "line": 102,
+    "text": "w_scale = thickness"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_adim.py",
+    "line": 103,
+    "text": "energy_scale = (_E*thickness**5)/(parameters[\"geometry\"][\"radius\"]**2)"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_adim.py",
+    "line": 242,
+    "text": "\"total\": energy_scale*model.energy(state)[0],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_adim.py",
+    "line": 243,
+    "text": "\"bending\": energy_scale*model.energy(state)[1],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_adim.py",
+    "line": 244,
+    "text": "\"membrane\": energy_scale*model.energy(state)[2],"
+  },
+  {
+    "path": "src/disclinations/test_branch/validation_test2_adim.py",
+    "line": 245,
+    "text": "\"coupling\": energy_scale*model.energy(state)[3],"
+  },
+  {
+    "path": "src/disclinations/utils/la.py",
+    "line": 56,
+    "text": "This routine defines numerical source signs, not a Burgers convention."
+  }
+]

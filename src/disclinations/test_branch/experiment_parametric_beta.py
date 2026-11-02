@@ -151,8 +151,8 @@ def run_experiment(FEMmodel, costantData, parameters, q_ig):
 
     # FUNCTION SPACE
     q = dolfinx.fem.Function(Q)
-    #q.vector.array = copy.deepcopy(q_ig.vector.array)
-    #q.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+    #q.x.petsc_vec.array = copy.deepcopy(q_ig.x.petsc_vec.array)
+    #q.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
     v, w = ufl.split(q)
     state = {"v": v, "w": w}
 
@@ -211,7 +211,7 @@ def run_experiment(FEMmodel, costantData, parameters, q_ig):
         bounds=None,
         petsc_options=solver_parameters,
         prefix="plate_fvk",
-        b0=b.vector,
+        b0=b.x.petsc_vec,
     )
 
     # run solver
@@ -417,13 +417,13 @@ if __name__ == "__main__":
             sol_q_list.append(data_var["q"])
 
             # Update the initial guess
-            #if i == 0: q_ig.vector.array = data_var[7].vector.array
-            #else: q_ig.vector.array = data_var[7].vector.array * p_range[i]/p_range[i-1]
-            #print(" q_ig.vector.norm(PETSc.NormType.NORM_2): ",  q_ig.vector.norm(PETSc.NormType.NORM_2))
-            #print(" data_var[7].vector.norm(PETSc.NormType.NORM_2): ",  data_var[7].vector.norm(PETSc.NormType.NORM_2) )
+            #if i == 0: q_ig.x.petsc_vec.array = data_var[7].x.petsc_vec.array
+            #else: q_ig.x.petsc_vec.array = data_var[7].x.petsc_vec.array * p_range[i]/p_range[i-1]
+            #print(" q_ig.x.petsc_vec.norm(PETSc.NormType.NORM_2): ",  q_ig.x.petsc_vec.norm(PETSc.NormType.NORM_2))
+            #print(" data_var[7].x.petsc_vec.norm(PETSc.NormType.NORM_2): ",  data_var[7].x.petsc_vec.norm(PETSc.NormType.NORM_2) )
             #pdb.set_trace()
-            #q_ig.vector.array = copy.deepcopy(data_var["q"].vector.array)
-            #q_ig.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+            #q_ig.x.petsc_vec.array = copy.deepcopy(data_var["q"].x.petsc_vec.array)
+            #q_ig.x.petsc_vec.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
 
         else:
             print(f"At least one of the three FEM models did not converged for {PARAMETER_NAME} = {param}")
@@ -957,7 +957,7 @@ if __name__ == "__main__":
             plt.savefig(f"{EXPERIMENT_DIR}/_{beta_range[i]}a-w-profiles_{info_experiment}.pdf")
 
             # fig, axes = plt.subplots(1, 1, figsize=(FIGWIDTH, FIGHEIGHT))
-            # sol_w.vector.array = sol_w.vector.array / beta_range[i]
+            # sol_w.x.petsc_vec.array = sol_w.x.petsc_vec.array / beta_range[i]
             # plt, data = plot_profile(sol_w, points, None, subplot=(1, 1), lineproperties={"c": "r", "lw":5, "ls": "solid"}, fig=fig, subplotnumber=1)
             # plt.xlabel("x [m]", fontsize=FONTSIZE)
             # plt.ylabel("Transverse displacement [m]", fontsize=FONTSIZE)
@@ -1045,8 +1045,8 @@ if __name__ == "__main__":
     grid = pyvista.UnstructuredGrid(topology, cells, geometry)
 
     # PLOT PROFILES
-    grid.point_data["w_1"] = sol_w_list[0].vector.array[dofs2_w]
-    grid.point_data["w_2"] = sol_w_list[-1].vector.array[dofs2_w]
+    grid.point_data["w_1"] = sol_w_list[0].x.petsc_vec.array[dofs2_w]
+    grid.point_data["w_2"] = sol_w_list[-1].x.petsc_vec.array[dofs2_w]
     y0 = 0
     tolerance = 1e-2
     points = grid.points
@@ -1080,8 +1080,8 @@ if __name__ == "__main__":
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_w_comparison_y_{y0}_{info_experiment}.png", dpi=300)
     plt.savefig(f"{EXPERIMENT_DIR}/profiles_w_comparison_y_{y0}_{info_experiment}.pdf", dpi=300)
 
-    grid.point_data["v_1"] = sol_v_list[0].vector.array[dofs2_v]
-    grid.point_data["v_2"] = sol_v_list[-1].vector.array[dofs2_v]
+    grid.point_data["v_1"] = sol_v_list[0].x.petsc_vec.array[dofs2_v]
+    grid.point_data["v_2"] = sol_v_list[-1].x.petsc_vec.array[dofs2_v]
     points = grid.points
     x_values = points[np.abs(points[:, 1] - y0) < tolerance, 0]  # Select x-coordinates at y = 0
     v_1 = grid['v_1'][np.abs(points[:, 1] - y0) < tolerance]

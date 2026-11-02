@@ -56,7 +56,7 @@ def plot_vector(u, plotter, subplot=None, scale=1.):
     num_dofs_local = u.function_space.dofmap.index_map.size_local
     geometry = u.function_space.tabulate_dof_coordinates()[:num_dofs_local]
     values = np.zeros((V.dofmap.index_map.size_local, 3), dtype=np.float64)
-    values[:, : mesh.geometry.dim] = u.vector.array.real.reshape(
+    values[:, : mesh.geometry.dim] = u.x.petsc_vec.array.real.reshape(
         V.dofmap.index_map.size_local, V.dofmap.index_map_bs
     )
     grid = pyvista.UnstructuredGrid(topology, cell_types, geometry)
@@ -111,9 +111,9 @@ def plot_scalar(u, plotter, subplot=None, lineproperties={}, V_sub=None, dofs=No
 
     # plotter.subplot(0, 0)
     if dofs:
-        values = u.vector.array.real[dofs]
+        values = u.x.petsc_vec.array.real[dofs]
     else:
-        values = u.vector.array.real.reshape(
+        values = u.x.petsc_vec.array.real.reshape(
             V.dofmap.index_map.size_local, V.dofmap.index_map_bs)
     grid.point_data["u"] = values
     grid.set_active_scalars("u")

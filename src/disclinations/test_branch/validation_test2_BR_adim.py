@@ -202,7 +202,7 @@ solver = SNESSolver(
     bcs=bcs,
     petsc_options=parameters.get("solvers").get("elasticity").get("snes"),
     prefix='plate_fvk_disclinations',
-    b0=b.vector,
+    b0=b.x.petsc_vec,
     monitor=monitor,
 )
 
@@ -262,15 +262,15 @@ wpp.name = "deflection"
 
 V_v, dofs_v = Q.sub(0).collapse()
 V_w, dofs_w = Q.sub(1).collapse()
-print("sup norm w_brn: ", max(abs(wpp.vector.array.real[dofs_w])) )
-#vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
-#wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
+print("sup norm w_brn: ", max(abs(wpp.x.petsc_vec.array.real[dofs_w])) )
+#vpp.x.petsc_vec.array.real[dofs_v] = E*(thickness**3) * vpp.x.petsc_vec.array.real[dofs_v]
+#wpp.x.petsc_vec.array.real[dofs_w] = thickness * wpp.x.petsc_vec.array.real[dofs_w]
 
 _pv_points = np.array([p[0] for p in disclinations])
 _pv_colours = np.array(-np.array(DISCLINATION_POWER_LIST))
 
 scalar_plot = plot_scalar(wpp, plotter, subplot=(0, 0), V_sub=V_w, dofs=dofs_w,
-                            lineproperties={'clim': [min(wpp.vector[:]), max(wpp.vector[:])]})
+                            lineproperties={'clim': [min(wpp.x.petsc_vec[:]), max(wpp.x.petsc_vec[:])]})
 plotter.add_points(
         _pv_points,
         scalars = _pv_colours,
@@ -279,7 +279,7 @@ plotter.add_points(
         point_size=15.0
 )
 
-scalar_plot = plot_scalar(vpp, plotter, subplot=(0, 1), V_sub=V_v, dofs=dofs_v, lineproperties={'clim': [min(vpp.vector[:]), max(vpp.vector[:])]})
+scalar_plot = plot_scalar(vpp, plotter, subplot=(0, 1), V_sub=V_v, dofs=dofs_v, lineproperties={'clim': [min(vpp.x.petsc_vec[:]), max(vpp.x.petsc_vec[:])]})
 plotter.add_points(_pv_points, scalars = _pv_colours, style = 'points',  render_points_as_spheres=True, point_size=15.0 )
 
 plotter.subplot(0, 2)

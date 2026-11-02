@@ -1,0 +1,9 @@
+Processing /Users/kumiori3/Documents/WIP/Nature/disclinations
+  Preparing metadata (pyproject.toml): started
+  Preparing metadata (pyproject.toml): finished with status 'done'
+Building wheels for collected packages: disclinations
+  Building wheel for disclinations (pyproject.toml): started
+  Building wheel for disclinations (pyproject.toml): finished with status 'done'
+  Created wheel for disclinations: filename=disclinations-2024.0.2-py3-none-any.whl size=156863 sha256=37ed76592a14c59da6f5223dacb39804975a8ac07a4550011123e776f1635a34
+  Stored in directory: /private/var/folders/ht/z8sb7wsd1bg0qpmyyfyq2rcm0000gr/T/pip-ephem-wheel-cache-epmr8r2b/wheels/c1/f0/e4/a7b31c92f14fcbc23c41b6f57d13d5a767054deaba89675cd4
+Successfully built disclinations

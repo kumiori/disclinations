@@ -166,8 +166,8 @@ V_w, dofs_w = Q.sub(1).collapse()
 
 v_exact.interpolate(v_exact_function)
 w_exact.interpolate(w_exact_function)
-v_exact_adim.vector.array.real[dofs_v] = v_exact.vector.array.real[dofs_v] / (E*(thickness**3))
-w_exact_adim.vector.array.real[dofs_w] = w_exact.vector.array.real[dofs_w] / thickness
+v_exact_adim.x.petsc_vec.array.real[dofs_v] = v_exact.x.petsc_vec.array.real[dofs_v] / (E*(thickness**3))
+w_exact_adim.x.petsc_vec.array.real[dofs_w] = w_exact.x.petsc_vec.array.real[dofs_w] / thickness
 
 exact_energy = model.energy(state_exact)[0]
 ex_bending_energy = exact_bending_energy(v_exact, w_exact)
@@ -218,7 +218,7 @@ solver = SNESSolver(
 solver.solve()
 
 # COMPUTE DIMENSIONAL ENERGY
-energy_dimension = E* (thickness**3) / (a**2)
+energy_dimension = model.material.energy_scale(a)
 print("energy_dimension = ", energy_dimension)
 energy_terms = {
         "bending": energy_dimension*model.compute_bending_energy(state, COMM),
@@ -271,8 +271,8 @@ fig.savefig(f"{OUTDIR}/mesh.png")
 # Plot the profiles
 pyvista.OFF_SCREEN = True
 
-#vpp.vector.array.real[dofs_v] = E*(thickness**3) * vpp.vector.array.real[dofs_v]
-#wpp.vector.array.real[dofs_w] = thickness * wpp.vector.array.real[dofs_w]
+#vpp.x.petsc_vec.array.real[dofs_v] = E*(thickness**3) * vpp.x.petsc_vec.array.real[dofs_v]
+#wpp.x.petsc_vec.array.real[dofs_w] = thickness * wpp.x.petsc_vec.array.real[dofs_w]
 
 plotter = pyvista.Plotter(title="Displacement", window_size=[1200, 600], shape=(2, 2) )
 

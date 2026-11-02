@@ -1,66 +1,66 @@
+"""Collective scalar sampling with coordinates kept aligned with their values."""
 import numpy as np
 import dolfinx
-from dolfinx import mesh, fem
-from mpi4py import MPI
+
 
 def get_datapoints(u, points):
-    import dolfinx.geometry
-    mesh = u.function_space.mesh
-    cells = []
-    bb_tree = dolfinx.geometry.bb_tree(mesh, mesh.topology.dim)
-    points_on_proc = []
-    cell_candidates = dolfinx.geometry.compute_collisions_points(bb_tree, points.T)
-    colliding_cells = dolfinx.geometry.compute_colliding_cells(
-        mesh, cell_candidates, points.T
+    """Return local owned sample coordinates/values for common (3,N) points.
+
+    Collective on the function's mesh communicator. The common point list is
+    routed from rank zero to avoid duplicate samples on partition interfaces.
+    Points outside the mesh are omitted. Outputs have shapes (M,3), (M,1).
+    """
+    msh = u.function_space.mesh
+    points = np.asarray(points, dtype=msh.geometry.x.dtype)
+    if points.ndim != 2 or points.shape[0] != 3 or u.ufl_shape:
+        raise ValueError("Require scalar u and points with shape (3,N)")
+    source = (
+        np.ascontiguousarray(points.T)
+        if msh.comm.rank == 0
+        else np.empty((0, 3), dtype=points.dtype)
     )
-    for i, point in enumerate(points.T):
-        if len(colliding_cells.links(i)) > 0:
-            points_on_proc.append(point)
-            cells.append(colliding_cells.links(i)[0])
+    data = dolfinx.cpp.geometry.determine_point_ownership(msh._cpp_object, source, 1e-8)
+    owned = np.asarray(data.dest_points).reshape(-1, 3)
+    cells = np.asarray(data.dest_cells, dtype=np.int32)
+    values = u.eval(owned, cells).reshape(-1, 1)
+    return owned, values
 
-    points_on_proc = np.array(points_on_proc, dtype=np.float64)
-    u_values = u.eval(points_on_proc, cells)
 
-    return points_on_proc, u_values
+def sample_function(v, radius, num_points=1001):
+    """Return global x,y,value lists sampled on an open disk of given radius.
 
-def sample_function(v, radius):
+    Samples outside the actual FE domain are omitted, with no coordinate/value
+    misalignment. MPI results are combined and sorted on every rank. radius is
+    in the mesh's coordinate units; v is scalar. num_points controls both axes.
     """
-    Identifier: sample_function
-    Parametrs: dolfinx.fem.function.Function, number
-    Return values: list, list, list
-    Description: The function takes in input a Function object and samples it on the ball of radius radius
-    """
-    num_points0 = 1001
-    x_list = []
-    y_list = []
-    z_list = []
-    tol = 1e-2
-    y_range = np.linspace(-radius+tol, radius-tol, num_points0)
-    for y in y_range:
-        choord = 2*radius - 2 * np.sqrt((radius)**2 - y**2)
-        #num_points = np.floor( num_points0 * (chood / (2*radius)) )
-        num_points = num_points0
-        x_range = [-np.sqrt(radius-y**2)+tol, np.sqrt(radius-y**2)-tol]
-        x_samples = np.linspace(x_range[0], x_range[1], num_points)
-        y_samples = np.linspace(y, y, num_points)
-        points = np.zeros((3, num_points))
-        points[0] = x_samples
-        points[1] = y_samples
-        points_on_proc, v_values = get_datapoints(v, points)
-        points[2] = v_values.flatten()
-        x_list += points[0].ravel().tolist()
-        y_list += points[1].ravel().tolist()
-        z_list += points[2].ravel().tolist()
-    return x_list, y_list, z_list
+    if (
+        not np.isfinite(radius)
+        or radius <= 0
+        or num_points < 2
+        or int(num_points) != num_points
+    ):
+        raise ValueError("Require positive finite radius and integer num_points>=2")
+    tol = min(0.01, 0.001 * radius)
+    rows = []
+    for y in np.linspace(-radius + tol, radius - tol, int(num_points)):
+        half_chord = np.sqrt(radius**2 - y**2)
+        inset = min(tol, 0.1 * half_chord)
+        x = np.linspace(-half_chord + inset, half_chord - inset, int(num_points))
+        rows.append(np.vstack([x, np.full_like(x, y), np.zeros_like(x)]))
+    points = np.concatenate(rows, axis=1)
+    local, values = get_datapoints(v, points)
+    pieces = v.function_space.mesh.comm.allgather(
+        np.column_stack([local[:, :2], values])
+    )
+    samples = np.concatenate(pieces, axis=0)
+    samples = samples[np.lexsort((samples[:, 0], samples[:, 1]))]
+    return tuple(samples[:, i].tolist() for i in range(3))
+
 
 def interpolate_sample(x_list, y_list, z_list, radius):
-    """
-    Identifier: interpolate_sample
-    Parametrs: list, list, list, number
-    Return values: numpy array, numpy array, numpy array
-    Description: The function takes in input three Pyhton lists representing the x, y coordinates and the heigth of a function v(x,y) and returns a cubic interpolation of the points
-    """
+    """Return cubic interpolation on a 500² Cartesian grid; outside is NaN."""
     from scipy.interpolate import griddata
-    grid_x, grid_y = np.mgrid[-radius:radius:500j, -radius:radius:500j]  # 500x500 grid for high resolution
-    grid_z = griddata((x_list, y_list), z_list, (grid_x, grid_y), method='cubic')
+
+    grid_x, grid_y = np.mgrid[-radius:radius:500j, -radius:radius:500j]
+    grid_z = griddata((x_list, y_list), z_list, (grid_x, grid_y), method="cubic")
     return grid_x, grid_y, grid_z
