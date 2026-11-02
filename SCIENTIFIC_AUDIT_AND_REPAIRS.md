@@ -8,10 +8,11 @@ research files, not an assumed implementation matching the mission description.
 The two outputs are this report and the versioned repaired project containing
 source, configurations, tests, mathematical documentation, reproducible example
 and evidence. The available **plate-code repairs are verified in their stated
-cases**. The broader mission is **not scientifically complete**: the requested
-core-regularised linear dislocation/internal-crack solver and its scattering
-study are absent. The missing source/data question was raised during work;
-no replacement model has been invented to close it.
+cases**. The user confirmed that the core-regularised implementation lives
+elsewhere and instructed this audit to cover the current repository only.
+That separate implementation and its scattering study are outside the agreed
+scope, not blockers for delivery. Scientific and reproducibility limits of
+this repository remain explicit below; no replacement model is introduced.
 
 Incoming branch `final-figures`, HEAD `6e64d61`; pre-audit checkpoint
 `71e11e4d43174d26149130e97bd98b2f9635e09e` contains all supplied tracked edits and
@@ -343,24 +344,23 @@ to the specific test/evidence stated, not to every historic numerical output.
 | Associated test | `tests/test_postprocess_cache.py::test_mesh_cache_preserves_radius_and_tags`, serial and MPI. |
 | Numerical consequences | A radius2 request now generates area≈4π rather than≈π. Cached and freshly generated meshes preserve equivalent measurable tags. This repair changes legacy runs that unintentionally relied on the forced unit radius. |
 
-## Modelling choices, unresolved inconsistencies and numerical limits
+## Scope decisions, modelling choices and numerical limits
 
-### U01 — critical: requested linear defect/crack model is missing
+### U01 — confirmed scope exclusion: separate linear defect/crack model
 
-**Location/original:** repository-wide current-tree inventory; production classes
-are FvK plates, meshing, utilities and SNES. **Problem/evidence:** no Burgers
-representation, excluded-core defect loading, fundamental-cell basis solver,
-`LinearProblem`, distance sweep, quoted Hessian-statistic energy, or internal
-crack bilinear term occurs in the inspected current-tree code. Notebook source
-and the paper archive do not supply it. **Correct formulation:** depends on the
-missing model's incompatibility sign, plane stress/strain choice, Airy units,
-core/topological constraints and boundary loads. **Repair:** none guessed.
-**Associated tests:** scope inventory only; this cannot numerically verify absent
-code. **Numerical consequences:** no claim about dislocation or core/crack
-energy-distance curves is justified. Required next input: repository path or
-branch containing that solver, its exact configuration and raw sweep data.
-Other Git branch names were inventoried but their implementations were not
-silently substituted for the supplied current tree.
+**Location/evidence:** the current-tree inventory contains FvK plates, meshing,
+utilities and SNES, without the mission's Burgers-vector representation,
+excluded-core defect loading, fundamental-cell solver, distance sweep, or
+internal crack bilinear form. The user confirmed that the core-regularised
+implementation is elsewhere and requested work on this repository only.
+**Classification:** scope decision, not a defect or delivery blocker.
+**Action:** retain the current plate model and its verified repairs; do not
+import a different branch or invent replacement defect physics.
+**Associated tests:** current-repository verification in `audit/RESULTS.md`.
+**Numerical consequences:** the delivered results apply to this plate code.
+No repository path or external dataset is required to deliver the agreed scope;
+results for the separate solver are not claimed. The U01 identifier is retained
+so existing evidence references remain stable.
 
 ### U02 — critical scientific decision: independent core Airy constants/periods
 
@@ -398,10 +398,11 @@ adjacency and measures. **Numerical consequence:** these tests cannot certify
 ideal crack-tip mechanics. Merely removing an interior penalty cannot remove
 shared C0 value DOFs across a genuine internal slit.
 
-### U04 — major numerical limitation: the reported scattering is not reproduced
+### U04 — scope exclusion: external dislocation-distance scattering study
 
-**Location/original:** the requested dislocation-distance study is absent;
-provided sweep sources vary plate thickness/aspect ratio/load parameters.
+**Location/scope:** the dislocation-distance study belongs to the separate
+implementation excluded by the user. Current sweep sources vary plate
+thickness/aspect ratio/load parameters. This exclusion is not a delivery blocker.
 **Problem:** no traceable dataset, geometry, intensity/orientation convention,
 mesh sequence or solver diagnostics identifies the outlier runs. **Evidence:**
 source inventory and archived numerical discussion describe a different plate

@@ -6,9 +6,9 @@ remaining limitations are in [SCIENTIFIC_AUDIT_AND_REPAIRS.md](SCIENTIFIC_AUDIT_
 The reconstructed equations and implementation map are in
 [docs/formulation.md](docs/formulation.md).
 
-The core-regularised linear dislocation/free-internal-crack solver described
-in the audit request is absent from this branch. Do not use these repairs as
-validation of crack-tip energy sweeps or of plane-strain dislocation physics.
+The confirmed scope is this repository's plate code. The core-regularised
+linear defect/crack implementation lives elsewhere and is outside this audit.
+The reported tests and energies apply to the plate formulations documented here.
 
 ## Installation
 

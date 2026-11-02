@@ -3,8 +3,8 @@
 ## Scope and evidence
 
 This document describes the supplied `final-figures` implementation and its
-verified repairs. It does not define the absent core-regularised linear
-elasticity/crack model. The original working tree is checkpoint `71e11e4`.
+verified repairs. The user confirmed that the core-regularised linear
+elasticity/crack implementation lives elsewhere and excluded it from this audit. The original working tree is checkpoint `71e11e4`.
 `paper/Archive.zip!numerics.tex` identifies a thin-plate formulation and the
 scales below; `!discrete.tex` contains an inconsistent half-weight consistency
 functional. Those draft files are evidence of intent, not mathematical authority.
@@ -226,4 +226,6 @@ Physical stress/curvature tests, polynomial residuals, mesh/order convergence,
 intensity reversal/scaling, solver failure tests, and two-rank assembly tests
 are evidence for their stated cases. They do not establish core-radius,
 crack-tip, remeshing, near-contact, nonlinear bifurcation, or dislocation-sweep
-convergence. Those require the missing implementation and input/output data.
+convergence. The separate core/crack/dislocation study is outside the agreed
+repository scope; nonlinear bifurcation and historical plate sweeps retain the
+verification limits stated in the audit.

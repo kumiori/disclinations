@@ -18,7 +18,7 @@ Text logs have trailing whitespace trimmed; numerical and diagnostic content is 
 | Install wheel in temporary target and solve outside the repository | Passed | `installed_smoke.txt`, `check_installed.py` |
 | Static syntax / whitespace | Source/test/example/audit files parse; `git diff --check` clean | Final worktree verification |
 | New Conda environment / other platforms / MUMPS / GUI acceptance | **Not verified** | Explicit limitation |
-| Core-radius/ideal-crack/dislocation scattering convergence | **Not verified; implementation/data absent** | Audit U01–U04 |
+| Core-radius/ideal-crack/dislocation scattering convergence | **Outside the user-confirmed repository scope** | Audit U01–U04 |
 
 The three skips are redundant combinations for the scalar biharmonic model,
 which has neither a second field nor a coupled variant. MPI output is repeated
@@ -67,6 +67,6 @@ The script asserts the import actually came from that installation.
   harness issue is represented as an original-code scientific defect.
 
 The benchmark is smooth and clamped, with regular volume incompatibility.
-None of these checks establishes the missing core/crack/dislocation physics or
-validates historical publication plots. See the main report for unresolved
+The separate core/crack/dislocation implementation is outside the user-confirmed
+scope. These checks do not validate historical publication plots. See the main report for unresolved
 scientific decisions and exact original source locations.
