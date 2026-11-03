@@ -1,6 +1,7 @@
 # Numerical Experiments with FVK Plates and Disclinations
 
 ## Series 000 Overview
+### Test 1: Kinematically compatible plate under volume forces
 
 This script contains material for conducting numerical experiments on FVK (Foppl-von Kármán) plates subjected to transverse pressure loading. The experiments aim to investigate the behavior of FVK plates under various loading conditions and parameter configurations.
 
@@ -13,7 +14,14 @@ $$
 $$
 where the state is $y=(v, w)$, $v\in H^2_0(B_R)$ is Airy stress potential, $w\in H^2_0(B_R)$ is the transverse displacement, and $p_0$ is set so that the coefficient of $\mathcal L_{\text{tr}}(w)$ is one.
 
+$\frac{R^4}{E h^4} p_0:= c*a^4$, where $c:=p_0/E$, $a:=R/h$
+
 ## Loading Conditions
+
+The transverse load is polynomial, 
+$
+f(x) = \frac{40}{3} (1 - x^2 - y^2)^4 + \frac{16}{3} (11 + x^2 + y^2)
+$
 
 Experiments of the 000 Series run parametrically with respect to the .... of the plate to study the ...
 
