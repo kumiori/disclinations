@@ -1,0 +1,8 @@
+............................ss............ss............ss....................................                          [100%]                          [100%]
+=========================== short test summary info ============================
+SKIPPED [3] tests/test_forms.py:47: scalar model has only one field
+44 passed, 3 skipped in 2.76s
+
+=========================== short test summary info ============================
+SKIPPED [3] tests/test_forms.py:47: scalar model has only one field
+44 passed, 3 skipped in 2.76s

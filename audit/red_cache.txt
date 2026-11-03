@@ -1,0 +1,33 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+__________________ test_mesh_cache_preserves_radius_and_tags ___________________
+
+tmp_path = PosixPath('/private/var/folders/ht/z8sb7wsd1bg0qpmyyfyq2rcm0000gr/T/pytest-of-kumiori3/pytest-118/test_mesh_cache_preserves_radi0')
+
+    def test_mesh_cache_preserves_radius_and_tags(tmp_path):
+        import gmsh
+        comm=MPI.COMM_WORLD
+        folder=comm.bcast(str(tmp_path) if comm.rank==0 else None,root=0)
+        params={'geometry':{'radius':2.,'mesh_size':.35,'geom_type':'circle'}}
+        fresh,cells1,facets1=create_or_load_circle_mesh(params,folder)
+        cached,cells2,facets2=create_or_load_circle_mesh(params,folder)
+>       assert params['geometry']['radius']==2.
+E       assert 1 == 2.0
+
+tests/test_postprocess_cache.py:30: AssertionError
+----------------------------- Captured stdout call -----------------------------
+Creating new mesh...
+Info    : Meshing 1D...
+Info    : [  0%] Meshing curve 1 (Circle)
+Info    : [ 30%] Meshing curve 2 (Circle)
+Info    : [ 60%] Meshing curve 3 (Circle)
+Info    : [ 80%] Meshing curve 4 (Circle)
+Info    : Done meshing 1D (Wall 0.00096s, CPU 0.000173s)
+Info    : Meshing 2D...
+Info    : Meshing surface 1 (Plane, Frontal-Delaunay)
+Info    : Done meshing 2D (Wall 0.0338432s, CPU 0.031259s)
+Info    : 55 nodes 111 elements
+Loading existing mesh...
+=========================== short test summary info ============================
+FAILED tests/test_postprocess_cache.py::test_mesh_cache_preserves_radius_and_tags
+1 failed in 0.90s

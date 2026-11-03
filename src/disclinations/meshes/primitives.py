@@ -19,7 +19,8 @@ def mesh_ep_gmshapi(name,
         import gmsh
 
         # Initialise gmsh and set options
-        gmsh.initialize()
+        if not gmsh.isInitialized():
+            gmsh.initialize()
         gmsh.option.setNumber("General.Terminal", 1)
 
         gmsh.option.setNumber("Mesh.Algorithm", 6)
@@ -79,10 +80,10 @@ def mesh_ep_gmshapi(name,
         gmsh.model.addPhysicalGroup(tdim - 1, [5], tag=11)
         gmsh.model.setPhysicalName(tdim - 1, 11, "top")
         
-        gmsh.model.addPhysicalGroup(tdim - 1, [6, 7, 8, 9], tag=12)
+        gmsh.model.addPhysicalGroup(tdim - 1, [6, 9], tag=12)
         #gmsh.model.addPhysicalGroup(tdim - 1, [6], tag=12)
         gmsh.model.setPhysicalName(tdim - 1, 12, "left")
-        gmsh.model.addPhysicalGroup(tdim - 1, [1, 2, 3, 4], tag=13)
+        gmsh.model.addPhysicalGroup(tdim - 1, [1, 4], tag=13)
         #gmsh.model.addPhysicalGroup(tdim - 1, [1], tag=13)
         gmsh.model.setPhysicalName(tdim - 1, 13, "right")
         gmsh.model.addPhysicalGroup(tdim - 1, [7], tag=14)
@@ -90,9 +91,9 @@ def mesh_ep_gmshapi(name,
         gmsh.model.addPhysicalGroup(tdim - 1, [8], tag=15)
         gmsh.model.setPhysicalName(tdim - 1, 15, "Llipbot")
         gmsh.model.addPhysicalGroup(tdim - 1, [2], tag=16)
-        gmsh.model.setPhysicalName(tdim - 1, 16, "Rliptop")
+        gmsh.model.setPhysicalName(tdim - 1, 16, "Rlipbot")
         gmsh.model.addPhysicalGroup(tdim - 1, [3], tag=17)
-        gmsh.model.setPhysicalName(tdim - 1, 17, "Rlipbot")
+        gmsh.model.setPhysicalName(tdim - 1, 17, "Rliptop")
         
         model.mesh.generate(tdim)
 
@@ -136,7 +137,8 @@ def mesh_rightCrack_gmshapi(name,
         import gmsh
 
         # Initialise gmsh and set options
-        gmsh.initialize()
+        if not gmsh.isInitialized():
+            gmsh.initialize()
         gmsh.option.setNumber("General.Terminal", 1)
 
         gmsh.option.setNumber("Mesh.Algorithm", 6)
@@ -192,10 +194,10 @@ def mesh_rightCrack_gmshapi(name,
         gmsh.model.addPhysicalGroup(tdim - 1, [5], tag=11)
         gmsh.model.setPhysicalName(tdim - 1, 11, "top")
         
-        #gmsh.model.addPhysicalGroup(tdim - 1, [6, 7, 8, 9], tag=12)
+        #gmsh.model.addPhysicalGroup(tdim - 1, [6, 9], tag=12)
         gmsh.model.addPhysicalGroup(tdim - 1, [6], tag=12)
         gmsh.model.setPhysicalName(tdim - 1, 12, "left")
-        #gmsh.model.addPhysicalGroup(tdim - 1, [1, 2, 3, 4], tag=13)
+        #gmsh.model.addPhysicalGroup(tdim - 1, [1, 4], tag=13)
         gmsh.model.addPhysicalGroup(tdim - 1, [1], tag=13)
         gmsh.model.setPhysicalName(tdim - 1, 13, "right")
         gmsh.model.addPhysicalGroup(tdim - 1, [7], tag=14)
@@ -246,7 +248,8 @@ def mesh_bar_gmshapi(name,
         import gmsh
 
         # Initialise gmsh and set options
-        gmsh.initialize()
+        if not gmsh.isInitialized():
+            gmsh.initialize()
         gmsh.option.setNumber("General.Terminal", 1)
 
         gmsh.option.setNumber("Mesh.Algorithm", 6)
@@ -328,17 +331,19 @@ def mesh_circle_gmshapi(name,
     """
     Create 2d circle mesh using the Python API of Gmsh.
     """
+    if tdim != 2 or R <= 0 or lc <= 0:
+        raise ValueError("Require 2D circle and positive radius/mesh size")
     # Perform Gmsh work only on rank = 0
 
     if comm.rank == 0:
         import gmsh
 
         # Initialise gmsh and set options
-        if not gmsh.is_initialized():
+        if not gmsh.isInitialized():
             gmsh.initialize()
         gmsh.option.setNumber("General.Terminal", 1)
 
-        gmsh.option.setNumber("Mesh.Algorithm", 6)
+        #gmsh.option.setNumber("Mesh.Algorithm", 2) # 6
         model = gmsh.model()
         model.add("Circle")
         model.setCurrent("Circle")
@@ -360,16 +365,48 @@ def mesh_circle_gmshapi(name,
         surface_entities = [model[1] for model in model.getEntities(tdim)]
         model.addPhysicalGroup(tdim, surface_entities, tag=5)
         model.setPhysicalName(tdim, 5, "Film surface")
+        model.addPhysicalGroup(1, [c1,c2,c3,c4], tag=6)
+        model.setPhysicalName(1, 6, "outer")
 
-        gmsh.model.mesh.setOrder(order)
+    # CFe added 6 11 24
+        # Create a mesh size field to refine the center
+        #field_id = gmsh.model.mesh.field.add("Distance")
+        #gmsh.model.mesh.field.setNumbers(field_id, "EdgesList", [c1, c2, c3, c4])
+        #gmsh.model.mesh.field.setNumber(field_id, "Sampling", 1000)
+
+        #Threshold field to define refinement size near the center
+        #threshold_id = gmsh.model.mesh.field.add("Threshold")
+        #gmsh.model.mesh.field.setNumber(threshold_id, "InField", field_id)
+        #gmsh.model.mesh.field.setNumber(threshold_id, "SizeMin", lc * 0.5 )  # Small mesh size at center
+        #gmsh.model.mesh.field.setNumber(threshold_id, "SizeMax", lc )        # Larger mesh size at edges
+        #gmsh.model.mesh.field.setNumber(threshold_id, "DistMin", R * 0.1)  # Radius of fine mesh region
+        #gmsh.model.mesh.field.setNumber(threshold_id, "DistMax", R * 0.2 )  # Transition region
+
+        # Set the threshold field as the background mesh field
+        #gmsh.model.mesh.field.setAsBackgroundMesh(threshold_id)
+    # CFe end
+
+
+        # Enable mesh optimization
+        #gmsh.option.setNumber("Mesh.Optimize", 4)
+        gmsh.option.setNumber("Mesh.OptimizeNetgen", 1) # 1: on, 0: off
+        gmsh.option.setNumber("Mesh.Optimize", 1)
+        gmsh.option.setNumber("Mesh.Smoothing", 100) # Number of smoothing iterations to perform
+        gmsh.option.setNumber("Mesh.Algorithm", 6)  # 2: Automatic, 5: Delaunay
+        #gmsh.option.setNumber("Mesh.QualityType", 3)
+        #gmsh.option.setNumber("Mesh.QualityInf", 0.01)
+        #gmsh.option.setNumber("Mesh.CharacteristicLengthExtendFromBoundary", 1)
+        #gmsh.option.setNumber("Mesh.CharacteristicLengthFromCurvature", 1)
+        #gmsh.option.setNumber("Mesh.OptimizeThreshold", 0.1)
 
         model.mesh.generate(tdim)
+        model.mesh.setOrder(order)
 
         # Optional: Write msh file
         if msh_file is not None:
             gmsh.write(msh_file)
 
-        # gmsh.finalize()
+        #gmsh.finalize()
 
     return gmsh.model if comm.rank == 0 else None, tdim
 
@@ -386,16 +423,50 @@ def mesh_circle_with_holes_gmshapi(name,
                                    refinement_factor=0.1,
                                    order=1,
                                    msh_file=None,
-                                   comm=MPI.COMM_WORLD):
+                                   comm=MPI.COMM_WORLD,
+                                   seed=0):
+    """Disk with non-overlapping excluded cores and disjoint facet tags.
+
+    Surface tag 5, outer boundary tag 6, core i tag 100+i. Dimensions and
+    positions use the same length unit. Random placement uses a local seed.
+    The returned Gmsh model stays alive; the caller owns finalisation.
+    This geometry alone does not specify core traction or defect periods.
     """
-    Create 2d circle mesh with holes using the Python API of Gmsh.
-    """
+    import math
+    if tdim != 2 or R <= 0 or hole_radius <= 0 or lc <= 0 or refinement_factor <= 0:
+        raise ValueError('Require 2D geometry and positive radii/mesh sizes')
+    if num_holes < 0 or int(num_holes) != num_holes:
+        raise ValueError('num_holes must be a nonnegative integer')
+    if hole_positions is None:
+        rng = random.Random(seed)
+        hole_positions = []
+        for attempt in range(10000):
+            if len(hole_positions) == num_holes:
+                break
+            candidate = (rng.uniform(-R, R), rng.uniform(-R, R))
+            if math.hypot(*candidate)+hole_radius >= R:
+                continue
+            if any(math.dist(candidate, p) <= 2*hole_radius for p in hole_positions):
+                continue
+            hole_positions.append(candidate)
+        if len(hole_positions) != num_holes:
+            raise ValueError('Cannot place nonoverlapping holes; specify positions')
+    if len(hole_positions) != num_holes:
+        raise ValueError('num_holes and hole_positions disagree')
+    for i, position in enumerate(hole_positions):
+        if len(position) != 2 or not all(math.isfinite(x) for x in position):
+            raise ValueError('Hole positions must be finite pairs')
+        if math.hypot(*position)+hole_radius >= R:
+            raise ValueError('Hole must lie strictly inside outer disk')
+        if any(math.dist(position, p) <= 2*hole_radius for p in hole_positions[:i]):
+            raise ValueError('Holes must be disjoint')
     # Perform Gmsh work only on rank = 0
     if comm.rank == 0:
         import gmsh
 
         # Initialise gmsh and set options
-        gmsh.initialize()
+        if not gmsh.isInitialized():
+            gmsh.initialize()
         gmsh.option.setNumber("General.Terminal", 1)
         gmsh.option.setNumber("Mesh.Algorithm", 6)
 
@@ -417,12 +488,7 @@ def mesh_circle_with_holes_gmshapi(name,
         # Define holes
         hole_points = []
         hole_loops = []
-        
-        if hole_positions is None:
-            # Generate random positions for the holes
-            hole_positions = [(random.uniform(-R + hole_radius, R - hole_radius), 
-                               random.uniform(-R + hole_radius, R - hole_radius)) 
-                              for _ in range(num_holes)]
+        core_curves = []
         
         for i, (hx, hy) in enumerate(hole_positions):
             h0 = model.geo.addPoint(hx, hy, 0, lc * refinement_factor)
@@ -436,6 +502,7 @@ def mesh_circle_with_holes_gmshapi(name,
             hc4 = model.geo.addCircleArc(h4, h0, h1)
             hole_loop = model.geo.addCurveLoop([hc1, hc2, hc3, hc4])
             hole_loops.append(hole_loop)
+            core_curves.append([hc1, hc2, hc3, hc4])
         
         # Define the surface with holes
         plane_surface = model.geo.addPlaneSurface([outer_circle] + hole_loops)
@@ -445,14 +512,19 @@ def mesh_circle_with_holes_gmshapi(name,
         model.addPhysicalGroup(tdim, surface_entities, tag=5)
         model.setPhysicalName(tdim, 5, "Film surface")
         
-        gmsh.model.mesh.setOrder(order)
+        model.addPhysicalGroup(1, [c1, c2, c3, c4], tag=6)
+        model.setPhysicalName(1, 6, 'outer')
+        for i, curves in enumerate(core_curves):
+            model.addPhysicalGroup(1, curves, tag=100+i)
+            model.setPhysicalName(1, 100+i, f'core_{i}')
         model.mesh.generate(tdim)
+        gmsh.model.mesh.setOrder(order)
         
         # Optional: Write msh file
         if msh_file is not None:
             gmsh.write(msh_file)
         
-        gmsh.finalize()
+        # Caller must convert/use the live model before finalising Gmsh.
     
     return gmsh.model if comm.rank == 0 else None, tdim
 

@@ -1,79 +1,76 @@
-# Disclinations
-This package is to solve equilibrium problems for nonlinear models of plates with disclinations.
+# Disclinations: audited plate research code
 
-.
+This checkout implements Airy/transverse Föppl–von Kármán plate models with
+continuous interior-penalty finite elements. The scientific audit and its
+remaining limitations are in [SCIENTIFIC_AUDIT_AND_REPAIRS.md](SCIENTIFIC_AUDIT_AND_REPAIRS.md).
+The reconstructed equations and implementation map are in
+[docs/formulation.md](docs/formulation.md).
 
-.
-.
-.
-.
-.
-.
-.
-.
-.
-.
-.
-.
-.
-.
-.
+The confirmed scope is this repository's plate code. The core-regularised
+linear defect/crack implementation lives elsewhere and is outside this audit.
+The reported tests and energies apply to the plate formulations documented here.
 
-### Prerequisites
+## Installation
 
-The project assumes basic knowledge of the theory of infinitesimal elasticity and
-finite element methods.
+Use a matched FEniCSx stack. The tested API is DOLFINx/Basix 0.9.0,
+UFL 2024.2.0, real-valued PETSc/petsc4py 3.22 and Python 3.11.
 
-Basic knowledge of Python will be assumed, see https://github.com/jakevdp/WhirlwindTourOfPython
-to brush up if you feel unsure.
-
-Basic knowledge of git as a versioning system with feature-branch workflow
-https://gist.github.com/brandon1024/14b5f9fcfd982658d01811ee3045ff1e
-
-Remember to set your name and email before pushing to the repository,
-either locally or globally, see https://www.phpspiderblog.com/how-to-configure-username-and-email-in-git/
-
-#### Feature branch workflow
-
-For each new feature you wish to implement, create a branch named ```{yourname}-{feature}```, 
-as in ```andres-meshes```.
-
-https://docs.gitlab.com/ee/gitlab-basics/feature_branch_workflow.html
-
- - Create your feature branch:`git checkout -b username-feature`
- - To push your branch: `git push -u origin feature_branch_name`
- - Create a pull request on the main branch for merging. Somebody should approve the pull-request. -
-
-### Weekly updates (merge from main)
-```
-git checkout main
-git pull
-git checkout yourname-branch
-git merge main
+```bash
+conda env create -f environment.yml
+conda activate disclinations-audit
+python -m pip install --no-deps -e .
+python -m pytest -q
+mpiexec -n 2 python -m pytest tests/test_postprocess_cache.py tests/test_loads_solver.py tests/test_forms.py tests/test_geometry.py -q
+python examples/verify_clamped.py
 ```
 
-Asymmetrically, feature-work is `rebased`.
+Without installing the project, prefix Python commands with `PYTHONPATH=src:.`.
+The Conda specification describes a compatible environment; the exact packages
+used for verification are recorded in `audit/runtime.json`. A clean environment
+creation has not been verified. `requirements_pipreq.txt` is a historical scanner
+export, contains unrelated package names, and is not an installation lockfile.
 
-### To run the code (on Docker)
+The example solves a smooth manufactured Airy problem and prints separate
+physical membrane energy, discrete corrections, load work, functional and
+residual. `audit/convergence.json` records mesh/order comparisons;
+`audit/before_after.json` isolates the repaired forms using a common solver.
 
-First, run the container, attaching an interactive session and sharing data space 
-(the current dir) between the host and the container (the syntax is origin:target).
+## Research interfaces and limitations
 
-On a Mac:
-```
-docker run --rm -ti -v "$(pwd)":/home/numerix -w /home/numerix kumiori3/numerix:latest
+Existing model class names and the energy tuple `(saddle, bending, membrane,
+coupling)` are retained. The first entry is a saddle functional, not total
+physical elastic energy. Assembly of a zero value trace is separate from weak
+zero-slope enforcement. Hole meshing now retains a live Gmsh model and tags
+outer/core boundaries as 6/100+i; callers must finalise Gmsh after conversion.
+
+Point loads require one global ordered strength list on every MPI rank. Each
+point is supplied once, with an empty `(0,3)` array on other ranks. The returned
+vector is already accumulated. `SNESSolver` adds this vector with a **plus**
+sign to the residual, and raises on divergence. SNES tolerances use PETSc
+defaults unless supplied explicitly. See the source docstrings.
+
+Archived plotting and parameter-sweep scripts remain research prototypes.
+Their DOLFINx Function-vector accesses have been migrated, but their historical
+outputs have not been regenerated or accepted as numerical evidence. Manual
+PyVista/Xvfb examples run only when invoked directly. The old interactive
+"tests" with missing files, commented-out assertions and debugger stops were
+replaced by unattended smoke and manufactured-solution tests.
+
+Disk sampling now preserves coordinates and values for arbitrary positive radii,
+with single MPI ownership and an optional resolution argument. Mesh caches retain
+the requested radius and persist both cell and facet tags; their versioned
+identity leaves old incomplete caches untouched.
+
+The original supplied working tree is committed at
+`71e11e4d43174d26149130e97bd98b2f9635e09e`; the incoming branch was
+`final-figures`, HEAD `6e64d61`. All pre-existing tracked edits and non-ignored
+untracked files are recoverable at that checkpoint. Ignored environment/output
+files remain in place and are outside the checkpoint. To compare:
+
+```bash
+git diff 71e11e4 -- src tests test docs pyproject.toml
 ```
 
-On a Windows:
-```
-docker run --rm -ti -v "C:/...":/home/numerix" -w /home/numerix kumiori3\numerix:latest
-```
+## Authors and licence
 
-### To run the tests, execute the following command in your terminal:
-```
-pytest tests
-```
-
-### Authors
-- Cf. commit messages
-  
+See Git history for contributors. GPLv3; see [LICENSE](LICENSE).

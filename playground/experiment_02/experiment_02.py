@@ -168,7 +168,7 @@ def run_experiment(mesh: None, parameters: dict, series: str):
         bounds=None,
         petsc_options=parameters["solvers"]["elasticity"],
         prefix='plate_fvk',
-        b0=b_scale*b.vector,
+        b0=b_scale*b.x.petsc_vec,
     )
     solver.solve()
     

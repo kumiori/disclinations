@@ -1,0 +1,418 @@
+FFFFFsFFFF                                                               [100%]
+=================================== FAILURES ===================================
+______________ test_clamped_polynomial_consistency[v-biharmonic] _______________
+
+kind = 'biharmonic', field = 'v'
+
+    @pytest.mark.parametrize('kind', ['biharmonic', 'dimensional', 'dimensional_brenner', 'adimensional', 'adimensional_brenner'])
+    @pytest.mark.parametrize('field', ['v', 'w'])
+    def test_clamped_polynomial_consistency(kind, field):
+        """An exact smooth clamped polynomial must satisfy the broken weak equation.
+
+        The direction is a random C0 P2 function with zero trace, hence its slope
+        jumps detect missing interior fluxes independently of any numerical solve.
+        """
+        if kind == 'biharmonic' and field == 'w':
+            pytest.skip('scalar model has only one field')
+        msh = mesh.create_unit_square(MPI.COMM_WORLD, 3, 3, ghost_mode=mesh.GhostMode.shared_facet)
+        V = fem.functionspace(msh, ('Lagrange', 2))
+        u, z = fem.Function(V), fem.Function(V)
+        z.interpolate(lambda x: np.sin(3*x[0]+7*x[1]))
+        msh.topology.create_connectivity(1, 2)
+        dofs = fem.locate_dofs_topological(V, 1, mesh.exterior_facet_indices(msh.topology))
+        z.x.array[dofs] = 0
+        z.x.scatter_forward()
+        zero = fem.Function(V)
+        params = {'order': 2, 'E': 7., 'nu': .23, 'thickness': .4, 'alpha_penalty': 30.}
+        classes = {'biharmonic': Biharmonic, 'dimensional': NonlinearPlateFVK,
+                   'dimensional_brenner': NonlinearPlateFVK_brenner,
+                   'adimensional': A_NonlinearPlateFVK, 'adimensional_brenner': A_NonlinearPlateFVK_brenner}
+        model = classes[kind](msh, params)
+        state = {'u': u} if kind == 'biharmonic' else {'v': u if field == 'v' else zero, 'w': u if field == 'w' else zero}
+        energy = model.energy(state) if kind == 'biharmonic' else model.energy(state)[0]
+        residual = ufl.derivative(energy + model.penalisation(state), u, z)
+        x = ufl.SpatialCoordinate(msh)
+        exact = x[0]**2*(1-x[0])**2*x[1]**2*(1-x[1])**2
+        residual = ufl.replace(ufl.algorithms.expand_derivatives(residual), {u: exact})
+        bih = ufl.div(ufl.grad(ufl.div(ufl.grad(exact))))
+        coeff = 1. if kind == 'biharmonic' else (-1. if field == 'v' else model.c_nu) if kind.startswith('adimensional') else (-1/(model.E*model.t) if field == 'v' else model.D)
+        error = scalar(residual - coeff*bih*z*ufl.dx, msh)
+>       assert abs(error) < 2e-10, (kind, field, error)
+E       AssertionError: ('biharmonic', 'v', -0.16649351185147762)
+E       assert 0.16649351185147762 < 2e-10
+E        +  where 0.16649351185147762 = abs(-0.16649351185147762)
+
+tests/test_forms.py:50: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+______________ test_clamped_polynomial_consistency[v-dimensional] ______________
+
+kind = 'dimensional', field = 'v'
+
+    @pytest.mark.parametrize('kind', ['biharmonic', 'dimensional', 'dimensional_brenner', 'adimensional', 'adimensional_brenner'])
+    @pytest.mark.parametrize('field', ['v', 'w'])
+    def test_clamped_polynomial_consistency(kind, field):
+        """An exact smooth clamped polynomial must satisfy the broken weak equation.
+
+        The direction is a random C0 P2 function with zero trace, hence its slope
+        jumps detect missing interior fluxes independently of any numerical solve.
+        """
+        if kind == 'biharmonic' and field == 'w':
+            pytest.skip('scalar model has only one field')
+        msh = mesh.create_unit_square(MPI.COMM_WORLD, 3, 3, ghost_mode=mesh.GhostMode.shared_facet)
+        V = fem.functionspace(msh, ('Lagrange', 2))
+        u, z = fem.Function(V), fem.Function(V)
+        z.interpolate(lambda x: np.sin(3*x[0]+7*x[1]))
+        msh.topology.create_connectivity(1, 2)
+        dofs = fem.locate_dofs_topological(V, 1, mesh.exterior_facet_indices(msh.topology))
+        z.x.array[dofs] = 0
+        z.x.scatter_forward()
+        zero = fem.Function(V)
+        params = {'order': 2, 'E': 7., 'nu': .23, 'thickness': .4, 'alpha_penalty': 30.}
+        classes = {'biharmonic': Biharmonic, 'dimensional': NonlinearPlateFVK,
+                   'dimensional_brenner': NonlinearPlateFVK_brenner,
+                   'adimensional': A_NonlinearPlateFVK, 'adimensional_brenner': A_NonlinearPlateFVK_brenner}
+        model = classes[kind](msh, params)
+        state = {'u': u} if kind == 'biharmonic' else {'v': u if field == 'v' else zero, 'w': u if field == 'w' else zero}
+        energy = model.energy(state) if kind == 'biharmonic' else model.energy(state)[0]
+        residual = ufl.derivative(energy + model.penalisation(state), u, z)
+        x = ufl.SpatialCoordinate(msh)
+        exact = x[0]**2*(1-x[0])**2*x[1]**2*(1-x[1])**2
+        residual = ufl.replace(ufl.algorithms.expand_derivatives(residual), {u: exact})
+        bih = ufl.div(ufl.grad(ufl.div(ufl.grad(exact))))
+        coeff = 1. if kind == 'biharmonic' else (-1. if field == 'v' else model.c_nu) if kind.startswith('adimensional') else (-1/(model.E*model.t) if field == 'v' else model.D)
+        error = scalar(residual - coeff*bih*z*ufl.dx, msh)
+>       assert abs(error) < 2e-10, (kind, field, error)
+E       AssertionError: ('dimensional', 'v', 0.06630686038895074)
+E       assert 0.06630686038895074 < 2e-10
+E        +  where 0.06630686038895074 = abs(0.06630686038895074)
+
+tests/test_forms.py:50: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+__________ test_clamped_polynomial_consistency[v-dimensional_brenner] __________
+
+kind = 'dimensional_brenner', field = 'v'
+
+    @pytest.mark.parametrize('kind', ['biharmonic', 'dimensional', 'dimensional_brenner', 'adimensional', 'adimensional_brenner'])
+    @pytest.mark.parametrize('field', ['v', 'w'])
+    def test_clamped_polynomial_consistency(kind, field):
+        """An exact smooth clamped polynomial must satisfy the broken weak equation.
+
+        The direction is a random C0 P2 function with zero trace, hence its slope
+        jumps detect missing interior fluxes independently of any numerical solve.
+        """
+        if kind == 'biharmonic' and field == 'w':
+            pytest.skip('scalar model has only one field')
+        msh = mesh.create_unit_square(MPI.COMM_WORLD, 3, 3, ghost_mode=mesh.GhostMode.shared_facet)
+        V = fem.functionspace(msh, ('Lagrange', 2))
+        u, z = fem.Function(V), fem.Function(V)
+        z.interpolate(lambda x: np.sin(3*x[0]+7*x[1]))
+        msh.topology.create_connectivity(1, 2)
+        dofs = fem.locate_dofs_topological(V, 1, mesh.exterior_facet_indices(msh.topology))
+        z.x.array[dofs] = 0
+        z.x.scatter_forward()
+        zero = fem.Function(V)
+        params = {'order': 2, 'E': 7., 'nu': .23, 'thickness': .4, 'alpha_penalty': 30.}
+        classes = {'biharmonic': Biharmonic, 'dimensional': NonlinearPlateFVK,
+                   'dimensional_brenner': NonlinearPlateFVK_brenner,
+                   'adimensional': A_NonlinearPlateFVK, 'adimensional_brenner': A_NonlinearPlateFVK_brenner}
+        model = classes[kind](msh, params)
+        state = {'u': u} if kind == 'biharmonic' else {'v': u if field == 'v' else zero, 'w': u if field == 'w' else zero}
+        energy = model.energy(state) if kind == 'biharmonic' else model.energy(state)[0]
+        residual = ufl.derivative(energy + model.penalisation(state), u, z)
+        x = ufl.SpatialCoordinate(msh)
+        exact = x[0]**2*(1-x[0])**2*x[1]**2*(1-x[1])**2
+        residual = ufl.replace(ufl.algorithms.expand_derivatives(residual), {u: exact})
+        bih = ufl.div(ufl.grad(ufl.div(ufl.grad(exact))))
+        coeff = 1. if kind == 'biharmonic' else (-1. if field == 'v' else model.c_nu) if kind.startswith('adimensional') else (-1/(model.E*model.t) if field == 'v' else model.D)
+        error = scalar(residual - coeff*bih*z*ufl.dx, msh)
+>       assert abs(error) < 2e-10, (kind, field, error)
+E       AssertionError: ('dimensional_brenner', 'v', 0.08659365723371396)
+E       assert 0.08659365723371396 < 2e-10
+E        +  where 0.08659365723371396 = abs(0.08659365723371396)
+
+tests/test_forms.py:50: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+_____________ test_clamped_polynomial_consistency[v-adimensional] ______________
+
+kind = 'adimensional', field = 'v'
+
+    @pytest.mark.parametrize('kind', ['biharmonic', 'dimensional', 'dimensional_brenner', 'adimensional', 'adimensional_brenner'])
+    @pytest.mark.parametrize('field', ['v', 'w'])
+    def test_clamped_polynomial_consistency(kind, field):
+        """An exact smooth clamped polynomial must satisfy the broken weak equation.
+
+        The direction is a random C0 P2 function with zero trace, hence its slope
+        jumps detect missing interior fluxes independently of any numerical solve.
+        """
+        if kind == 'biharmonic' and field == 'w':
+            pytest.skip('scalar model has only one field')
+        msh = mesh.create_unit_square(MPI.COMM_WORLD, 3, 3, ghost_mode=mesh.GhostMode.shared_facet)
+        V = fem.functionspace(msh, ('Lagrange', 2))
+        u, z = fem.Function(V), fem.Function(V)
+        z.interpolate(lambda x: np.sin(3*x[0]+7*x[1]))
+        msh.topology.create_connectivity(1, 2)
+        dofs = fem.locate_dofs_topological(V, 1, mesh.exterior_facet_indices(msh.topology))
+        z.x.array[dofs] = 0
+        z.x.scatter_forward()
+        zero = fem.Function(V)
+        params = {'order': 2, 'E': 7., 'nu': .23, 'thickness': .4, 'alpha_penalty': 30.}
+        classes = {'biharmonic': Biharmonic, 'dimensional': NonlinearPlateFVK,
+                   'dimensional_brenner': NonlinearPlateFVK_brenner,
+                   'adimensional': A_NonlinearPlateFVK, 'adimensional_brenner': A_NonlinearPlateFVK_brenner}
+        model = classes[kind](msh, params)
+        state = {'u': u} if kind == 'biharmonic' else {'v': u if field == 'v' else zero, 'w': u if field == 'w' else zero}
+        energy = model.energy(state) if kind == 'biharmonic' else model.energy(state)[0]
+        residual = ufl.derivative(energy + model.penalisation(state), u, z)
+        x = ufl.SpatialCoordinate(msh)
+        exact = x[0]**2*(1-x[0])**2*x[1]**2*(1-x[1])**2
+        residual = ufl.replace(ufl.algorithms.expand_derivatives(residual), {u: exact})
+        bih = ufl.div(ufl.grad(ufl.div(ufl.grad(exact))))
+        coeff = 1. if kind == 'biharmonic' else (-1. if field == 'v' else model.c_nu) if kind.startswith('adimensional') else (-1/(model.E*model.t) if field == 'v' else model.D)
+        error = scalar(residual - coeff*bih*z*ufl.dx, msh)
+>       assert abs(error) < 2e-10, (kind, field, error)
+E       AssertionError: ('adimensional', 'v', 0.19229845752071123)
+E       assert 0.19229845752071123 < 2e-10
+E        +  where 0.19229845752071123 = abs(0.19229845752071123)
+
+tests/test_forms.py:50: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+_________ test_clamped_polynomial_consistency[v-adimensional_brenner] __________
+
+kind = 'adimensional_brenner', field = 'v'
+
+    @pytest.mark.parametrize('kind', ['biharmonic', 'dimensional', 'dimensional_brenner', 'adimensional', 'adimensional_brenner'])
+    @pytest.mark.parametrize('field', ['v', 'w'])
+    def test_clamped_polynomial_consistency(kind, field):
+        """An exact smooth clamped polynomial must satisfy the broken weak equation.
+
+        The direction is a random C0 P2 function with zero trace, hence its slope
+        jumps detect missing interior fluxes independently of any numerical solve.
+        """
+        if kind == 'biharmonic' and field == 'w':
+            pytest.skip('scalar model has only one field')
+        msh = mesh.create_unit_square(MPI.COMM_WORLD, 3, 3, ghost_mode=mesh.GhostMode.shared_facet)
+        V = fem.functionspace(msh, ('Lagrange', 2))
+        u, z = fem.Function(V), fem.Function(V)
+        z.interpolate(lambda x: np.sin(3*x[0]+7*x[1]))
+        msh.topology.create_connectivity(1, 2)
+        dofs = fem.locate_dofs_topological(V, 1, mesh.exterior_facet_indices(msh.topology))
+        z.x.array[dofs] = 0
+        z.x.scatter_forward()
+        zero = fem.Function(V)
+        params = {'order': 2, 'E': 7., 'nu': .23, 'thickness': .4, 'alpha_penalty': 30.}
+        classes = {'biharmonic': Biharmonic, 'dimensional': NonlinearPlateFVK,
+                   'dimensional_brenner': NonlinearPlateFVK_brenner,
+                   'adimensional': A_NonlinearPlateFVK, 'adimensional_brenner': A_NonlinearPlateFVK_brenner}
+        model = classes[kind](msh, params)
+        state = {'u': u} if kind == 'biharmonic' else {'v': u if field == 'v' else zero, 'w': u if field == 'w' else zero}
+        energy = model.energy(state) if kind == 'biharmonic' else model.energy(state)[0]
+        residual = ufl.derivative(energy + model.penalisation(state), u, z)
+        x = ufl.SpatialCoordinate(msh)
+        exact = x[0]**2*(1-x[0])**2*x[1]**2*(1-x[1])**2
+        residual = ufl.replace(ufl.algorithms.expand_derivatives(residual), {u: exact})
+        bih = ufl.div(ufl.grad(ufl.div(ufl.grad(exact))))
+        coeff = 1. if kind == 'biharmonic' else (-1. if field == 'v' else model.c_nu) if kind.startswith('adimensional') else (-1/(model.E*model.t) if field == 'v' else model.D)
+        error = scalar(residual - coeff*bih*z*ufl.dx, msh)
+>       assert abs(error) < 2e-10, (kind, field, error)
+E       AssertionError: ('adimensional_brenner', 'v', 0.19229845752071123)
+E       assert 0.19229845752071123 < 2e-10
+E        +  where 0.19229845752071123 = abs(0.19229845752071123)
+
+tests/test_forms.py:50: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+______________ test_clamped_polynomial_consistency[w-dimensional] ______________
+
+kind = 'dimensional', field = 'w'
+
+    @pytest.mark.parametrize('kind', ['biharmonic', 'dimensional', 'dimensional_brenner', 'adimensional', 'adimensional_brenner'])
+    @pytest.mark.parametrize('field', ['v', 'w'])
+    def test_clamped_polynomial_consistency(kind, field):
+        """An exact smooth clamped polynomial must satisfy the broken weak equation.
+
+        The direction is a random C0 P2 function with zero trace, hence its slope
+        jumps detect missing interior fluxes independently of any numerical solve.
+        """
+        if kind == 'biharmonic' and field == 'w':
+            pytest.skip('scalar model has only one field')
+        msh = mesh.create_unit_square(MPI.COMM_WORLD, 3, 3, ghost_mode=mesh.GhostMode.shared_facet)
+        V = fem.functionspace(msh, ('Lagrange', 2))
+        u, z = fem.Function(V), fem.Function(V)
+        z.interpolate(lambda x: np.sin(3*x[0]+7*x[1]))
+        msh.topology.create_connectivity(1, 2)
+        dofs = fem.locate_dofs_topological(V, 1, mesh.exterior_facet_indices(msh.topology))
+        z.x.array[dofs] = 0
+        z.x.scatter_forward()
+        zero = fem.Function(V)
+        params = {'order': 2, 'E': 7., 'nu': .23, 'thickness': .4, 'alpha_penalty': 30.}
+        classes = {'biharmonic': Biharmonic, 'dimensional': NonlinearPlateFVK,
+                   'dimensional_brenner': NonlinearPlateFVK_brenner,
+                   'adimensional': A_NonlinearPlateFVK, 'adimensional_brenner': A_NonlinearPlateFVK_brenner}
+        model = classes[kind](msh, params)
+        state = {'u': u} if kind == 'biharmonic' else {'v': u if field == 'v' else zero, 'w': u if field == 'w' else zero}
+        energy = model.energy(state) if kind == 'biharmonic' else model.energy(state)[0]
+        residual = ufl.derivative(energy + model.penalisation(state), u, z)
+        x = ufl.SpatialCoordinate(msh)
+        exact = x[0]**2*(1-x[0])**2*x[1]**2*(1-x[1])**2
+        residual = ufl.replace(ufl.algorithms.expand_derivatives(residual), {u: exact})
+        bih = ufl.div(ufl.grad(ufl.div(ufl.grad(exact))))
+        coeff = 1. if kind == 'biharmonic' else (-1. if field == 'v' else model.c_nu) if kind.startswith('adimensional') else (-1/(model.E*model.t) if field == 'v' else model.D)
+        error = scalar(residual - coeff*bih*z*ufl.dx, msh)
+>       assert abs(error) < 2e-10, (kind, field, error)
+E       AssertionError: ('dimensional', 'w', 0.07578193954376551)
+E       assert 0.07578193954376551 < 2e-10
+E        +  where 0.07578193954376551 = abs(0.07578193954376551)
+
+tests/test_forms.py:50: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+__________ test_clamped_polynomial_consistency[w-dimensional_brenner] __________
+
+kind = 'dimensional_brenner', field = 'w'
+
+    @pytest.mark.parametrize('kind', ['biharmonic', 'dimensional', 'dimensional_brenner', 'adimensional', 'adimensional_brenner'])
+    @pytest.mark.parametrize('field', ['v', 'w'])
+    def test_clamped_polynomial_consistency(kind, field):
+        """An exact smooth clamped polynomial must satisfy the broken weak equation.
+
+        The direction is a random C0 P2 function with zero trace, hence its slope
+        jumps detect missing interior fluxes independently of any numerical solve.
+        """
+        if kind == 'biharmonic' and field == 'w':
+            pytest.skip('scalar model has only one field')
+        msh = mesh.create_unit_square(MPI.COMM_WORLD, 3, 3, ghost_mode=mesh.GhostMode.shared_facet)
+        V = fem.functionspace(msh, ('Lagrange', 2))
+        u, z = fem.Function(V), fem.Function(V)
+        z.interpolate(lambda x: np.sin(3*x[0]+7*x[1]))
+        msh.topology.create_connectivity(1, 2)
+        dofs = fem.locate_dofs_topological(V, 1, mesh.exterior_facet_indices(msh.topology))
+        z.x.array[dofs] = 0
+        z.x.scatter_forward()
+        zero = fem.Function(V)
+        params = {'order': 2, 'E': 7., 'nu': .23, 'thickness': .4, 'alpha_penalty': 30.}
+        classes = {'biharmonic': Biharmonic, 'dimensional': NonlinearPlateFVK,
+                   'dimensional_brenner': NonlinearPlateFVK_brenner,
+                   'adimensional': A_NonlinearPlateFVK, 'adimensional_brenner': A_NonlinearPlateFVK_brenner}
+        model = classes[kind](msh, params)
+        state = {'u': u} if kind == 'biharmonic' else {'v': u if field == 'v' else zero, 'w': u if field == 'w' else zero}
+        energy = model.energy(state) if kind == 'biharmonic' else model.energy(state)[0]
+        residual = ufl.derivative(energy + model.penalisation(state), u, z)
+        x = ufl.SpatialCoordinate(msh)
+        exact = x[0]**2*(1-x[0])**2*x[1]**2*(1-x[1])**2
+        residual = ufl.replace(ufl.algorithms.expand_derivatives(residual), {u: exact})
+        bih = ufl.div(ufl.grad(ufl.div(ufl.grad(exact))))
+        coeff = 1. if kind == 'biharmonic' else (-1. if field == 'v' else model.c_nu) if kind.startswith('adimensional') else (-1/(model.E*model.t) if field == 'v' else model.D)
+        error = scalar(residual - coeff*bih*z*ufl.dx, msh)
+>       assert abs(error) < 2e-10, (kind, field, error)
+E       AssertionError: ('dimensional_brenner', 'w', 0.0735428449425204)
+E       assert 0.0735428449425204 < 2e-10
+E        +  where 0.0735428449425204 = abs(0.0735428449425204)
+
+tests/test_forms.py:50: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+_____________ test_clamped_polynomial_consistency[w-adimensional] ______________
+
+kind = 'adimensional', field = 'w'
+
+    @pytest.mark.parametrize('kind', ['biharmonic', 'dimensional', 'dimensional_brenner', 'adimensional', 'adimensional_brenner'])
+    @pytest.mark.parametrize('field', ['v', 'w'])
+    def test_clamped_polynomial_consistency(kind, field):
+        """An exact smooth clamped polynomial must satisfy the broken weak equation.
+
+        The direction is a random C0 P2 function with zero trace, hence its slope
+        jumps detect missing interior fluxes independently of any numerical solve.
+        """
+        if kind == 'biharmonic' and field == 'w':
+            pytest.skip('scalar model has only one field')
+        msh = mesh.create_unit_square(MPI.COMM_WORLD, 3, 3, ghost_mode=mesh.GhostMode.shared_facet)
+        V = fem.functionspace(msh, ('Lagrange', 2))
+        u, z = fem.Function(V), fem.Function(V)
+        z.interpolate(lambda x: np.sin(3*x[0]+7*x[1]))
+        msh.topology.create_connectivity(1, 2)
+        dofs = fem.locate_dofs_topological(V, 1, mesh.exterior_facet_indices(msh.topology))
+        z.x.array[dofs] = 0
+        z.x.scatter_forward()
+        zero = fem.Function(V)
+        params = {'order': 2, 'E': 7., 'nu': .23, 'thickness': .4, 'alpha_penalty': 30.}
+        classes = {'biharmonic': Biharmonic, 'dimensional': NonlinearPlateFVK,
+                   'dimensional_brenner': NonlinearPlateFVK_brenner,
+                   'adimensional': A_NonlinearPlateFVK, 'adimensional_brenner': A_NonlinearPlateFVK_brenner}
+        model = classes[kind](msh, params)
+        state = {'u': u} if kind == 'biharmonic' else {'v': u if field == 'v' else zero, 'w': u if field == 'w' else zero}
+        energy = model.energy(state) if kind == 'biharmonic' else model.energy(state)[0]
+        residual = ufl.derivative(energy + model.penalisation(state), u, z)
+        x = ufl.SpatialCoordinate(msh)
+        exact = x[0]**2*(1-x[0])**2*x[1]**2*(1-x[1])**2
+        residual = ufl.replace(ufl.algorithms.expand_derivatives(residual), {u: exact})
+        bih = ufl.div(ufl.grad(ufl.div(ufl.grad(exact))))
+        coeff = 1. if kind == 'biharmonic' else (-1. if field == 'v' else model.c_nu) if kind.startswith('adimensional') else (-1/(model.E*model.t) if field == 'v' else model.D)
+        error = scalar(residual - coeff*bih*z*ufl.dx, msh)
+>       assert abs(error) < 2e-10, (kind, field, error)
+E       AssertionError: ('adimensional', 'w', -0.016919936078618542)
+E       assert 0.016919936078618542 < 2e-10
+E        +  where 0.016919936078618542 = abs(-0.016919936078618542)
+
+tests/test_forms.py:50: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+_________ test_clamped_polynomial_consistency[w-adimensional_brenner] __________
+
+kind = 'adimensional_brenner', field = 'w'
+
+    @pytest.mark.parametrize('kind', ['biharmonic', 'dimensional', 'dimensional_brenner', 'adimensional', 'adimensional_brenner'])
+    @pytest.mark.parametrize('field', ['v', 'w'])
+    def test_clamped_polynomial_consistency(kind, field):
+        """An exact smooth clamped polynomial must satisfy the broken weak equation.
+
+        The direction is a random C0 P2 function with zero trace, hence its slope
+        jumps detect missing interior fluxes independently of any numerical solve.
+        """
+        if kind == 'biharmonic' and field == 'w':
+            pytest.skip('scalar model has only one field')
+        msh = mesh.create_unit_square(MPI.COMM_WORLD, 3, 3, ghost_mode=mesh.GhostMode.shared_facet)
+        V = fem.functionspace(msh, ('Lagrange', 2))
+        u, z = fem.Function(V), fem.Function(V)
+        z.interpolate(lambda x: np.sin(3*x[0]+7*x[1]))
+        msh.topology.create_connectivity(1, 2)
+        dofs = fem.locate_dofs_topological(V, 1, mesh.exterior_facet_indices(msh.topology))
+        z.x.array[dofs] = 0
+        z.x.scatter_forward()
+        zero = fem.Function(V)
+        params = {'order': 2, 'E': 7., 'nu': .23, 'thickness': .4, 'alpha_penalty': 30.}
+        classes = {'biharmonic': Biharmonic, 'dimensional': NonlinearPlateFVK,
+                   'dimensional_brenner': NonlinearPlateFVK_brenner,
+                   'adimensional': A_NonlinearPlateFVK, 'adimensional_brenner': A_NonlinearPlateFVK_brenner}
+        model = classes[kind](msh, params)
+        state = {'u': u} if kind == 'biharmonic' else {'v': u if field == 'v' else zero, 'w': u if field == 'w' else zero}
+        energy = model.energy(state) if kind == 'biharmonic' else model.energy(state)[0]
+        residual = ufl.derivative(energy + model.penalisation(state), u, z)
+        x = ufl.SpatialCoordinate(msh)
+        exact = x[0]**2*(1-x[0])**2*x[1]**2*(1-x[1])**2
+        residual = ufl.replace(ufl.algorithms.expand_derivatives(residual), {u: exact})
+        bih = ufl.div(ufl.grad(ufl.div(ufl.grad(exact))))
+        coeff = 1. if kind == 'biharmonic' else (-1. if field == 'v' else model.c_nu) if kind.startswith('adimensional') else (-1/(model.E*model.t) if field == 'v' else model.D)
+        error = scalar(residual - coeff*bih*z*ufl.dx, msh)
+>       assert abs(error) < 2e-10, (kind, field, error)
+E       AssertionError: ('adimensional_brenner', 'w', -0.01691993607861857)
+E       assert 0.01691993607861857 < 2e-10
+E        +  where 0.01691993607861857 = abs(-0.01691993607861857)
+
+tests/test_forms.py:50: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+=========================== short test summary info ============================
+FAILED tests/test_forms.py::test_clamped_polynomial_consistency[v-biharmonic]
+FAILED tests/test_forms.py::test_clamped_polynomial_consistency[v-dimensional]
+FAILED tests/test_forms.py::test_clamped_polynomial_consistency[v-dimensional_brenner]
+FAILED tests/test_forms.py::test_clamped_polynomial_consistency[v-adimensional]
+FAILED tests/test_forms.py::test_clamped_polynomial_consistency[v-adimensional_brenner]
+FAILED tests/test_forms.py::test_clamped_polynomial_consistency[w-dimensional]
+FAILED tests/test_forms.py::test_clamped_polynomial_consistency[w-dimensional_brenner]
+FAILED tests/test_forms.py::test_clamped_polynomial_consistency[w-adimensional]
+FAILED tests/test_forms.py::test_clamped_polynomial_consistency[w-adimensional_brenner]
+9 failed, 1 skipped in 10.84s

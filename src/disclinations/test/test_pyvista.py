@@ -1,15 +1,22 @@
-import pyvista as pv
-pv.OFF_SCREEN = True
-sphere = pv.Sphere()
+"""Manual visualisation demonstration (requires a graphical session)."""
 
-# Create a PyVista plotter object
-plotter = pv.Plotter()
+def main():
+    import pyvista as pv
+    pv.OFF_SCREEN = True
+    sphere = pv.Sphere()
 
-# Add the sphere mesh to the plotter
-plotter.add_mesh(sphere, color="cyan", show_edges=True)
+    # Create a PyVista plotter object
+    plotter = pv.Plotter()
 
-# Display the plot in an interactive window
-plotter.show()
+    # Add the sphere mesh to the plotter
+    plotter.add_mesh(sphere, color="cyan", show_edges=True)
 
-# Save the plot to an image file (PNG format)
-plotter.screenshot("sphere_plot.png")
+    # Display the plot in an interactive window
+    plotter.show()
+
+    # Save the plot to an image file (PNG format)
+    plotter.screenshot("sphere_plot.png")
+
+
+if __name__ == "__main__":
+    main()

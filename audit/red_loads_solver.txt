@@ -1,0 +1,123 @@
+FFFF                                                                     [100%]
+=================================== FAILURES ===================================
+____________________ test_point_load_strengths_and_pairing _____________________
+
+    def test_point_load_strengths_and_pairing():
+        V = space()
+        coords = [[.13,.19,0.],[.71,.83,0.]]
+        points = [np.array([p]) if V.mesh.comm.rank == 0 else np.empty((0,3)) for p in coords]
+>       b = compute_disclination_loads(points, [2.,-3.], V)
+
+tests/test_loads_solver.py:20:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/disclinations/utils/la.py:82: in compute_disclination_loads
+    cells, basis_values = compute_cell_contributions(V, points)
+src/disclinations/utils/la.py:50: in compute_cell_contributions
+    cells, basis_values = compute_cell_contribution_point(V, point)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+V = FunctionSpace(Mesh(blocked element (Basix element (P, triangle, 1, gll_warped, unset, False, float64, []), (2,)), 0), Basix element (P, triangle, 2, gll_warped, unset, False, float64, []))
+points = array([[0.13, 0.19, 0.  ]])
+
+    def compute_cell_contribution_point(V, points):
+        # Determine what process owns a point and what cells it lies within
+        mesh = V.mesh
+>       _, _, owning_points, cells = dolfinx.cpp.geometry.determine_point_ownership(
+            mesh._cpp_object, points, 1e-6)
+E       TypeError: cannot unpack non-iterable PointOwnershipData_float64 object
+
+src/disclinations/utils/la.py:9: TypeError
+________________________ test_point_load_outside_fails _________________________
+
+    def test_point_load_outside_fails():
+        V = space()
+        points = [np.array([[3.,3.,0.]]) if V.mesh.comm.rank == 0 else np.empty((0,3))]
+        with pytest.raises(ValueError, match='outside'):
+>           compute_disclination_loads(points, [1.], V)
+
+tests/test_loads_solver.py:31:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+src/disclinations/utils/la.py:82: in compute_disclination_loads
+    cells, basis_values = compute_cell_contributions(V, points)
+src/disclinations/utils/la.py:50: in compute_cell_contributions
+    cells, basis_values = compute_cell_contribution_point(V, point)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+V = FunctionSpace(Mesh(blocked element (Basix element (P, triangle, 1, gll_warped, unset, False, float64, []), (2,)), 1), Basix element (P, triangle, 2, gll_warped, unset, False, float64, []))
+points = array([[3., 3., 0.]])
+
+    def compute_cell_contribution_point(V, points):
+        # Determine what process owns a point and what cells it lies within
+        mesh = V.mesh
+>       _, _, owning_points, cells = dolfinx.cpp.geometry.determine_point_ownership(
+            mesh._cpp_object, points, 1e-6)
+E       TypeError: cannot unpack non-iterable PointOwnershipData_float64 object
+
+src/disclinations/utils/la.py:9: TypeError
+__________________ test_solver_configuration_and_convergence ___________________
+
+    def test_solver_configuration_and_convergence():
+        V = space()
+        u = fem.Function(V)
+        v = ufl.TestFunction(V)
+        solver = SNESSolver((u-2)*v*ufl.dx, u, petsc_options={'ksp_type':'preonly','pc_type':'lu','snes_rtol':1e-9}, monitor=None)
+        assert solver.solver.getKSP().getType() == 'preonly'
+        assert solver.solver.getKSP().getPC().getType() == 'lu'
+>       assert solver.solver.getTolerances()[1] == pytest.approx(1e-9)
+E       assert 1e-16 == 1e-09 ± 1.0e-12
+E
+E         comparison failed
+E         Obtained: 1e-16
+E         Expected: 1e-09 ± 1.0e-12
+
+tests/test_loads_solver.py:41: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+______________________ test_solver_nonconvergence_raises _______________________
+
+    def test_solver_nonconvergence_raises():
+        V = space()
+        u = fem.Function(V)
+        solver = SNESSolver((u-2)*ufl.TestFunction(V)*ufl.dx, u, petsc_options={'snes_max_it':0}, monitor=None)
+        with pytest.raises(RuntimeError, match='converg'):
+>           solver.solve()
+
+tests/test_loads_solver.py:52:
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+
+self = <disclinations.solvers.SNESSolver object at 0x14fd3b050>
+
+    def solve(self):
+        """
+        Solve the nonlinear problem.
+
+        Returns
+        -------
+        tuple
+            A tuple containing the number of iterations and the reason for convergence.
+
+        Raises
+        ------
+        RuntimeError
+            If the solver fails to converge.
+        """
+
+        log(LogLevel.INFO, f"Solving {self.prefix}")
+
+        with dolfinx.common.Timer(f"~First Order: min-max equilibrium") as timer:
+            try:
+                #print("Initial guess: ", self.u.vector.array)
+                #self.u.vector.ghostUpdate(addv=PETSc.InsertMode.INSERT, mode=PETSc.ScatterMode.FORWARD)
+                #self.solver.setSolution(self.u.vector)
+
+>               self.solver.solve(None, self.u.vector)
+E               AttributeError: 'Function' object has no attribute 'vector'
+
+src/disclinations/solvers/__init__.py:406: AttributeError
+=========================== short test summary info ============================
+FAILED tests/test_loads_solver.py::test_point_load_strengths_and_pairing - Ty...
+FAILED tests/test_loads_solver.py::test_point_load_outside_fails - TypeError:...
+FAILED tests/test_loads_solver.py::test_solver_configuration_and_convergence
+FAILED tests/test_loads_solver.py::test_solver_nonconvergence_raises - Attrib...
+4 failed in 1.64s

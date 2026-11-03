@@ -1,0 +1,22 @@
+F                                                                        [100%]
+=================================== FAILURES ===================================
+____________________ test_gaussian_curvature_is_determinant ____________________
+
+    def test_gaussian_curvature_is_determinant():
+        msh=mesh.create_unit_square(MPI.COMM_WORLD,2,2)
+        V=fem.functionspace(msh,('Lagrange',2))
+        w=fem.Function(V);w.interpolate(lambda x:.5*(x[0]**2+x[1]**2))
+        model=NonlinearPlateFVK(msh,{'order':2})
+        curvature=model.gaussian_curvature(w,order=0)
+>       assert integral((curvature-1)**2*ufl.dx) < 1e-20
+E       AssertionError: assert 1.000000000000011 < 1e-20
+E        +  where 1.000000000000011 = integral((((Coefficient(FunctionSpace(Mesh(blocked element (Basix element (P, triangle, 1, gll_warped, unset, False, float64, []), (2,)), 0), Basix element (P, triangle, 0, gll_warped, unset, True, float64, [])), 1) - 1) ** 2) * Measure('cell', subdomain_id='everywhere')))
+E        +    where Measure('cell', subdomain_id='everywhere') = ufl.dx
+
+tests/test_mechanics.py:97: AssertionError
+----------------------------- Captured stderr call -----------------------------
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+ld: warning: duplicate -rpath '/opt/anaconda3/envs/fenicsx-env/lib' ignored
+=========================== short test summary info ============================
+FAILED tests/test_mechanics.py::test_gaussian_curvature_is_determinant - Asse...
+1 failed in 1.69s

@@ -262,7 +262,7 @@ def run_experiment(mesh, parameters, experiment_dir, variant = "variational", in
         bounds=None,
         petsc_options=parameters["solvers"]["elasticity"],
         prefix='plate_fvk',
-        b0=b_scale*b.vector,
+        b0=b_scale*b.x.petsc_vec,
     )
     solver.solve()
 

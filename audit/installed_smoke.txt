@@ -1,0 +1,6 @@
+Processing /tmp/disclinations-audit-wheel/disclinations-2024.0.2-py3-none-any.whl
+Installing collected packages: disclinations
+Successfully installed disclinations-2024.0.2
+INSTALLED WHEEL: bundled YAML, default material and numerical solver verified outside checkout
+Package location: /private/tmp/disclinations-audit-installed/disclinations/__init__.py
+Safe provenance fallback: {'branch': None, 'commit_hash': None}

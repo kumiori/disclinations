@@ -1,1 +1,7 @@
-include disclinations/test/parameters.yml
+recursive-include src/disclinations/models *.yml
+recursive-include src/disclinations/test *.yml
+include SCIENTIFIC_AUDIT_AND_REPAIRS.md environment.yml pytest.ini
+recursive-include docs *.md
+recursive-include tests *.py
+recursive-include examples *.py
+recursive-include audit *.py *.json *.txt *.md

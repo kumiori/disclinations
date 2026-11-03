@@ -1,35 +1,26 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "disclinations"
-authors = [
-    {name = "Andrés A León Baldelli", email = "leon.baldelli@cnrs.fr"},
-    ]
-version = "2024.0.1"
-requires-python = ">=3.8"
-
-# Short description
-description = "We study disclinations in plates, incompressible elasticity, and inverse problems."
-
-# Path to README.md
+authors = [{name = "Andrés A León Baldelli", email = "leon.baldelli@cnrs.fr"}]
+version = "2024.0.2"
+requires-python = ">=3.10"
+description = "Audited C0 interior-penalty Foppl-von Karman plate research software"
 readme = "README.md"
-
-# Path to license file
 license = {file = "LICENSE"}
-
-# Direct dependencies
-dependencies = [
-    "pandas>=2.2",
-    "sympy",
-    "matplotlib",
-    "gmsh>=4.11.0",
-    "PyYAML>=6.0.1",
-    "pyvista>=0.43",
-#    "fenics-dolfinx>=0.8.0.dev0,<0.9.0",
-]
+dependencies = ["numpy>=1.26,<3", "PyYAML>=6", "mpi4py>=3.1"]
 
 [project.optional-dependencies]
-test = ["pytest"]
+test = ["pytest>=8,<9"]
+postprocess = ["matplotlib", "pandas>=2", "scipy", "sympy", "pyvista>=0.43"]
+# DOLFINx/PETSc/Gmsh are provisioned together through environment.yml.
+# Do not install the unrelated packages named `ufl` or `basix` from the
+# historical pipreqs export. Distribution names are fenics-ufl/fenics-basix.
 
-#    "numpy>=1.26.0",
-#    "mpi4py>=3.1.5",
-#    "slepc4py==3.20.1",
-#    "petsc4py>=3.20.5",
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+disclinations = ["models/*.yml", "test/*.yml"]
