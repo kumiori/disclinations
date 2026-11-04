@@ -154,7 +154,12 @@ class NonlinearPlateFVK(ToyPlateFVK):
         kappa = 0.5 * self.bracket(w, w)  # det Hess(w), small-slope Gaussian curvature
         kappa_expr = dolfinx.fem.Expression(kappa, DG.element.interpolation_points())
         Kappa = dolfinx.fem.Function(DG)
-        Kappa.interpolate(kappa_expr)
+        cell_map = mesh.topology.index_map(mesh.topology.dim)
+        cells = np.arange(cell_map.size_local + cell_map.num_ghosts, dtype=np.int32)
+        # Supplying both cell arrays works across the DOLFINx 0.9 builds used by
+        # the audit.  Some later builds no longer accept the empty cells1 array
+        # produced by the one-argument Python convenience path.
+        Kappa.interpolate(kappa_expr, cells, cells)
 
         return Kappa
 
