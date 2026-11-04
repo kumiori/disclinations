@@ -1,32 +1,63 @@
-name: Run Tests in Docker Container
-run-name: We are testing disclinations
+name: Test disclinations
 
 on:
-    push:
-        branches:
-            - '**'
+  pull_request:
+  push:
+    branches: [main]
+
+concurrency:
+  group: tests-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
 
 jobs:
-    set-up-computing-environment:
-        runs-on: ubuntu-latest
-        container: kumiori3/numerix-amd:0.8
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash -el {0}
 
-        steps:
-            - name: Checkout repository
-              uses: actions/checkout@v4
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-            - name: Install dependencies
-              run: python3 -m pip install .
+      - name: Create validated FEniCSx environment
+        uses: mamba-org/setup-micromamba@v2
+        with:
+          environment-file: environment.yml
+          environment-name: disclinations-audit
+          cache-environment: true
 
-            - name: List installed packages
-              run: |
-                  pip list
+      - name: Install package
+        run: python -m pip install --no-deps .
 
-            - name: Test import
-              run: python3 -c "import disclinations"
+      - name: Record runtime
+        run: |
+          python - <<'PY'
+          import basix
+          import dolfinx
+          import mpi4py
+          import numpy
+          import petsc4py
+          import ufl
 
-            # - name: Run 1d test
-            #   run: pytest -v test/test_1d.py
+          print("DOLFINx", dolfinx.__version__)
+          print("UFL", ufl.__version__)
+          print("Basix", basix.__version__)
+          print("PETSc4py", petsc4py.__version__)
+          print("MPI4py", mpi4py.__version__)
+          print("NumPy", numpy.__version__)
+          PY
 
-            # - name: Run tests
-            #   run: cd test && pytest -v .
+      - name: Run serial validation suite
+        run: python -m pytest -q
+
+      - name: Run two-rank MPI validation suite
+        run: >-
+          mpiexec -n 2 python -m pytest -q
+          tests/test_postprocess_cache.py
+          tests/test_loads_solver.py
+          tests/test_forms.py
+          tests/test_geometry.py
+          src/disclinations/test/test_models.py
+          src/disclinations/test/test_models-monopole.py
+          src/disclinations/test/test_models-transverse.py

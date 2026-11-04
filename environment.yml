@@ -2,19 +2,21 @@ name: disclinations-audit
 channels:
   - conda-forge
 dependencies:
-  - python=3.11
+  # ABI-sensitive versions from audit/runtime.json. Keep these exact until the
+  # full serial and MPI suites have validated a newer FEniCSx/PETSc stack.
+  - python=3.11.10
   - fenics-dolfinx=0.9.0
   - fenics-basix=0.9.0
   - fenics-ufl=2024.2.0
-  - petsc=3.22.*=real_*
-  - petsc4py=3.22
-  - mpi4py=4
-  - mpich
-  - numpy>=1.26,<3
-  - scipy
-  - pyyaml
-  - sympy
-  - pytest=8
+  - petsc=3.22.1=real_*
+  - petsc4py=3.22.1
+  - mpi4py=4.0.1
+  - mpich=4.2.3
+  - numpy=1.26.4
+  - scipy=1.15.1
+  - pyyaml=6.0.2
+  - sympy=1.13.3
+  - pytest=8.3.4
   - setuptools>=68
   - pip
   # Optional historical plotting/postprocessing:

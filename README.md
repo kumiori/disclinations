@@ -25,10 +25,11 @@ python examples/verify_clamped.py
 ```
 
 Without installing the project, prefix Python commands with `PYTHONPATH=src:.`.
-The Conda specification describes a compatible environment; the exact packages
-used for verification are recorded in `audit/runtime.json`. A clean environment
-creation has not been verified. `requirements_pipreq.txt` is a historical scanner
-export, contains unrelated package names, and is not an installation lockfile.
+The Conda specification pins the ABI-sensitive versions used for verification;
+the resolved package builds are recorded in `audit/runtime.json`. Pull requests
+create this environment and run both serial and two-rank MPI validation. The
+`requirements_pipreq.txt` file is a historical scanner export, contains unrelated
+package names, and is not an installation lockfile.
 
 The example solves a smooth manufactured Airy problem and prints separate
 physical membrane energy, discrete corrections, load work, functional and
@@ -50,11 +51,11 @@ sign to the residual, and raises on divergence. SNES tolerances use PETSc
 defaults unless supplied explicitly. See the source docstrings.
 
 Archived plotting and parameter-sweep scripts remain research prototypes.
-Their DOLFINx Function-vector accesses have been migrated, but their historical
-outputs have not been regenerated or accepted as numerical evidence. Manual
-PyVista/Xvfb examples run only when invoked directly. The old interactive
-"tests" with missing files, commented-out assertions and debugger stops were
-replaced by unattended smoke and manufactured-solution tests.
+Several still use pre-audit APIs and are listed explicitly in `conftest.py` so
+pytest does not mistake them for unattended validation. Their historical outputs
+have not been regenerated or accepted as numerical evidence. Manual PyVista/Xvfb
+examples run only when invoked directly. Maintained smoke, patch and
+manufactured-solution tests are collected by the default pytest command.
 
 Disk sampling now preserves coordinates and values for arbitrary positive radii,
 with single MPI ownership and an optional resolution argument. Mesh caches retain
